@@ -1,0 +1,93 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserRole() {
+      return request.auth.token.role;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && getUserRole() == 'admin';
+    }
+
+    function isManagerOrAdmin() {
+      return isAuthenticated() && (getUserRole() == 'admin' || getUserRole() == 'manager');
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasSegmentAccess(segment) {
+      return isAdmin() ||
+        (getUserRole() == 'manager' && segment in getUserData().assignedSegments);
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+      // Allow user to read own profile
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Segments (reference data)
+    match /segments/{segmentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Categories (reference data)
+    match /categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Transactions
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated();
+      allow create: if isManagerOrAdmin()
+        && hasSegmentAccess(request.resource.data.segment)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.isDeleted == false;
+      allow update: if isManagerOrAdmin()
+        && hasSegmentAccess(resource.data.segment);
+      allow delete: if isAdmin();
+    }
+
+    // Loans
+    match /loans/{loanId} {
+      allow read: if isAuthenticated();
+      allow create: if isManagerOrAdmin()
+        && hasSegmentAccess(request.resource.data.segment);
+      allow update: if isManagerOrAdmin()
+        && hasSegmentAccess(resource.data.segment);
+      allow delete: if isAdmin();
+
+      // Repayments subcollection
+      match /repayments/{repaymentId} {
+        allow read: if isAuthenticated();
+        allow create: if isManagerOrAdmin();
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Audit logs - immutable
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Monthly summaries
+    match /monthlySummaries/{summaryId} {
+      allow read: if isAuthenticated();
+      allow write: if isManagerOrAdmin();
+    }
+  }
+}

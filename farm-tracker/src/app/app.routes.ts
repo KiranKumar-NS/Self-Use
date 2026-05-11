@@ -1,0 +1,49 @@
+import { Routes } from '@angular/router';
+import { authGuard } from './core/guards/auth.guard';
+import { roleGuard } from './core/guards/role.guard';
+import { ShellComponent } from './layout/shell/shell.component';
+import { NotFoundComponent } from './layout/not-found/not-found.component';
+
+export const routes: Routes = [
+  {
+    path: '',
+    component: ShellComponent,
+    canActivate: [authGuard],
+    children: [
+      { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+      {
+        path: 'dashboard',
+        loadChildren: () => import('./features/dashboard/dashboard.routes').then(m => m.DASHBOARD_ROUTES),
+      },
+      {
+        path: 'transactions',
+        loadChildren: () => import('./features/transactions/transactions.routes').then(m => m.TRANSACTION_ROUTES),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
+        path: 'loans',
+        loadChildren: () => import('./features/loans/loans.routes').then(m => m.LOAN_ROUTES),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
+        path: 'reports',
+        loadChildren: () => import('./features/reports/reports.routes').then(m => m.REPORT_ROUTES),
+      },
+      {
+        path: 'audit-log',
+        loadChildren: () => import('./features/audit-log/audit-log.routes').then(m => m.AUDIT_LOG_ROUTES),
+        canActivate: [roleGuard(['admin'])],
+      },
+      {
+        path: 'admin',
+        loadChildren: () => import('./features/admin/admin.routes').then(m => m.ADMIN_ROUTES),
+        canActivate: [roleGuard(['admin'])],
+      },
+    ],
+  },
+  {
+    path: 'auth',
+    loadChildren: () => import('./features/auth/auth.routes').then(m => m.AUTH_ROUTES),
+  },
+  { path: '**', component: NotFoundComponent },
+];

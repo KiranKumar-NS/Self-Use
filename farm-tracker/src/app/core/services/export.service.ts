@@ -1,0 +1,142 @@
+import { Injectable } from '@angular/core';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { Transaction } from '../models/transaction.model';
+import { Loan } from '../models/loan.model';
+import { MonthlySummary } from '../models/monthly-summary.model';
+import { formatCurrency } from '../utils/firestore.utils';
+import { getMonthName } from '../utils/date.utils';
+
+@Injectable({ providedIn: 'root' })
+export class ExportService {
+  exportTransactionsPdf(
+    transactions: Transaction[],
+    summaries: MonthlySummary[],
+    month: string
+  ): void {
+    const pdf = new jsPDF();
+    const monthName = getMonthName(month);
+
+    pdf.setFontSize(18);
+    pdf.text('Farm Financial Report', 14, 22);
+    pdf.setFontSize(12);
+    pdf.text(`Month: ${monthName}`, 14, 32);
+    pdf.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, 14, 40);
+
+    // Summary table
+    const totalIncome = summaries.reduce((s, m) => s + (m.totalIncome || 0), 0);
+    const totalExpense = summaries.reduce((s, m) => s + (m.totalExpense || 0), 0);
+    const netProfit = totalIncome - totalExpense;
+
+    autoTable(pdf, {
+      startY: 50,
+      head: [['Metric', 'Amount']],
+      body: [
+        ['Total Income', formatCurrency(totalIncome)],
+        ['Total Expense', formatCurrency(totalExpense)],
+        ['Net Profit/Loss', formatCurrency(netProfit)],
+      ],
+      theme: 'grid',
+    });
+
+    // Segment breakdown
+    if (summaries.length > 0) {
+      autoTable(pdf, {
+        head: [['Segment', 'Income', 'Expense', 'Net']],
+        body: summaries.map((s) => [
+          s.segment,
+          formatCurrency(s.totalIncome || 0),
+          formatCurrency(s.totalExpense || 0),
+          formatCurrency(s.netProfit || 0),
+        ]),
+        theme: 'striped',
+      });
+    }
+
+    // Transactions detail
+    if (transactions.length > 0) {
+      pdf.addPage();
+      pdf.setFontSize(14);
+      pdf.text('Transaction Details', 14, 22);
+
+      autoTable(pdf, {
+        startY: 30,
+        head: [['Date', 'Type', 'Segment', 'Category', 'Amount', 'By', 'Description']],
+        body: transactions.map((t) => [
+          t.date.toDate().toLocaleDateString('en-IN'),
+          t.type,
+          t.segmentName,
+          t.categoryName,
+          formatCurrency(t.amount),
+          t.createdByName,
+          t.description,
+        ]),
+        theme: 'striped',
+        styles: { fontSize: 8 },
+      });
+    }
+
+    pdf.save(`farm-report-${month}.pdf`);
+  }
+
+  exportLoansPdf(loans: Loan[], month: string): void {
+    const pdf = new jsPDF();
+
+    pdf.setFontSize(18);
+    pdf.text('Loan Report', 14, 22);
+    pdf.setFontSize(12);
+    pdf.text(`Month: ${getMonthName(month)}`, 14, 32);
+
+    autoTable(pdf, {
+      startY: 42,
+      head: [['Date', 'Type', 'Person', 'Amount', 'Repaid', 'Balance', 'Status', 'Segment']],
+      body: loans.map((l) => [
+        l.date.toDate().toLocaleDateString('en-IN'),
+        l.type,
+        l.personName,
+        formatCurrency(l.amount),
+        formatCurrency(l.totalRepaid),
+        formatCurrency(l.balanceRemaining),
+        l.repaymentStatus,
+        l.segmentName,
+      ]),
+      theme: 'striped',
+    });
+
+    pdf.save(`loan-report-${month}.pdf`);
+  }
+
+  exportTransactionsCsv(transactions: Transaction[], filename: string): void {
+    const headers = 'Date,Type,Segment,Category,Amount,Description,Created By\n';
+    const rows = transactions
+      .map(
+        (t) =>
+          `${t.date.toDate().toLocaleDateString('en-IN')},${t.type},${t.segmentName},${t.categoryName},${t.amount},"${t.description}",${t.createdByName}`
+      )
+      .join('\n');
+
+    this.downloadFile(headers + rows, `${filename}.csv`, 'text/csv');
+  }
+
+  exportLoansCsv(loans: Loan[], filename: string): void {
+    const headers = 'Date,Type,Person,Amount,Repaid,Balance,Status,Purpose,Segment,Recorded By\n';
+    const rows = loans
+      .map(
+        (l) =>
+          `${l.date.toDate().toLocaleDateString('en-IN')},${l.type},${l.personName},${l.amount},${l.totalRepaid},${l.balanceRemaining},${l.repaymentStatus},"${l.purpose}",${l.segmentName},${l.recordedByName}`
+      )
+      .join('\n');
+
+    this.downloadFile(headers + rows, `${filename}.csv`, 'text/csv');
+  }
+
+  private downloadFile(content: string, filename: string, mimeType: string): void {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+}
