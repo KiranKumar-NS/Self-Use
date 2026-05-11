@@ -28,7 +28,7 @@ Then download the **service account key**:
 Creates a user in Firebase Auth + Firestore with role and segment assignments.
 
 ```bash
-node scripts/create-user.js <email> <password> <displayName> <role> [segments]
+node scripts/create-user.js <email> <password> <displayName> <role> [segment1 segment2 ...]
 ```
 
 **Roles:**
@@ -44,10 +44,10 @@ node scripts/create-user.js <email> <password> <displayName> <role> [segments]
 node scripts/create-user.js admin@farm.com Pass123! "Kiran Kumar" admin
 
 # Create manager with specific segments
-node scripts/create-user.js ravi@farm.com Pass123! "Ravi S" manager goats,cows
+node scripts/create-user.js ravi@farm.com Pass123! "Ravi S" manager goats cows
 
 # Create manager with all segments
-node scripts/create-user.js suresh@farm.com Pass123! "Suresh M" manager goats,chickens,cows,fruits,crops
+node scripts/create-user.js suresh@farm.com Pass123! "Suresh M" manager goats chickens cows fruits crops
 
 # Create viewer
 node scripts/create-user.js viewer@farm.com Pass123! "Priya N" viewer
@@ -122,8 +122,8 @@ node scripts/clean-db.js seed
 node scripts/create-user.js yourname@email.com YourPass123! "Your Name" admin
 
 # 3. Create team members
-node scripts/create-user.js friend1@email.com Pass123! "Friend 1" manager goats,cows
-node scripts/create-user.js friend2@email.com Pass123! "Friend 2" manager chickens,fruits
+node scripts/create-user.js friend1@email.com Pass123! "Friend 1" manager goats cows
+node scripts/create-user.js friend2@email.com Pass123! "Friend 2" manager chickens fruits
 node scripts/create-user.js friend3@email.com Pass123! "Friend 3" viewer
 ```
 

@@ -27,15 +27,15 @@
  * USAGE
  * ────────────────────────────────────────────────────────────
  *
- *   node scripts/create-user.js <email> <password> <displayName> <role> [segments]
+ *   node scripts/create-user.js <email> <password> <displayName> <role> [segment1 segment2 ...]
  *
  * Parameters:
  *   email        - User's email address
  *   password     - Password (minimum 6 characters)
  *   displayName  - User's display name (use quotes if contains spaces)
  *   role         - One of: admin, manager, viewer
- *   segments     - (Optional) Comma-separated segment IDs for managers
- *                  Available: goats,chickens,cows,fruits,crops
+ *   segment1...  - (Optional) Space-separated segment IDs for managers
+ *                  Available: goats chickens cows fruits crops
  *                  Admin gets all segments automatically.
  *                  Viewer does not need segments.
  *
@@ -47,10 +47,10 @@
  *   node scripts/create-user.js admin@farm.com Pass123! "Kiran Kumar" admin
  *
  *   # Create a manager with specific segments
- *   node scripts/create-user.js ravi@farm.com Pass123! "Ravi S" manager goats,cows
+ *   node scripts/create-user.js ravi@farm.com Pass123! "Ravi S" manager goats cows
  *
  *   # Create a manager with all segments
- *   node scripts/create-user.js suresh@farm.com Pass123! "Suresh M" manager goats,chickens,cows,fruits,crops
+ *   node scripts/create-user.js suresh@farm.com Pass123! "Suresh M" manager goats chickens cows fruits crops
  *
  *   # Create a viewer (read-only access)
  *   node scripts/create-user.js viewer@farm.com Pass123! "Priya N" viewer
@@ -110,21 +110,22 @@ const email = process.argv[2];
 const password = process.argv[3];
 const displayName = process.argv[4];
 const role = process.argv[5];
-const segmentsArg = process.argv[6];
+const segmentsArgs = process.argv.slice(6);
 
 const ALL_SEGMENTS = ['goats', 'chickens', 'cows', 'fruits', 'crops'];
 const VALID_ROLES = ['admin', 'manager', 'viewer'];
 
 if (!email || !password || !displayName || !role) {
   console.error('');
-  console.error('Usage: node scripts/create-user.js <email> <password> <displayName> <role> [segments]');
+  console.error('Usage: node scripts/create-user.js <email> <password> <displayName> <role> [segment1 segment2 ...]');
   console.error('');
   console.error('Roles: admin, manager, viewer');
-  console.error('Segments: goats,chickens,cows,fruits,crops (comma-separated, for managers)');
+  console.error('Segments: goats chickens cows fruits crops (space-separated, for managers)');
   console.error('');
   console.error('Examples:');
   console.error('  node scripts/create-user.js admin@farm.com Pass123! "Kiran Kumar" admin');
-  console.error('  node scripts/create-user.js ravi@farm.com Pass123! "Ravi S" manager goats,cows');
+  console.error('  node scripts/create-user.js ravi@farm.com Pass123! "Ravi S" manager goats cows');
+  console.error('  node scripts/create-user.js suresh@farm.com Pass123! "Suresh M" manager goats chickens cows fruits crops');
   console.error('  node scripts/create-user.js viewer@farm.com Pass123! "Priya N" viewer');
   process.exit(1);
 }
@@ -144,13 +145,13 @@ let assignedSegments;
 if (role === 'admin') {
   assignedSegments = ALL_SEGMENTS;
 } else if (role === 'manager') {
-  if (!segmentsArg) {
+  if (segmentsArgs.length === 0) {
     console.error('ERROR: Managers must have assigned segments.');
-    console.error('  Use: node scripts/create-user.js ... manager goats,cows');
+    console.error('  Use: node scripts/create-user.js ... manager goats cows');
     console.error(`  Available segments: ${ALL_SEGMENTS.join(', ')}`);
     process.exit(1);
   }
-  assignedSegments = segmentsArg.split(',').map((s) => s.trim().toLowerCase());
+  assignedSegments = segmentsArgs.map((s) => s.trim().toLowerCase());
   const invalid = assignedSegments.filter((s) => !ALL_SEGMENTS.includes(s));
   if (invalid.length > 0) {
     console.error(`ERROR: Invalid segment(s): ${invalid.join(', ')}`);
