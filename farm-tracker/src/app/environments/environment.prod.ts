@@ -1,11 +1,11 @@
 export const environment = {
   production: true,
   firebase: {
-    apiKey: 'YOUR_API_KEY',
-    authDomain: 'YOUR_PROJECT.firebaseapp.com',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_PROJECT.appspot.com',
-    messagingSenderId: 'YOUR_SENDER_ID',
-    appId: 'YOUR_APP_ID',
+    apiKey: 'AIzaSyBRaToZrwnA4pm_vjp2EDNof8JL9AtuKZA',
+    authDomain: 'farm-tracker-tn70.firebaseapp.com',
+    projectId: 'farm-tracker-tn70',
+    storageBucket: 'farm-tracker-tn70.firebasestorage.app',
+    messagingSenderId: '794646368074',
+    appId: '1:794646368074:web:241a61eeec0819130bfbb3',
   },
 };

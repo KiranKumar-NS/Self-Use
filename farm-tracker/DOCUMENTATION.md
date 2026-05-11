@@ -249,6 +249,10 @@ farm-tracker/
 │   └── app.routes.ts        (lazy-loaded routes with guards)
 ├── firebase/
 │   └── set-custom-claims.js (Node script for setting user roles)
+├── scripts/
+│   ├── create-user.js        (Create users with role & segments via CLI)
+│   ├── clean-db.js           (Clean/reset database collections)
+│   └── README.md             (Detailed script documentation)
 ├── firestore.rules           (Security rules with role-based access)
 ├── firestore.indexes.json    (Composite indexes for efficient queries)
 └── DOCUMENTATION.md          (this file)
@@ -290,23 +294,29 @@ ng serve
 ```
 App runs at http://localhost:4200
 
-### 4. Create First Admin User
-1. Register via the app (first user auto-creates in Firestore)
-2. Get the user UID from Firebase Console → Authentication
-3. Set admin role:
+### 4. Setup Scripts
 ```bash
-cd firebase
+cd scripts
 npm install firebase-admin
-# Download service account key from Firebase Console
-# Save as firebase/service-account-key.json
-node set-custom-claims.js <USER_UID> admin
 ```
-4. Log out and log back in
+Download service account key from Firebase Console:
+- Project Settings → Service Accounts → Generate New Private Key
+- Save as `scripts/service-account-key.json`
 
-### 5. Seed Initial Data
-After logging in as admin, the app will work with the default segments and categories defined in code. Alternatively, you can seed them:
-- Segments: goats, chickens, cows, fruits, crops
-- Categories: Feed, Medicine, Labor, Transport, Maintenance, Other (expense); Milk, Eggs, Animal Sales, Crop Sales, Fruit Sales, Other (income)
+### 5. Seed Database & Create Admin
+```bash
+# Seed default segments and categories
+node scripts/clean-db.js seed
+
+# Create your first admin user
+node scripts/create-user.js yourname@email.com YourPass123! "Your Name" admin
+
+# Create team members
+node scripts/create-user.js friend1@email.com Pass123! "Friend 1" manager goats,cows
+node scripts/create-user.js friend2@email.com Pass123! "Friend 2" viewer
+```
+
+See `scripts/README.md` for full documentation on all scripts.
 
 ### 6. Deploy Firestore Rules
 ```bash
