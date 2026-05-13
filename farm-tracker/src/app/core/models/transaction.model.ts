@@ -1,6 +1,7 @@
 import { Timestamp } from '@angular/fire/firestore';
 
 export type TransactionType = 'expense' | 'income';
+export type PaymentMethod = 'cash' | 'upi';
 
 export interface Transaction {
   id: string;
@@ -12,8 +13,9 @@ export interface Transaction {
   segment: string;
   segmentName: string;
   description: string;
+  paymentMethod: PaymentMethod;
 
-  // Expense-specific
+  // Who paid / received
   paidBy: string | null;
   paidByName: string | null;
 
@@ -46,6 +48,7 @@ export interface TransactionFormData {
   segment: string;
   segmentName: string;
   description: string;
+  paymentMethod: PaymentMethod;
   paidBy?: string;
   paidByName?: string;
   month: string;

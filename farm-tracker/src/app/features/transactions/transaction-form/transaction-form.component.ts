@@ -9,7 +9,7 @@ import { UserService } from '../../../core/services/user.service';
 import { Category } from '../../../core/models/category.model';
 import { Segment } from '../../../core/models/segment.model';
 import { AppUser } from '../../../core/models/user.model';
-import { TransactionFormData } from '../../../core/models/transaction.model';
+import { TransactionFormData, PaymentMethod } from '../../../core/models/transaction.model';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -79,16 +79,26 @@ import { MatRadioModule } from '@angular/material/radio';
           </mat-form-field>
         </div>
 
-        @if (type === 'expense') {
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Paid By</mat-label>
-            <mat-select [(ngModel)]="paidBy" name="paidBy" required>
-              @for (u of users(); track u.uid) {
-                <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-        }
+        <!-- Payment Method -->
+        <div class="form-row">
+          <div class="payment-method-group">
+            <label class="field-label">Payment Method</label>
+            <mat-radio-group [(ngModel)]="paymentMethod" name="paymentMethod">
+              <mat-radio-button value="cash">Cash</mat-radio-button>
+              <mat-radio-button value="upi">UPI</mat-radio-button>
+            </mat-radio-group>
+          </div>
+        </div>
+
+        <!-- Paid By - shown for both expense and income -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>{{ type === 'expense' ? 'Paid By' : 'Received By' }}</mat-label>
+          <mat-select [(ngModel)]="paidBy" name="paidBy" required>
+            @for (u of users(); track u.uid) {
+              <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Description</mat-label>
@@ -113,7 +123,13 @@ import { MatRadioModule } from '@angular/material/radio';
     .full-width { width: 100%; }
     .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
     .error-message { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
-    mat-radio-group { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
+    mat-radio-group { display: flex; gap: 1rem; }
+    .payment-method-group {
+      display: flex; flex-direction: column; gap: 6px; margin-bottom: 0.5rem;
+    }
+    .field-label {
+      font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600;
+    }
   `],
 })
 export class TransactionFormComponent implements OnInit {
@@ -136,6 +152,7 @@ export class TransactionFormComponent implements OnInit {
   category = '';
   description = '';
   paidBy = '';
+  paymentMethod: PaymentMethod = 'cash';
 
   allCategories = signal<Category[]>([]);
   allSegments = signal<Segment[]>([]);
@@ -177,6 +194,7 @@ export class TransactionFormComponent implements OnInit {
         this.category = txn.category;
         this.description = txn.description;
         this.paidBy = txn.paidBy || '';
+        this.paymentMethod = txn.paymentMethod || 'cash';
         this.onTypeChange();
       }
     }
@@ -206,8 +224,9 @@ export class TransactionFormComponent implements OnInit {
         segment: this.segment,
         segmentName: selectedSegment?.name || this.segment,
         description: this.description,
-        paidBy: this.type === 'expense' ? this.paidBy : undefined,
-        paidByName: this.type === 'expense' ? paidByUser?.displayName : undefined,
+        paymentMethod: this.paymentMethod,
+        paidBy: this.paidBy,
+        paidByName: paidByUser?.displayName,
         month: getMonthString(this.date),
         year: getYear(this.date),
       };

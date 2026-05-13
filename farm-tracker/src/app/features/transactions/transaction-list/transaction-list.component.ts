@@ -1,6 +1,7 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { UpperCasePipe } from '@angular/common';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { Transaction } from '../../../core/models/transaction.model';
@@ -22,7 +23,7 @@ import { DatePipe } from '@angular/common';
   selector: 'app-transaction-list',
   standalone: true,
   imports: [
-    FormsModule, DatePipe, CurrencyInrPipe, RelativeTimePipe,
+    FormsModule, DatePipe, UpperCasePipe, CurrencyInrPipe, RelativeTimePipe,
     LoadingSpinnerComponent, EmptyStateComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatChipsModule,
   ],
@@ -76,7 +77,8 @@ import { DatePipe } from '@angular/common';
               <th>Segment</th>
               <th>Category</th>
               <th>Amount</th>
-              <th>By</th>
+              <th>Paid Via</th>
+              <th>Paid/Received By</th>
               <th>Description</th>
               <th>Actions</th>
             </tr>
@@ -91,7 +93,10 @@ import { DatePipe } from '@angular/common';
                 <td>{{ txn.segmentName }}</td>
                 <td>{{ txn.categoryName }}</td>
                 <td class="amount" [class]="txn.type">{{ txn.amount | currencyInr }}</td>
-                <td>{{ txn.createdByName }}</td>
+                <td>
+                  <span class="payment-badge" [class]="txn.paymentMethod || 'cash'">{{ (txn.paymentMethod || 'cash') | uppercase }}</span>
+                </td>
+                <td>{{ txn.paidByName || txn.createdByName }}</td>
                 <td class="desc-cell">{{ txn.description }}</td>
                 <td>
                   <button mat-icon-button (click)="edit(txn.id)" title="Edit">
@@ -132,6 +137,9 @@ import { DatePipe } from '@angular/common';
     .type-badge.income { background: #f0fdf4; color: #16a34a; }
     .amount.expense { color: #dc2626; font-weight: 600; }
     .amount.income { color: #16a34a; font-weight: 600; }
+    .payment-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; }
+    .payment-badge.cash { background: #fef3c7; color: #d97706; }
+    .payment-badge.upi { background: #dbeafe; color: #2563eb; }
     .desc-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .load-more { text-align: center; padding: 1rem; }
   `],

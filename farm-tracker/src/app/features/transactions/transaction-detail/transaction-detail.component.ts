@@ -54,8 +54,12 @@ import { DatePipe } from '@angular/common';
             <span>{{ transaction()!.categoryName }}</span>
           </div>
           <div class="detail-item">
-            <label>{{ transaction()!.type === 'expense' ? 'Paid By' : 'Recorded By' }}</label>
-            <span>{{ transaction()!.type === 'expense' ? transaction()!.paidByName : transaction()!.recordedByName }}</span>
+            <label>Payment Method</label>
+            <span class="payment-badge" [class]="transaction()!.paymentMethod || 'cash'">{{ (transaction()!.paymentMethod || 'cash').toUpperCase() }}</span>
+          </div>
+          <div class="detail-item">
+            <label>{{ transaction()!.type === 'expense' ? 'Paid By' : 'Received By' }}</label>
+            <span>{{ transaction()!.paidByName || transaction()!.createdByName }}</span>
           </div>
           <div class="detail-item full">
             <label>Description</label>
@@ -105,6 +109,9 @@ import { DatePipe } from '@angular/common';
     .type-badge.income { background: #f0fdf4; color: #16a34a; }
     .amount.expense { color: #dc2626; font-weight: 700; font-size: 1.25rem !important; }
     .amount.income { color: #16a34a; font-weight: 700; font-size: 1.25rem !important; }
+    .payment-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
+    .payment-badge.cash { background: #fef3c7; color: #d97706; }
+    .payment-badge.upi { background: #dbeafe; color: #2563eb; }
     .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: #1e293b; }
     .audit-entry { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.875rem; }
     .audit-time { color: #94a3b8; margin-left: 8px; }
