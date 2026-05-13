@@ -9,6 +9,7 @@ import {
   limit,
   startAfter,
   DocumentSnapshot,
+  QueryConstraint,
 } from '@angular/fire/firestore';
 import { AuditLog, EntityType } from '../models/audit-log.model';
 
@@ -25,25 +26,25 @@ export class AuditLogService {
     pageSize = 20,
     lastDoc?: DocumentSnapshot
   ): Promise<{ logs: AuditLog[]; lastDoc: DocumentSnapshot | null }> {
-    let q = query(
-      collection(this.firestore, 'auditLogs'),
+    const constraints: QueryConstraint[] = [
       orderBy('timestamp', 'desc'),
-      limit(pageSize)
-    );
+      limit(pageSize),
+    ];
 
     if (filters.entityType) {
-      q = query(q, where('entityType', '==', filters.entityType));
+      constraints.push(where('entityType', '==', filters.entityType));
     }
     if (filters.entityId) {
-      q = query(q, where('entityId', '==', filters.entityId));
+      constraints.push(where('entityId', '==', filters.entityId));
     }
     if (filters.userId) {
-      q = query(q, where('userId', '==', filters.userId));
+      constraints.push(where('userId', '==', filters.userId));
     }
     if (lastDoc) {
-      q = query(q, startAfter(lastDoc));
+      constraints.push(startAfter(lastDoc));
     }
 
+    const q = query(collection(this.firestore, 'auditLogs'), ...constraints);
     const snapshot = await getDocs(q);
     const logs = snapshot.docs.map((d) => d.data() as AuditLog);
     const last = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;

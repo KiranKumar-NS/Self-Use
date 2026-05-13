@@ -94,7 +94,7 @@ export class UserManagementComponent implements OnInit {
   }
 
   addUser(): void {
-    this.router.navigate(['/auth/register']);
+    this.router.navigate(['/admin/register']);
   }
 
   editUser(uid: string): void {

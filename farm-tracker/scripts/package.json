@@ -1,0 +1,9 @@
+{
+  "name": "farm-tracker-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Admin scripts for Farm Tracker",
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}

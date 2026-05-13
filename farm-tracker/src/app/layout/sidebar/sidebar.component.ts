@@ -44,9 +44,14 @@ import { MatIconModule } from '@angular/material/icon';
             <span>Audit Log</span>
           </a>
 
-          <a routerLink="/admin" routerLinkActive="active" class="nav-item">
+          <a routerLink="/admin" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item">
             <mat-icon>admin_panel_settings</mat-icon>
             <span>Admin</span>
+          </a>
+
+          <a routerLink="/admin/data-setup" routerLinkActive="active" class="nav-item">
+            <mat-icon>dataset</mat-icon>
+            <span>Data Setup</span>
           </a>
         }
       </nav>

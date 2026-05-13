@@ -57,7 +57,27 @@ node scripts/create-user.js viewer@farm.com Pass123! "Priya N" viewer
 
 ---
 
-### 2. `clean-db.js` — Clean / Reset Database
+### 2. `setup-collections.js` — Initialize System Collections
+
+Creates all default segments and categories in Firestore. Safe to re-run — skips documents that already exist.
+
+```bash
+node scripts/setup-collections.js
+```
+
+**What it creates:**
+
+| Collection | Documents |
+|------------|-----------|
+| `segments` | Goats, Chickens, Cows, Fruits, Crops |
+| `categories` | Feed, Medicine, Labor, Transport, Maintenance, Other (expense) |
+| | Milk, Eggs, Animal Sales, Crop Sales, Fruit Sales, Other (income) |
+
+> Run this **once** after creating your Firebase project.
+
+---
+
+### 3. `clean-db.js` — Clean / Reset Database
 
 Deletes data from Firestore collections. Useful for development/testing.
 
@@ -95,7 +115,7 @@ node scripts/clean-db.js seed
 
 ---
 
-### 3. `set-custom-claims.js` (in `/firebase` folder)
+### 4. `set-custom-claims.js` (in `/firebase` folder)
 
 Sets role custom claims on an existing Firebase Auth user.
 
@@ -115,8 +135,8 @@ node firebase/set-custom-claims.js abc123def456 admin
 
 ### First-time setup:
 ```bash
-# 1. Seed the database with default segments & categories
-node scripts/clean-db.js seed
+# 1. Create all system collections (segments & categories)
+node scripts/setup-collections.js
 
 # 2. Create your first admin user
 node scripts/create-user.js yourname@email.com YourPass123! "Your Name" admin
