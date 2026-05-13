@@ -1,10 +1,9 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { UpperCasePipe } from '@angular/common';
 import { SegmentService } from '../../../core/services/segment.service';
 import { CategoryService } from '../../../core/services/category.service';
-import { Segment, DEFAULT_SEGMENTS } from '../../../core/models/segment.model';
-import { Category, DEFAULT_CATEGORIES } from '../../../core/models/category.model';
+import { Segment } from '../../../core/models/segment.model';
+import { Category } from '../../../core/models/category.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -27,7 +26,7 @@ import {
   selector: 'app-data-setup',
   standalone: true,
   imports: [
-    FormsModule, UpperCasePipe, LoadingSpinnerComponent,
+    FormsModule, LoadingSpinnerComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatChipsModule,
     MatTabsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule,
   ],
@@ -127,31 +126,6 @@ import {
               </div>
             </mat-card>
 
-            <!-- Default Segments Reference -->
-            <mat-card class="defaults-card">
-              <h4>Default Segments Reference</h4>
-              <table class="defaults-table">
-                <thead>
-                  <tr><th>ID</th><th>Name</th><th>Icon</th><th>Status</th></tr>
-                </thead>
-                <tbody>
-                  @for (seg of defaultSegments; track seg.id) {
-                    <tr>
-                      <td><code>{{ seg.id }}</code></td>
-                      <td>{{ seg.name }}</td>
-                      <td>{{ seg.icon }}</td>
-                      <td>
-                        @if (isSegmentInDb(seg.id)) {
-                          <span class="status-active">In Database</span>
-                        } @else {
-                          <span class="status-missing">Not Added</span>
-                        }
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </mat-card>
           </div>
         </mat-tab>
 
@@ -240,33 +214,6 @@ import {
               </div>
             </mat-card>
 
-            <!-- Default Categories Reference -->
-            <mat-card class="defaults-card">
-              <h4>Default Categories Reference</h4>
-              <table class="defaults-table">
-                <thead>
-                  <tr><th>ID</th><th>Name</th><th>Type</th><th>Status</th></tr>
-                </thead>
-                <tbody>
-                  @for (cat of defaultCategories; track cat.id) {
-                    <tr>
-                      <td><code>{{ cat.id }}</code></td>
-                      <td>{{ cat.name }}</td>
-                      <td>
-                        <span class="type-chip" [class]="cat.type">{{ cat.type | uppercase }}</span>
-                      </td>
-                      <td>
-                        @if (isCategoryInDb(cat.id)) {
-                          <span class="status-active">In Database</span>
-                        } @else {
-                          <span class="status-missing">Not Added</span>
-                        }
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </mat-card>
           </div>
         </mat-tab>
       </mat-tab-group>
@@ -307,14 +254,6 @@ import {
     .add-form-card h4 { margin: 0 0 1rem; font-size: 0.9rem; color: #1e293b; }
     .add-form { display: flex; gap: 0.75rem; align-items: flex-start; flex-wrap: wrap; }
     .add-form mat-form-field { flex: 1; min-width: 150px; }
-    .defaults-card { padding: 1.25rem; }
-    .defaults-card h4 { margin: 0 0 0.75rem; font-size: 0.9rem; color: #1e293b; }
-    .defaults-table { width: 100%; border-collapse: collapse; }
-    .defaults-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; font-size: 0.7rem; text-transform: uppercase; color: #64748b; }
-    .defaults-table td { padding: 8px 12px; border-top: 1px solid #f1f5f9; font-size: 0.85rem; }
-    .defaults-table code { background: #f1f5f9; padding: 2px 6px; border-radius: 3px; font-size: 0.8rem; }
-    .status-active { color: #16a34a; font-weight: 600; font-size: 0.8rem; }
-    .status-missing { color: #d97706; font-weight: 600; font-size: 0.8rem; }
   `],
 })
 export class DataSetupComponent implements OnInit {
@@ -331,9 +270,6 @@ export class DataSetupComponent implements OnInit {
   categories = signal<Category[]>([]);
   expenseCategories = signal<Category[]>([]);
   incomeCategories = signal<Category[]>([]);
-
-  defaultSegments = DEFAULT_SEGMENTS;
-  defaultCategories = DEFAULT_CATEGORIES;
 
   newSegment = { id: '', name: '', description: '', icon: '' };
   newCategory = { id: '', name: '', type: 'expense' as 'expense' | 'income' };
@@ -353,14 +289,6 @@ export class DataSetupComponent implements OnInit {
     this.expenseCategories.set(categories.filter((c) => c.type === 'expense'));
     this.incomeCategories.set(categories.filter((c) => c.type === 'income'));
     this.loading.set(false);
-  }
-
-  isSegmentInDb(id: string): boolean {
-    return this.segments().some((s) => s.id === id);
-  }
-
-  isCategoryInDb(id: string): boolean {
-    return this.categories().some((c) => c.id === id);
   }
 
   async seedAll(): Promise<void> {

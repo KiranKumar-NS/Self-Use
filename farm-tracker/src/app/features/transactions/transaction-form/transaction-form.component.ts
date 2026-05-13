@@ -90,15 +90,25 @@ import { MatRadioModule } from '@angular/material/radio';
           </div>
         </div>
 
-        <!-- Paid By - shown for both expense and income -->
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ type === 'expense' ? 'Paid By' : 'Received By' }}</mat-label>
-          <mat-select [(ngModel)]="paidBy" name="paidBy" required>
-            @for (u of users(); track u.uid) {
-              <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
+        <!-- Paid By - select user or type custom name -->
+        <div class="form-row">
+          <mat-form-field appearance="outline">
+            <mat-label>{{ type === 'expense' ? 'Paid By' : 'Received By' }}</mat-label>
+            <mat-select [(ngModel)]="paidBy" name="paidBy" (selectionChange)="onPaidByChange()">
+              @for (u of users(); track u.uid) {
+                <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
+              }
+              <mat-option value="other">Other (type name)</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          @if (paidBy === 'other') {
+            <mat-form-field appearance="outline">
+              <mat-label>Enter Name</mat-label>
+              <input matInput [(ngModel)]="customPaidByName" name="customPaidByName" required placeholder="e.g. Raju, Loan from Suresh" />
+            </mat-form-field>
+          }
+        </div>
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Description</mat-label>
@@ -152,6 +162,7 @@ export class TransactionFormComponent implements OnInit {
   category = '';
   description = '';
   paidBy = '';
+  customPaidByName = '';
   paymentMethod: PaymentMethod = 'cash';
 
   allCategories = signal<Category[]>([]);
@@ -193,10 +204,23 @@ export class TransactionFormComponent implements OnInit {
         this.segment = txn.segment;
         this.category = txn.category;
         this.description = txn.description;
-        this.paidBy = txn.paidBy || '';
+        // Check if paidBy is a registered user or custom name
+        const isRegisteredUser = this.users().some((u) => u.uid === txn.paidBy);
+        if (isRegisteredUser) {
+          this.paidBy = txn.paidBy || '';
+        } else {
+          this.paidBy = 'other';
+          this.customPaidByName = txn.paidByName || '';
+        }
         this.paymentMethod = txn.paymentMethod || 'cash';
         this.onTypeChange();
       }
+    }
+  }
+
+  onPaidByChange(): void {
+    if (this.paidBy !== 'other') {
+      this.customPaidByName = '';
     }
   }
 
@@ -213,7 +237,11 @@ export class TransactionFormComponent implements OnInit {
     try {
       const selectedSegment = this.allSegments().find((s) => s.id === this.segment);
       const selectedCategory = this.filteredCategories().find((c) => c.id === this.category);
-      const paidByUser = this.users().find((u) => u.uid === this.paidBy);
+      // Resolve paid by - either registered user or custom name
+      const isCustom = this.paidBy === 'other';
+      const paidByUser = isCustom ? null : this.users().find((u) => u.uid === this.paidBy);
+      const resolvedPaidBy = isCustom ? 'other' : this.paidBy;
+      const resolvedPaidByName = isCustom ? this.customPaidByName : paidByUser?.displayName;
 
       const formData: TransactionFormData = {
         type: this.type,
@@ -225,8 +253,8 @@ export class TransactionFormComponent implements OnInit {
         segmentName: selectedSegment?.name || this.segment,
         description: this.description,
         paymentMethod: this.paymentMethod,
-        paidBy: this.paidBy,
-        paidByName: paidByUser?.displayName,
+        paidBy: resolvedPaidBy,
+        paidByName: resolvedPaidByName,
         month: getMonthString(this.date),
         year: getYear(this.date),
       };
