@@ -26,9 +26,9 @@ import { DatePipe } from '@angular/common';
   ],
   template: `
     <div class="page-header">
-      <h1>Loans</h1>
+      <h1>Owe & Lent</h1>
       <button mat-flat-button color="primary" (click)="addNew()">
-        <mat-icon>add</mat-icon> Add Loan
+        <mat-icon>add</mat-icon> Add Entry
       </button>
     </div>
 
@@ -38,8 +38,8 @@ import { DatePipe } from '@angular/common';
           <mat-label>Type</mat-label>
           <mat-select [(ngModel)]="filterType" (selectionChange)="loadData()">
             <mat-option value="">All</mat-option>
-            <mat-option value="given">Given</mat-option>
-            <mat-option value="received">Received</mat-option>
+            <mat-option value="given">Lent (We gave)</mat-option>
+            <mat-option value="received">Owed (We borrowed)</mat-option>
           </mat-select>
         </mat-form-field>
         <mat-form-field appearance="outline">
@@ -68,7 +68,7 @@ import { DatePipe } from '@angular/common';
     @if (loading()) {
       <app-loading-spinner />
     } @else if (loans().length === 0) {
-      <app-empty-state icon="🏦" title="No loans" message="No loan records found." />
+      <app-empty-state icon="🏦" title="No records" message="No owe or lent records found." />
     } @else {
       <div class="table-container">
         <table class="data-table">
@@ -90,7 +90,7 @@ import { DatePipe } from '@angular/common';
               <tr>
                 <td>{{ loan.date.toDate() | date:'dd MMM yyyy' }}</td>
                 <td>
-                  <span class="type-badge" [class]="loan.type">{{ loan.type }}</span>
+                  <span class="type-badge" [class]="loan.type">{{ loan.type === 'given' ? 'Lent' : 'Owed' }}</span>
                 </td>
                 <td>{{ loan.personName }}</td>
                 <td class="amount">{{ loan.amount | currencyInr }}</td>
@@ -201,7 +201,7 @@ export class LoanListComponent implements OnInit {
 
   async confirmDelete(loan: Loan): Promise<void> {
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
-      data: { title: 'Delete Loan', message: `Delete loan of ${loan.amount} to ${loan.personName}?`, confirmText: 'Delete' } as ConfirmDialogData,
+      data: { title: 'Delete Entry', message: `Delete ${loan.type === 'given' ? 'lent' : 'owed'} entry of ${loan.amount} - ${loan.personName}?`, confirmText: 'Delete' } as ConfirmDialogData,
     });
     dialogRef.afterClosed().subscribe(async (confirmed) => {
       if (confirmed) {

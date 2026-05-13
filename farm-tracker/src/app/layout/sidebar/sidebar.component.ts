@@ -29,7 +29,7 @@ import { MatIconModule } from '@angular/material/icon';
 
           <a routerLink="/loans" routerLinkActive="active" class="nav-item">
             <mat-icon>account_balance</mat-icon>
-            <span>Loans</span>
+            <span>Owe & Lent</span>
           </a>
         }
 

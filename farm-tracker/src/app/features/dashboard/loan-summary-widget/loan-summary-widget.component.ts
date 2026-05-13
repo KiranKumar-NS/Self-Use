@@ -11,24 +11,24 @@ import { MatButtonModule } from '@angular/material/button';
   template: `
     <mat-card class="loan-card">
       <div class="card-header">
-        <h3>Loan Summary</h3>
+        <h3>Owe & Lent Summary</h3>
         <button mat-button color="primary" (click)="viewAll()">View All</button>
       </div>
       <div class="loan-grid">
         <div class="loan-item">
-          <span class="loan-label">Total Given</span>
+          <span class="loan-label">Total Lent</span>
           <span class="loan-value given">{{ totalGiven | currencyInr }}</span>
         </div>
         <div class="loan-item">
-          <span class="loan-label">Total Received</span>
+          <span class="loan-label">Total Owed</span>
           <span class="loan-value received">{{ totalReceived | currencyInr }}</span>
         </div>
         <div class="loan-item">
-          <span class="loan-label">Pending (Given)</span>
+          <span class="loan-label">Pending (Lent)</span>
           <span class="loan-value pending">{{ pendingGiven | currencyInr }}</span>
         </div>
         <div class="loan-item">
-          <span class="loan-label">Pending (Received)</span>
+          <span class="loan-label">Pending (Owed)</span>
           <span class="loan-value pending">{{ pendingReceived | currencyInr }}</span>
         </div>
       </div>

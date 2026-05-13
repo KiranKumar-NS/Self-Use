@@ -25,7 +25,7 @@ import { MatRadioModule } from '@angular/material/radio';
   ],
   template: `
     <div class="page-header">
-      <h1>{{ isEdit() ? 'Edit' : 'Add' }} Loan</h1>
+      <h1>{{ isEdit() ? 'Edit' : 'Add' }} Owe / Lent Entry</h1>
     </div>
 
     <mat-card class="form-card">
@@ -36,8 +36,8 @@ import { MatRadioModule } from '@angular/material/radio';
       <form (ngSubmit)="save()">
         <div class="form-row">
           <mat-radio-group [(ngModel)]="type" name="type">
-            <mat-radio-button value="given">Loan Given</mat-radio-button>
-            <mat-radio-button value="received">Loan Received</mat-radio-button>
+            <mat-radio-button value="given">Lent (We gave money)</mat-radio-button>
+            <mat-radio-button value="received">Owed (We borrowed money)</mat-radio-button>
           </mat-radio-group>
         </div>
 
@@ -79,7 +79,7 @@ import { MatRadioModule } from '@angular/material/radio';
         <div class="form-actions">
           <button mat-button type="button" (click)="cancel()">Cancel</button>
           <button mat-flat-button color="primary" type="submit" [disabled]="saving()">
-            {{ saving() ? 'Saving...' : 'Save Loan' }}
+            {{ saving() ? 'Saving...' : 'Save Entry' }}
           </button>
         </div>
       </form>

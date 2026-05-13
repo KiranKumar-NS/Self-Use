@@ -31,7 +31,7 @@ import { DatePipe } from '@angular/common';
       <app-loading-spinner />
     } @else if (loan()) {
       <div class="page-header">
-        <h1>Loan Detail</h1>
+        <h1>{{ loan()!.type === 'given' ? 'Lent' : 'Owed' }} Detail</h1>
         <div>
           <button mat-stroked-button (click)="edit()">
             <mat-icon>edit</mat-icon> Edit
@@ -44,7 +44,7 @@ import { DatePipe } from '@angular/common';
         <div class="detail-grid">
           <div class="detail-item">
             <label>Type</label>
-            <span class="type-badge" [class]="loan()!.type">{{ loan()!.type }}</span>
+            <span class="type-badge" [class]="loan()!.type">{{ loan()!.type === 'given' ? 'Lent' : 'Owed' }}</span>
           </div>
           <div class="detail-item">
             <label>Date</label>
