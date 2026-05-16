@@ -103,6 +103,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
             <div class="subtask-row">
               <mat-checkbox [(ngModel)]="sub.done" [name]="'sub_' + i" />
               <input class="subtask-input" [(ngModel)]="sub.title" [name]="'subtitle_' + i" />
+              <input type="date" class="subtask-date" [(ngModel)]="sub.dueDate" [name]="'subdate_' + i" title="Due date" />
               <button mat-icon-button type="button" (click)="removeSubtask(i)">
                 <mat-icon>close</mat-icon>
               </button>
@@ -142,6 +143,8 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
     .subtask-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
     .subtask-input { flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; }
     .subtask-input:focus { outline: none; border-color: #4f46e5; }
+    .subtask-date { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font-size: 0.8rem; color: #475569; width: 140px; }
+    .subtask-date:focus { outline: none; border-color: #4f46e5; }
     .add-btn { color: #4f46e5; font-size: 0.85rem; }
   `],
 })
@@ -191,7 +194,7 @@ export class TaskFormComponent implements OnInit {
     }
   }
 
-  addSubtask(): void { this.subtasks.push({ id: Date.now().toString(), title: '', done: false }); }
+  addSubtask(): void { this.subtasks.push({ id: Date.now().toString(), title: '', done: false, dueDate: null }); }
   removeSubtask(i: number): void { this.subtasks.splice(i, 1); }
 
   async save(): Promise<void> {

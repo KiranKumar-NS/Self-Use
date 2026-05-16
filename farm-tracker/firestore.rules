@@ -30,9 +30,10 @@ service cloud.firestore {
     // Users collection
     match /users/{userId} {
       allow read: if isAuthenticated();
+      // User can create/update their own profile
+      allow create, update: if isAuthenticated() && request.auth.uid == userId;
+      // Admin can create/update/delete any user
       allow create, update, delete: if isAdmin();
-      // Allow user to read own profile
-      allow read: if isAuthenticated() && request.auth.uid == userId;
     }
 
     // Segments (reference data)

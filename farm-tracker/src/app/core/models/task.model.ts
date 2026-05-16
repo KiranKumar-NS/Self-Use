@@ -8,6 +8,7 @@ export interface Subtask {
   id: string;
   title: string;
   done: boolean;
+  dueDate: string | null; // 'YYYY-MM-DD' format for simplicity
 }
 
 export interface Task {

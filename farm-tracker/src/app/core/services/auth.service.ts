@@ -2,7 +2,6 @@ import { Injectable, inject, signal, computed } from '@angular/core';
 import {
   Auth,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
   onAuthStateChanged,
@@ -64,22 +63,36 @@ export class AuthService {
   }
 
   async register(email: string, password: string, displayName: string, role: UserRole, assignedSegments: string[]): Promise<string> {
-    const credential = await createUserWithEmailAndPassword(this.auth, email, password);
-    const uid = credential.user.uid;
+    // Use secondary app to create user without affecting current login
+    const { initializeApp, deleteApp } = await import('@angular/fire/app');
+    const { getAuth, createUserWithEmailAndPassword: createUser } = await import('@angular/fire/auth');
+    const { environment } = await import('../../environments/environment');
 
-    await setDoc(doc(this.firestore, 'users', uid), {
-      uid,
-      email,
-      displayName,
-      role,
-      assignedSegments,
-      isActive: true,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      createdBy: this.currentUser()?.uid || uid,
-    } as Partial<AppUser>);
+    const secondaryApp = initializeApp(environment.firebase, 'secondary-' + Date.now());
+    const secondaryAuth = getAuth(secondaryApp);
 
-    return uid;
+    try {
+      const credential = await createUser(secondaryAuth, email, password);
+      const uid = credential.user.uid;
+
+      await setDoc(doc(this.firestore, 'users', uid), {
+        uid,
+        email,
+        displayName,
+        role,
+        assignedSegments,
+        isActive: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: this.currentUser()?.uid || uid,
+      } as Partial<AppUser>);
+
+      await deleteApp(secondaryApp);
+      return uid;
+    } catch (err) {
+      await deleteApp(secondaryApp);
+      throw err;
+    }
   }
 
   async logout(): Promise<void> {

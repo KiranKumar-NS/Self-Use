@@ -69,6 +69,9 @@ import { DatePipe } from '@angular/common';
               <mat-checkbox [checked]="sub.done" (change)="toggleSubtask(i)">
                 <span [class.done-text]="sub.done">{{ sub.title }}</span>
               </mat-checkbox>
+              @if (sub.dueDate) {
+                <span class="subtask-due">{{ sub.dueDate }}</span>
+              }
             </div>
           }
         </mat-card>
@@ -96,7 +99,8 @@ import { DatePipe } from '@angular/common';
     .tag { background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; }
     .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; }
     .subtasks-card { padding: 1rem; }
-    .subtask-item { padding: 6px 0; border-bottom: 1px solid #f1f5f9; }
+    .subtask-item { padding: 6px 0; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; }
+    .subtask-due { font-size: 0.7rem; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; }
     .done-text { text-decoration: line-through; color: #94a3b8; }
   `],
 })
