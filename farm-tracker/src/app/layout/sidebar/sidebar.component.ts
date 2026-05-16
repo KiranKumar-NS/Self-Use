@@ -33,6 +33,16 @@ import { MatIconModule } from '@angular/material/icon';
           </a>
         }
 
+        <a routerLink="/tasks" routerLinkActive="active" class="nav-item">
+          <mat-icon>view_kanban</mat-icon>
+          <span>Tasks</span>
+        </a>
+
+        <a routerLink="/goals" routerLinkActive="active" class="nav-item">
+          <mat-icon>flag</mat-icon>
+          <span>Goals</span>
+        </a>
+
         <a routerLink="/reports" routerLinkActive="active" class="nav-item">
           <mat-icon>assessment</mat-icon>
           <span>Reports</span>

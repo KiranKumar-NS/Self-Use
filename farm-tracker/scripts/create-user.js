@@ -112,7 +112,7 @@ const displayName = process.argv[4];
 const role = process.argv[5];
 const segmentsArgs = process.argv.slice(6);
 
-const ALL_SEGMENTS = ['goats', 'chickens', 'cows', 'fruits', 'crops'];
+const ALL_SEGMENTS = ['goats', 'chickens', 'dragon'];
 const VALID_ROLES = ['admin', 'manager', 'viewer'];
 
 if (!email || !password || !displayName || !role) {

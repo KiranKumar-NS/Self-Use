@@ -101,11 +101,9 @@ const db = admin.firestore();
 // ── Default Data ───────────────────────────────────────────
 
 const SEGMENTS = [
-  { id: 'goats',    name: 'Goats',    description: 'Goat farming',      icon: '🐐' },
-  { id: 'chickens', name: 'Chickens', description: 'Chicken farming',   icon: '🐔' },
-  { id: 'cows',     name: 'Cows',     description: 'Cow farming',       icon: '🐄' },
-  { id: 'fruits',   name: 'Fruits',   description: 'Fruit cultivation', icon: '🍎' },
-  { id: 'crops',    name: 'Crops',    description: 'Crop cultivation',  icon: '🌾' },
+  { id: 'goats',    name: 'Goats',    description: 'Goat farming',    icon: '🐐' },
+  { id: 'chickens', name: 'Chickens', description: 'Chicken farming', icon: '🐔' },
+  { id: 'dragon',   name: 'Dragon',   description: 'Dragon farming',  icon: '🐉' },
 ];
 
 const CATEGORIES = [

@@ -1,0 +1,30 @@
+import { Timestamp } from '@angular/fire/firestore';
+
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'done';
+
+export interface Subtask {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string;
+  priority: TaskPriority;
+  status: TaskStatus;
+  goalId: string | null;
+  assignee: string | null;
+  assigneeName: string | null;
+  dueDate: Timestamp | null;
+  subtasks: Subtask[];
+  tags: string[];
+  kanbanOrder: number;
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  completedAt: Timestamp | null;
+}

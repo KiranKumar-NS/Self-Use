@@ -206,9 +206,7 @@ async function seedSegments() {
   const segments = [
     { id: 'goats', name: 'Goats', description: 'Goat farming', icon: '🐐', isActive: true },
     { id: 'chickens', name: 'Chickens', description: 'Chicken farming', icon: '🐔', isActive: true },
-    { id: 'cows', name: 'Cows', description: 'Cow farming', icon: '🐄', isActive: true },
-    { id: 'fruits', name: 'Fruits', description: 'Fruit cultivation', icon: '🍎', isActive: true },
-    { id: 'crops', name: 'Crops', description: 'Crop cultivation', icon: '🌾', isActive: true },
+    { id: 'dragon', name: 'Dragon', description: 'Dragon farming', icon: '🐉', isActive: true },
   ];
 
   const batch = db.batch();
