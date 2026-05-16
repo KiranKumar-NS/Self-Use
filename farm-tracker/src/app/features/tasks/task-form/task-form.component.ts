@@ -2,9 +2,10 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../core/services/task.service';
-import { GoalService } from '../../../core/services/goal.service';
-import { Task, TaskPriority, TaskStatus, Subtask } from '../../../core/models/task.model';
-import { Goal } from '../../../core/models/goal.model';
+import { UserService } from '../../../core/services/user.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { Task, TaskPriority, TaskStatus, TaskVisibility, Subtask } from '../../../core/models/task.model';
+import { AppUser } from '../../../core/models/user.model';
 import { Timestamp } from '@angular/fire/firestore';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -68,21 +69,31 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 
         <div class="form-row">
           <mat-form-field appearance="outline">
+            <mat-label>Assign To</mat-label>
+            <mat-select [(ngModel)]="assignee" name="assignee">
+              @for (u of users(); track u.uid) {
+                <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Visibility</mat-label>
+            <mat-select [(ngModel)]="visibility" name="visibility">
+              <mat-option value="shared">Shared (everyone sees)</mat-option>
+              <mat-option value="personal">Personal (only me)</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline">
             <mat-label>Due Date (optional)</mat-label>
             <input matInput [matDatepicker]="picker" [(ngModel)]="dueDate" name="dueDate" />
             <mat-datepicker-toggle matIconSuffix [for]="picker" />
             <mat-datepicker #picker />
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Link to Goal (optional)</mat-label>
-            <mat-select [(ngModel)]="goalId" name="goalId">
-              <mat-option value="">None</mat-option>
-              @for (g of goals(); track g.id) {
-                <mat-option [value]="g.id">{{ g.title }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
         </div>
 
         <!-- Subtasks -->
@@ -136,27 +147,32 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 })
 export class TaskFormComponent implements OnInit {
   private taskService = inject(TaskService);
-  private goalService = inject(GoalService);
+  private userService = inject(UserService);
+  private authService = inject(AuthService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
   isEdit = signal(false);
   error = signal('');
   saving = signal(false);
-  goals = signal<Goal[]>([]);
+  users = signal<AppUser[]>([]);
 
   title = '';
   description = '';
   priority: TaskPriority = 'medium';
   status: TaskStatus = 'todo';
+  visibility: TaskVisibility = 'shared';
+  assignee = '';
   dueDate: Date | null = null;
-  goalId = '';
   subtasks: Subtask[] = [];
   tagsInput = '';
   private editId = '';
 
   async ngOnInit(): Promise<void> {
-    this.goals.set(await this.goalService.getAll());
+    const allUsers = await this.userService.getAll();
+    this.users.set(allUsers.filter((u) => u.isActive));
+    this.assignee = this.authService.currentUser()?.uid || '';
+
     this.editId = this.route.snapshot.params['id'];
     if (this.editId) {
       this.isEdit.set(true);
@@ -166,8 +182,9 @@ export class TaskFormComponent implements OnInit {
         this.description = task.description;
         this.priority = task.priority;
         this.status = task.status;
+        this.visibility = task.visibility || 'shared';
+        this.assignee = task.assignee || '';
         this.dueDate = task.dueDate?.toDate() || null;
-        this.goalId = task.goalId || '';
         this.subtasks = [...task.subtasks];
         this.tagsInput = task.tags.join(', ');
       }
@@ -183,13 +200,16 @@ export class TaskFormComponent implements OnInit {
     this.saving.set(true);
 
     const tags = this.tagsInput ? this.tagsInput.split(',').map((t) => t.trim()).filter(Boolean) : [];
+    const assigneeUser = this.users().find((u) => u.uid === this.assignee);
     const data: Partial<Task> = {
       title: this.title,
       description: this.description,
       priority: this.priority,
       status: this.status,
+      visibility: this.visibility,
+      assignee: this.assignee || null,
+      assigneeName: assigneeUser?.displayName || null,
       dueDate: this.dueDate ? Timestamp.fromDate(this.dueDate) : null,
-      goalId: this.goalId || null,
       subtasks: this.subtasks.filter((s) => s.title.trim()),
       tags,
     };

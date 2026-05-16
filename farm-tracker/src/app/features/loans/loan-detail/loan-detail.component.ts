@@ -2,9 +2,7 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { LoanService } from '../../../core/services/loan.service';
-import { AuditLogService } from '../../../core/services/audit-log.service';
 import { Loan, Repayment } from '../../../core/models/loan.model';
-import { AuditLog } from '../../../core/models/audit-log.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { RelativeTimePipe } from '../../../shared/pipes/relative-time.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
@@ -33,9 +31,11 @@ import { DatePipe } from '@angular/common';
       <div class="page-header">
         <h1>{{ loan()!.type === 'given' ? 'Lent' : 'Owed' }} Detail</h1>
         <div>
-          <button mat-stroked-button (click)="edit()">
-            <mat-icon>edit</mat-icon> Edit
-          </button>
+          @if (loan()!.repaymentStatus === 'pending') {
+            <button mat-stroked-button (click)="edit()">
+              <mat-icon>edit</mat-icon> Edit
+            </button>
+          }
           <button mat-button (click)="back()">Back</button>
         </div>
       </div>
@@ -161,7 +161,6 @@ import { DatePipe } from '@angular/common';
 })
 export class LoanDetailComponent implements OnInit {
   private loanService = inject(LoanService);
-  private auditLogService = inject(AuditLogService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 

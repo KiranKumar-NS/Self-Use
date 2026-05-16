@@ -62,8 +62,9 @@ import { MatRadioModule } from '@angular/material/radio';
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>Segment</mat-label>
-            <mat-select [(ngModel)]="segment" name="segment" required>
+            <mat-label>Segment (optional)</mat-label>
+            <mat-select [(ngModel)]="segment" name="segment">
+              <mat-option value="">Personal (No segment)</mat-option>
               @for (seg of segments(); track seg.id) {
                 <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
               }
@@ -72,8 +73,8 @@ import { MatRadioModule } from '@angular/material/radio';
         </div>
 
         <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Purpose</mat-label>
-          <textarea matInput [(ngModel)]="purpose" name="purpose" rows="3" required></textarea>
+          <mat-label>Purpose / Reason</mat-label>
+          <input matInput [(ngModel)]="purpose" name="purpose" required placeholder="e.g. Personal need, Goat feed, Medical emergency" />
         </mat-form-field>
 
         <div class="form-actions">
@@ -143,15 +144,15 @@ export class LoanFormComponent implements OnInit {
     this.error.set('');
     this.saving.set(true);
     try {
-      const seg = this.segments().find((s) => s.id === this.segment);
+      const seg = this.segment ? this.segments().find((s) => s.id === this.segment) : null;
       const data: LoanFormData = {
         date: this.date,
         amount: this.amount,
         type: this.type,
         personName: this.personName,
         purpose: this.purpose,
-        segment: this.segment,
-        segmentName: seg?.name || this.segment,
+        segment: this.segment || 'personal',
+        segmentName: seg?.name || 'Personal',
         month: getMonthString(this.date),
         year: getYear(this.date),
       };

@@ -99,14 +99,18 @@ import { DatePipe } from '@angular/common';
                 <td>
                   <span class="status-badge" [class]="loan.repaymentStatus">{{ loan.repaymentStatus }}</span>
                 </td>
-                <td>{{ loan.segmentName }}</td>
+                <td>
+                  <span class="segment-tag" [class.personal]="loan.segment === 'personal' || !loan.segment">{{ loan.segmentName || 'Personal' }}</span>
+                </td>
                 <td>
                   <button mat-icon-button (click)="viewDetail(loan.id)" title="View">
                     <mat-icon>visibility</mat-icon>
                   </button>
-                  <button mat-icon-button (click)="edit(loan.id)" title="Edit">
-                    <mat-icon>edit</mat-icon>
-                  </button>
+                  @if (loan.repaymentStatus === 'pending') {
+                    <button mat-icon-button (click)="edit(loan.id)" title="Edit">
+                      <mat-icon>edit</mat-icon>
+                    </button>
+                  }
                   @if (auth.isAdmin()) {
                     <button mat-icon-button color="warn" (click)="confirmDelete(loan)" title="Delete">
                       <mat-icon>delete</mat-icon>
@@ -146,6 +150,8 @@ import { DatePipe } from '@angular/common';
     .status-badge.completed { background: #f0fdf4; color: #16a34a; }
     .amount { font-weight: 600; }
     .balance { color: #dc2626; font-weight: 600; }
+    .segment-tag { font-size: 0.8rem; }
+    .segment-tag.personal { color: #7c3aed; font-style: italic; }
     .load-more { text-align: center; padding: 1rem; }
   `],
 })

@@ -13,7 +13,6 @@ import {
   where,
   serverTimestamp,
   Timestamp,
-  arrayUnion,
 } from '@angular/fire/firestore';
 import { Task, TaskStatus, Subtask } from '../models/task.model';
 import { AuthService } from './auth.service';
@@ -37,7 +36,7 @@ export class TaskService {
       description: data.description || '',
       priority: data.priority || 'medium',
       status: data.status || 'todo',
-      goalId: data.goalId || null,
+      visibility: data.visibility || 'shared',
       assignee: data.assignee || user.uid,
       assigneeName: data.assigneeName || user.displayName,
       dueDate: data.dueDate || null,
@@ -53,14 +52,28 @@ export class TaskService {
     return taskRef.id;
   }
 
-  async getAll(): Promise<Task[]> {
+  async getAll(filter: 'all' | 'mine' = 'all'): Promise<Task[]> {
+    const uid = this.authService.currentUser()!.uid;
     const q = query(this.tasksRef, orderBy('kanbanOrder', 'asc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => d.data() as Task);
+    let tasks = snapshot.docs.map((d) => d.data() as Task);
+
+    // Filter: personal tasks only visible to creator
+    tasks = tasks.filter((t) => {
+      if (t.visibility === 'personal' && t.createdBy !== uid) return false;
+      return true;
+    });
+
+    // Filter: "mine" shows only tasks assigned to me or created by me
+    if (filter === 'mine') {
+      tasks = tasks.filter((t) => t.assignee === uid || t.createdBy === uid);
+    }
+
+    return tasks;
   }
 
-  async getByStatus(): Promise<Record<TaskStatus, Task[]>> {
-    const tasks = await this.getAll();
+  async getByStatus(filter: 'all' | 'mine' = 'all'): Promise<Record<TaskStatus, Task[]>> {
+    const tasks = await this.getAll(filter);
     return {
       backlog: tasks.filter((t) => t.status === 'backlog'),
       todo: tasks.filter((t) => t.status === 'todo'),

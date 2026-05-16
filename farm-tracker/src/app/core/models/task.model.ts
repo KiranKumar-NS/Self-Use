@@ -2,6 +2,7 @@ import { Timestamp } from '@angular/fire/firestore';
 
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'done';
+export type TaskVisibility = 'shared' | 'personal';
 
 export interface Subtask {
   id: string;
@@ -15,7 +16,7 @@ export interface Task {
   description: string;
   priority: TaskPriority;
   status: TaskStatus;
-  goalId: string | null;
+  visibility: TaskVisibility;
   assignee: string | null;
   assigneeName: string | null;
   dueDate: Timestamp | null;

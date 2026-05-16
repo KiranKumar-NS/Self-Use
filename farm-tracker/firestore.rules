@@ -86,10 +86,5 @@ service cloud.firestore {
     match /tasks/{taskId} {
       allow read, write: if isAuthenticated();
     }
-
-    // Goals - all authenticated users can manage
-    match /goals/{goalId} {
-      allow read, write: if isAuthenticated();
-    }
   }
 }
