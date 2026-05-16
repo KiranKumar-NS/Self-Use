@@ -28,13 +28,13 @@
  *
  * Commands:
  *
- *   all           - Delete ALL data from ALL collections (full reset)
- *                   WARNING: This deletes everything including users!
+ *   all           - Delete transactions, loans & summaries
+ *                   (keeps users, segments, categories safe)
  *
  *   transactions  - Delete all transactions + monthly summaries
  *   loans         - Delete all loans and their repayment subcollections
  *   summaries     - Delete all monthly summary documents
- *   seed          - Delete existing segments/categories and re-seed defaults
+ *   seed          - Re-seed segments and categories (adds missing ones)
  *
  * ────────────────────────────────────────────────────────────
  * EXAMPLES
@@ -109,11 +109,11 @@ if (!command || !VALID_COMMANDS.includes(command)) {
   console.error('Usage: node scripts/clean-db.js <command>');
   console.error('');
   console.error('Commands:');
-  console.error('  all           - Delete ALL data (full reset including users)');
+  console.error('  all           - Delete transactions, loans & summaries (keeps users/segments/categories)');
   console.error('  transactions  - Delete all transactions and summaries');
   console.error('  loans         - Delete all loans and repayments');
   console.error('  summaries     - Delete all monthly summaries');
-  console.error('  seed          - Re-seed segments and categories');
+  console.error('  seed          - Re-seed segments and categories (adds missing ones)');
   console.error('');
   process.exit(1);
 }
@@ -255,23 +255,20 @@ async function run() {
 
   switch (command) {
     case 'all': {
-      console.log('WARNING: This will delete ALL data including users!');
-      const ok = await confirm('Are you sure you want to delete EVERYTHING?');
+      console.log('This will delete all transactions, loans & summaries.');
+      console.log('Users, segments, and categories will NOT be deleted.');
+      const ok = await confirm('Proceed?');
       if (!ok) {
         console.log('Cancelled.');
         process.exit(0);
       }
       console.log('');
-      console.log('Deleting all collections...');
+      console.log('Deleting transaction data...');
       await deleteCollection('transactions');
       await deleteCollectionWithSubcollections('loans', 'repayments');
       await deleteCollection('monthlySummaries');
-      await deleteCollection('users');
-      await deleteCollection('segments');
-      await deleteCollection('categories');
-      await deleteAllAuthUsers();
       console.log('');
-      console.log('All data deleted. Run "seed" to re-create segments/categories.');
+      console.log('Done. Users, segments, and categories are preserved.');
       break;
     }
 
