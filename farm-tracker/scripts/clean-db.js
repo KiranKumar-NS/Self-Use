@@ -31,9 +31,8 @@
  *   all           - Delete ALL data from ALL collections (full reset)
  *                   WARNING: This deletes everything including users!
  *
- *   transactions  - Delete all transactions + update monthly summaries
+ *   transactions  - Delete all transactions + monthly summaries
  *   loans         - Delete all loans and their repayment subcollections
- *   audit         - Delete all audit log entries
  *   summaries     - Delete all monthly summary documents
  *   seed          - Delete existing segments/categories and re-seed defaults
  *
@@ -50,9 +49,6 @@
  *   # Clear only loans and repayments
  *   node scripts/clean-db.js loans
  *
- *   # Clear audit logs only
- *   node scripts/clean-db.js audit
- *
  *   # Reset segments and categories to defaults
  *   node scripts/clean-db.js seed
  *
@@ -63,10 +59,9 @@
  *   users             - User profiles (uid, email, role, segments)
  *   segments          - Business segments (goats, chickens, cows, fruits, crops)
  *   categories        - Transaction categories (Feed, Medicine, Milk, etc.)
- *   transactions      - All expense and income records
- *   loans             - Loan records (given/received)
+ *   transactions      - All expense and income records (with inline timeline)
+ *   loans             - Owe & Lent records (with inline timeline)
  *     └─ repayments   - Subcollection: repayment history per loan
- *   auditLogs         - Immutable audit trail of all changes
  *   monthlySummaries  - Precomputed monthly totals per segment
  *
  * ────────────────────────────────────────────────────────────
@@ -107,7 +102,7 @@ const db = admin.firestore();
 // ── Parse Arguments ────────────────────────────────────────
 const command = process.argv[2];
 
-const VALID_COMMANDS = ['all', 'transactions', 'loans', 'audit', 'summaries', 'seed'];
+const VALID_COMMANDS = ['all', 'transactions', 'loans', 'summaries', 'seed'];
 
 if (!command || !VALID_COMMANDS.includes(command)) {
   console.error('');
@@ -117,7 +112,6 @@ if (!command || !VALID_COMMANDS.includes(command)) {
   console.error('  all           - Delete ALL data (full reset including users)');
   console.error('  transactions  - Delete all transactions and summaries');
   console.error('  loans         - Delete all loans and repayments');
-  console.error('  audit         - Delete all audit log entries');
   console.error('  summaries     - Delete all monthly summaries');
   console.error('  seed          - Re-seed segments and categories');
   console.error('');
@@ -271,7 +265,6 @@ async function run() {
       console.log('Deleting all collections...');
       await deleteCollection('transactions');
       await deleteCollectionWithSubcollections('loans', 'repayments');
-      await deleteCollection('auditLogs');
       await deleteCollection('monthlySummaries');
       await deleteCollection('users');
       await deleteCollection('segments');
@@ -303,15 +296,6 @@ async function run() {
       break;
     }
 
-    case 'audit': {
-      const ok = await confirm('Delete all audit logs?');
-      if (!ok) { console.log('Cancelled.'); process.exit(0); }
-      console.log('');
-      console.log('Deleting audit logs...');
-      await deleteCollection('auditLogs');
-      console.log('Done.');
-      break;
-    }
 
     case 'summaries': {
       const ok = await confirm('Delete all monthly summaries?');
