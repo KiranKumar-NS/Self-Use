@@ -1,9 +1,7 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TransactionService } from '../../../core/services/transaction.service';
-import { AuditLogService } from '../../../core/services/audit-log.service';
 import { Transaction } from '../../../core/models/transaction.model';
-import { AuditLog } from '../../../core/models/audit-log.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { RelativeTimePipe } from '../../../shared/pipes/relative-time.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
@@ -76,19 +74,15 @@ import { DatePipe } from '@angular/common';
         </div>
       </mat-card>
 
-      @if (auditLogs().length > 0) {
-        <h3 class="section-title">Audit History</h3>
+      @if (transaction()!.timeline && transaction()!.timeline.length > 0) {
+        <h3 class="section-title">Timeline</h3>
         <mat-card>
-          @for (log of auditLogs(); track log.id) {
+          @for (entry of transaction()!.timeline; track $index) {
             <div class="audit-entry">
-              <strong>{{ log.userName }}</strong> {{ log.action }}d this transaction
-              <span class="audit-time">{{ log.timestamp | relativeTime }}</span>
-              @if (log.changes.length > 0 && log.changes[0].field !== '*') {
-                <ul class="changes">
-                  @for (change of log.changes; track change.field) {
-                    <li>{{ change.field }}: {{ change.oldValue }} → {{ change.newValue }}</li>
-                  }
-                </ul>
+              <strong>{{ entry.byName }}</strong> {{ entry.action }} this transaction
+              <span class="audit-time">{{ entry.at | relativeTime }}</span>
+              @if (entry.changes) {
+                <div class="changes">{{ entry.changes }}</div>
               }
             </div>
           }
@@ -120,22 +114,15 @@ import { DatePipe } from '@angular/common';
 })
 export class TransactionDetailComponent implements OnInit {
   private transactionService = inject(TransactionService);
-  private auditLogService = inject(AuditLogService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
   transaction = signal<Transaction | null>(null);
-  auditLogs = signal<AuditLog[]>([]);
   loading = signal(true);
 
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.params['id'];
-    const [txn, logs] = await Promise.all([
-      this.transactionService.getById(id),
-      this.auditLogService.getByEntity('transaction', id),
-    ]);
-    this.transaction.set(txn);
-    this.auditLogs.set(logs);
+    this.transaction.set(await this.transactionService.getById(id));
     this.loading.set(false);
   }
 

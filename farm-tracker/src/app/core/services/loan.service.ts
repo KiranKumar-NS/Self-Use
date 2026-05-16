@@ -15,6 +15,7 @@ import {
   Timestamp,
   DocumentSnapshot,
   startAfter,
+  arrayUnion,
 } from '@angular/fire/firestore';
 import { Loan, LoanFormData, Repayment } from '../models/loan.model';
 import { AuthService } from './auth.service';
@@ -25,12 +26,10 @@ export class LoanService {
   private authService = inject(AuthService);
 
   async create(data: LoanFormData): Promise<string> {
-    const batch = writeBatch(this.firestore);
     const user = this.authService.userProfile()!;
-
     const loanRef = doc(collection(this.firestore, 'loans'));
-    const auditRef = doc(collection(this.firestore, 'auditLogs'));
 
+    const batch = writeBatch(this.firestore);
     batch.set(loanRef, {
       id: loanRef.id,
       date: Timestamp.fromDate(data.date),
@@ -46,24 +45,13 @@ export class LoanService {
       recordedBy: user.uid,
       recordedByName: user.displayName,
       createdAt: serverTimestamp(),
-      updatedBy: null,
-      updatedAt: null,
       isDeleted: false,
-      deletedBy: null,
-      deletedAt: null,
-      month: data.month,
-      year: data.year,
-    });
-
-    batch.set(auditRef, {
-      id: auditRef.id,
-      entityType: 'loan',
-      entityId: loanRef.id,
-      action: 'create',
-      userId: user.uid,
-      userName: user.displayName,
-      timestamp: serverTimestamp(),
-      changes: [{ field: '*', oldValue: null, newValue: 'created' }],
+      timeline: [{
+        action: 'created',
+        by: user.uid,
+        byName: user.displayName,
+        at: Timestamp.now(),
+      }],
       month: data.month,
       year: data.year,
     });
@@ -73,11 +61,10 @@ export class LoanService {
   }
 
   async update(id: string, data: LoanFormData): Promise<void> {
-    const batch = writeBatch(this.firestore);
     const user = this.authService.userProfile()!;
     const loanRef = doc(this.firestore, 'loans', id);
-    const auditRef = doc(collection(this.firestore, 'auditLogs'));
 
+    const batch = writeBatch(this.firestore);
     batch.update(loanRef, {
       date: Timestamp.fromDate(data.date),
       amount: data.amount,
@@ -86,23 +73,15 @@ export class LoanService {
       purpose: data.purpose,
       segment: data.segment,
       segmentName: data.segmentName,
-      updatedBy: user.uid,
-      updatedAt: serverTimestamp(),
       month: data.month,
       year: data.year,
-    });
-
-    batch.set(auditRef, {
-      id: auditRef.id,
-      entityType: 'loan',
-      entityId: id,
-      action: 'update',
-      userId: user.uid,
-      userName: user.displayName,
-      timestamp: serverTimestamp(),
-      changes: [{ field: '*', oldValue: null, newValue: 'updated' }],
-      month: data.month,
-      year: data.year,
+      timeline: arrayUnion({
+        action: 'updated',
+        by: user.uid,
+        byName: user.displayName,
+        at: Timestamp.now(),
+        changes: 'details updated',
+      }),
     });
 
     await batch.commit();
@@ -120,6 +99,7 @@ export class LoanService {
       const newBalance = loan.amount - newTotalRepaid;
       const newStatus = newBalance <= 0 ? 'completed' : 'partial';
 
+      // Add repayment subcollection doc
       const repaymentRef = doc(collection(this.firestore, `loans/${loanId}/repayments`));
       transaction.set(repaymentRef, {
         id: repaymentRef.id,
@@ -131,71 +111,42 @@ export class LoanService {
         createdAt: serverTimestamp(),
       });
 
+      // Update loan + timeline
       transaction.update(loanRef, {
         totalRepaid: newTotalRepaid,
         balanceRemaining: Math.max(0, newBalance),
         repaymentStatus: newStatus,
-        updatedBy: user.uid,
-        updatedAt: serverTimestamp(),
-      });
-
-      const auditRef = doc(collection(this.firestore, 'auditLogs'));
-      transaction.set(auditRef, {
-        id: auditRef.id,
-        entityType: 'repayment',
-        entityId: loanId,
-        action: 'create',
-        userId: user.uid,
-        userName: user.displayName,
-        timestamp: serverTimestamp(),
-        changes: [
-          { field: 'repaymentAmount', oldValue: null, newValue: amount },
-          { field: 'totalRepaid', oldValue: loan.totalRepaid, newValue: newTotalRepaid },
-          { field: 'repaymentStatus', oldValue: loan.repaymentStatus, newValue: newStatus },
-        ],
-        month: loan.month,
-        year: loan.year,
+        timeline: arrayUnion({
+          action: 'updated',
+          by: user.uid,
+          byName: user.displayName,
+          at: Timestamp.now(),
+          changes: `repayment: +${amount} (${newStatus})`,
+        }),
       });
     });
   }
 
   async softDelete(id: string): Promise<void> {
-    const batch = writeBatch(this.firestore);
     const user = this.authService.userProfile()!;
     const loanRef = doc(this.firestore, 'loans', id);
-    const auditRef = doc(collection(this.firestore, 'auditLogs'));
 
-    const oldDoc = await getDoc(loanRef);
-    const oldData = oldDoc.data() as Loan;
-
+    const batch = writeBatch(this.firestore);
     batch.update(loanRef, {
       isDeleted: true,
-      deletedBy: user.uid,
-      deletedAt: serverTimestamp(),
-    });
-
-    batch.set(auditRef, {
-      id: auditRef.id,
-      entityType: 'loan',
-      entityId: id,
-      action: 'delete',
-      userId: user.uid,
-      userName: user.displayName,
-      timestamp: serverTimestamp(),
-      changes: [{ field: 'isDeleted', oldValue: false, newValue: true }],
-      month: oldData.month,
-      year: oldData.year,
+      timeline: arrayUnion({
+        action: 'deleted',
+        by: user.uid,
+        byName: user.displayName,
+        at: Timestamp.now(),
+      }),
     });
 
     await batch.commit();
   }
 
   async getAll(
-    filters: {
-      type?: 'given' | 'received';
-      segment?: string;
-      repaymentStatus?: string;
-    } = {},
+    filters: { type?: 'given' | 'received'; segment?: string; repaymentStatus?: string } = {},
     pageSize = 20,
     lastDoc?: DocumentSnapshot
   ): Promise<{ loans: Loan[]; lastDoc: DocumentSnapshot | null }> {

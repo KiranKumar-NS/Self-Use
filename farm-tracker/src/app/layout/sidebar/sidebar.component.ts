@@ -39,11 +39,6 @@ import { MatIconModule } from '@angular/material/icon';
         </a>
 
         @if (auth.isAdmin()) {
-          <a routerLink="/audit-log" routerLinkActive="active" class="nav-item">
-            <mat-icon>history</mat-icon>
-            <span>Audit Log</span>
-          </a>
-
           <a routerLink="/admin" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item">
             <mat-icon>admin_panel_settings</mat-icon>
             <span>Admin</span>

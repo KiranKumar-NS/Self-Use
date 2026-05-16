@@ -163,7 +163,7 @@ export class TransactionFormComponent implements OnInit {
   description = '';
   paidBy = '';
   customPaidByName = '';
-  paymentMethod: PaymentMethod = 'cash';
+  paymentMethod: PaymentMethod = 'upi';
 
   allCategories = signal<Category[]>([]);
   allSegments = signal<Segment[]>([]);
@@ -228,6 +228,10 @@ export class TransactionFormComponent implements OnInit {
     this.filteredCategories.set(
       this.allCategories().filter((c) => c.type === this.type)
     );
+    // Default to UPI for expense, cash for income
+    if (!this.isEdit()) {
+      this.paymentMethod = this.type === 'expense' ? 'upi' : 'cash';
+    }
   }
 
   async save(): Promise<void> {

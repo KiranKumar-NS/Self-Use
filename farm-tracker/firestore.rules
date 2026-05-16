@@ -59,13 +59,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Loans
+    // Loans (personal loans use segment='personal' which all users can access)
     match /loans/{loanId} {
       allow read: if isAuthenticated();
       allow create: if isManagerOrAdmin()
-        && hasSegmentAccess(request.resource.data.segment);
+        && (request.resource.data.segment == 'personal' || hasSegmentAccess(request.resource.data.segment));
       allow update: if isManagerOrAdmin()
-        && hasSegmentAccess(resource.data.segment);
+        && (resource.data.segment == 'personal' || hasSegmentAccess(resource.data.segment));
       allow delete: if isAdmin();
 
       // Repayments subcollection
@@ -74,14 +74,6 @@ service cloud.firestore {
         allow create: if isManagerOrAdmin();
         allow update, delete: if isAdmin();
       }
-    }
-
-    // Audit logs - immutable
-    match /auditLogs/{logId} {
-      allow read: if isAdmin();
-      allow create: if isAuthenticated()
-        && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false;
     }
 
     // Monthly summaries

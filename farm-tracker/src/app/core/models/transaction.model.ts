@@ -3,6 +3,14 @@ import { Timestamp } from '@angular/fire/firestore';
 export type TransactionType = 'expense' | 'income';
 export type PaymentMethod = 'cash' | 'upi';
 
+export interface TimelineEntry {
+  action: 'created' | 'updated' | 'deleted';
+  by: string;
+  byName: string;
+  at: Timestamp;
+  changes?: string; // e.g. "amount: 5000→4500, category: Feed→Medicine"
+}
+
 export interface Transaction {
   id: string;
   type: TransactionType;
@@ -19,20 +27,14 @@ export interface Transaction {
   paidBy: string | null;
   paidByName: string | null;
 
-  // Income-specific
-  recordedBy: string | null;
-  recordedByName: string | null;
-
-  // Audit fields
+  // Audit
   createdBy: string;
   createdByName: string;
   createdAt: Timestamp;
-  updatedBy: string | null;
-  updatedByName: string | null;
-  updatedAt: Timestamp | null;
   isDeleted: boolean;
-  deletedBy: string | null;
-  deletedAt: Timestamp | null;
+
+  // Status Timeline (replaces separate auditLogs collection)
+  timeline: TimelineEntry[];
 
   // For queries
   month: string;

@@ -15,11 +15,10 @@ import {
   increment,
   Timestamp,
   DocumentSnapshot,
+  arrayUnion,
 } from '@angular/fire/firestore';
-import { Transaction, TransactionFormData } from '../models/transaction.model';
-import { AuditChange } from '../models/audit-log.model';
+import { Transaction, TransactionFormData, TimelineEntry } from '../models/transaction.model';
 import { AuthService } from './auth.service';
-import { getMonthString, getYear } from '../utils/date.utils';
 
 @Injectable({ providedIn: 'root' })
 export class TransactionService {
@@ -31,11 +30,17 @@ export class TransactionService {
     const user = this.authService.userProfile()!;
 
     const txnRef = doc(collection(this.firestore, 'transactions'));
-    const auditRef = doc(collection(this.firestore, 'auditLogs'));
     const summaryId = `${data.month}-${data.segment}`;
     const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
 
-    const txnData: any = {
+    const timelineEntry: any = {
+      action: 'created',
+      by: user.uid,
+      byName: user.displayName,
+      at: Timestamp.now(),
+    };
+
+    batch.set(txnRef, {
       id: txnRef.id,
       type: data.type,
       date: Timestamp.fromDate(data.date),
@@ -45,58 +50,34 @@ export class TransactionService {
       segment: data.segment,
       segmentName: data.segmentName,
       description: data.description,
-      paymentMethod: data.paymentMethod || 'cash',
+      paymentMethod: data.paymentMethod || 'upi',
       paidBy: data.paidBy || user.uid,
       paidByName: data.paidByName || user.displayName,
-      recordedBy: data.type === 'income' ? user.uid : null,
-      recordedByName: data.type === 'income' ? user.displayName : null,
       createdBy: user.uid,
       createdByName: user.displayName,
       createdAt: serverTimestamp(),
-      updatedBy: null,
-      updatedByName: null,
-      updatedAt: null,
       isDeleted: false,
-      deletedBy: null,
-      deletedAt: null,
-      month: data.month,
-      year: data.year,
-    };
-
-    batch.set(txnRef, txnData);
-
-    batch.set(auditRef, {
-      id: auditRef.id,
-      entityType: 'transaction',
-      entityId: txnRef.id,
-      action: 'create',
-      userId: user.uid,
-      userName: user.displayName,
-      timestamp: serverTimestamp(),
-      changes: [{ field: '*', oldValue: null, newValue: 'created' }],
+      timeline: [timelineEntry],
       month: data.month,
       year: data.year,
     });
 
+    // Update monthly summary
     const incField = data.type === 'expense' ? 'totalExpense' : 'totalIncome';
     const profitDelta = data.type === 'income' ? data.amount : -data.amount;
     const catField = data.type === 'expense'
       ? `expenseByCategory.${data.category}`
       : `incomeBySource.${data.category}`;
 
-    batch.set(
-      summaryRef,
-      {
-        [incField]: increment(data.amount),
-        netProfit: increment(profitDelta),
-        [catField]: increment(data.amount),
-        month: data.month,
-        year: data.year,
-        segment: data.segment,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    batch.set(summaryRef, {
+      [incField]: increment(data.amount),
+      netProfit: increment(profitDelta),
+      [catField]: increment(data.amount),
+      month: data.month,
+      year: data.year,
+      segment: data.segment,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
 
     await batch.commit();
     return txnRef.id;
@@ -106,18 +87,17 @@ export class TransactionService {
     const batch = writeBatch(this.firestore);
     const user = this.authService.userProfile()!;
     const txnRef = doc(this.firestore, 'transactions', id);
-    const auditRef = doc(collection(this.firestore, 'auditLogs'));
 
     const oldDoc = await getDoc(txnRef);
     const oldData = oldDoc.data() as Transaction;
 
-    const changes: AuditChange[] = [];
-    const fields: (keyof TransactionFormData)[] = ['amount', 'category', 'segment', 'description', 'type'];
-    for (const field of fields) {
-      if ((oldData as any)[field] !== (data as any)[field]) {
-        changes.push({ field, oldValue: (oldData as any)[field], newValue: (data as any)[field] });
-      }
-    }
+    // Build changes description
+    const changesList: string[] = [];
+    if (oldData.amount !== data.amount) changesList.push(`amount: ${oldData.amount}→${data.amount}`);
+    if (oldData.category !== data.category) changesList.push(`category: ${oldData.categoryName}→${data.categoryName}`);
+    if (oldData.segment !== data.segment) changesList.push(`segment: ${oldData.segmentName}→${data.segmentName}`);
+    if (oldData.type !== data.type) changesList.push(`type: ${oldData.type}→${data.type}`);
+    const changesStr = changesList.length > 0 ? changesList.join(', ') : 'details updated';
 
     // Reverse old summary
     const oldSummaryId = `${oldData.month}-${oldData.segment}`;
@@ -154,6 +134,7 @@ export class TransactionService {
       updatedAt: serverTimestamp(),
     }, { merge: true });
 
+    // Update transaction + add timeline entry
     batch.update(txnRef, {
       type: data.type,
       date: Timestamp.fromDate(data.date),
@@ -163,27 +144,18 @@ export class TransactionService {
       segment: data.segment,
       segmentName: data.segmentName,
       description: data.description,
-      paymentMethod: data.paymentMethod || 'cash',
+      paymentMethod: data.paymentMethod || 'upi',
       paidBy: data.paidBy || user.uid,
       paidByName: data.paidByName || user.displayName,
-      updatedBy: user.uid,
-      updatedByName: user.displayName,
-      updatedAt: serverTimestamp(),
       month: data.month,
       year: data.year,
-    });
-
-    batch.set(auditRef, {
-      id: auditRef.id,
-      entityType: 'transaction',
-      entityId: id,
-      action: 'update',
-      userId: user.uid,
-      userName: user.displayName,
-      timestamp: serverTimestamp(),
-      changes,
-      month: data.month,
-      year: data.year,
+      timeline: arrayUnion({
+        action: 'updated',
+        by: user.uid,
+        byName: user.displayName,
+        at: Timestamp.now(),
+        changes: changesStr,
+      }),
     });
 
     await batch.commit();
@@ -193,7 +165,6 @@ export class TransactionService {
     const batch = writeBatch(this.firestore);
     const user = this.authService.userProfile()!;
     const txnRef = doc(this.firestore, 'transactions', id);
-    const auditRef = doc(collection(this.firestore, 'auditLogs'));
 
     const oldDoc = await getDoc(txnRef);
     const oldData = oldDoc.data() as Transaction;
@@ -216,33 +187,19 @@ export class TransactionService {
 
     batch.update(txnRef, {
       isDeleted: true,
-      deletedBy: user.uid,
-      deletedAt: serverTimestamp(),
-    });
-
-    batch.set(auditRef, {
-      id: auditRef.id,
-      entityType: 'transaction',
-      entityId: id,
-      action: 'delete',
-      userId: user.uid,
-      userName: user.displayName,
-      timestamp: serverTimestamp(),
-      changes: [{ field: 'isDeleted', oldValue: false, newValue: true }],
-      month: oldData.month,
-      year: oldData.year,
+      timeline: arrayUnion({
+        action: 'deleted',
+        by: user.uid,
+        byName: user.displayName,
+        at: Timestamp.now(),
+      }),
     });
 
     await batch.commit();
   }
 
   async getAll(
-    filters: {
-      type?: 'expense' | 'income';
-      segment?: string;
-      month?: string;
-      createdBy?: string;
-    } = {},
+    filters: { type?: 'expense' | 'income'; segment?: string; month?: string; createdBy?: string } = {},
     pageSize = 20,
     lastDoc?: DocumentSnapshot
   ): Promise<{ transactions: Transaction[]; lastDoc: DocumentSnapshot | null }> {

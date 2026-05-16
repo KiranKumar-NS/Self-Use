@@ -15,7 +15,6 @@ import { MatMenuModule } from '@angular/material/menu';
       <span class="spacer"></span>
 
       <div class="user-info">
-        <span class="role-badge">{{ auth.userRole() }}</span>
         <span class="user-name">{{ auth.userProfile()?.displayName }}</span>
 
         <button mat-icon-button [matMenuTriggerFor]="menu">
@@ -46,15 +45,6 @@ import { MatMenuModule } from '@angular/material/menu';
       display: flex;
       align-items: center;
       gap: 8px;
-    }
-    .role-badge {
-      background: #e0e7ff;
-      color: #4338ca;
-      padding: 2px 10px;
-      border-radius: 12px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
     }
     .user-name {
       font-size: 0.875rem;

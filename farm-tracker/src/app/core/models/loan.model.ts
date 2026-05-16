@@ -1,4 +1,5 @@
 import { Timestamp } from '@angular/fire/firestore';
+import { TimelineEntry } from './transaction.model';
 
 export type LoanType = 'given' | 'received';
 export type RepaymentStatus = 'pending' | 'partial' | 'completed';
@@ -20,11 +21,10 @@ export interface Loan {
   recordedBy: string;
   recordedByName: string;
   createdAt: Timestamp;
-  updatedBy: string | null;
-  updatedAt: Timestamp | null;
   isDeleted: boolean;
-  deletedBy: string | null;
-  deletedAt: Timestamp | null;
+
+  // Status Timeline
+  timeline: TimelineEntry[];
 
   month: string;
   year: number;
