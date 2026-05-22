@@ -30,6 +30,10 @@ export const routes: Routes = [
         loadChildren: () => import('./features/tasks/tasks.routes').then(m => m.TASK_ROUTES),
       },
       {
+        path: 'analytics',
+        loadComponent: () => import('./features/analytics/analytics.component').then(m => m.AnalyticsComponent),
+      },
+      {
         path: 'reports',
         loadChildren: () => import('./features/reports/reports.routes').then(m => m.REPORT_ROUTES),
       },

@@ -4,6 +4,7 @@
   "private": true,
   "description": "Admin scripts for Farm Tracker",
   "dependencies": {
-    "firebase-admin": "^13.0.0"
+    "firebase-admin": "^13.0.0",
+    "xlsx": "^0.18.5"
   }
 }
