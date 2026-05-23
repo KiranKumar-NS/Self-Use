@@ -2,7 +2,7 @@
 
 ## Overview
 
-A web application for managing a small farming business involving multiple users. The system tracks income, expenses, and loans with full transparency on who did what, where, and why.
+A web application for managing a small farming business involving multiple users. The system tracks income, expenses, loans, and tasks with full transparency on who did what, where, and why.
 
 **Tech Stack:** Angular 21 + Firebase (Free Spark Plan) + Angular Material + Chart.js
 
@@ -12,9 +12,7 @@ A web application for managing a small farming business involving multiple users
 
 - Goats
 - Chickens
-- Cows
-- Fruits
-- Crops
+- Dragon
 
 ---
 
@@ -22,9 +20,9 @@ A web application for managing a small farming business involving multiple users
 
 | Role | Access |
 |------|--------|
-| **Admin** | Full access to all data, manage users, view all reports and audit logs |
+| **Admin** | Full access to all data, manage users, seed data, view all reports |
 | **Manager** | Add income/expense/loan entries, limited to assigned segments |
-| **Viewer** | Read-only access to dashboards and reports |
+| **Viewer** | Read-only access to dashboards, analytics, and reports |
 
 ---
 
@@ -34,29 +32,45 @@ A web application for managing a small farming business involving multiple users
 - Email/password login via Firebase Auth
 - Role-based access using custom claims
 - Password reset via email
-- Admin can register new users
+- Admin can register new users (without logging out)
 
 ### 2. Dashboard
-- Total income, expense, net profit/loss cards
-- Segment-wise breakdown chart (bar)
+- Total income, expense, net profit/loss summary cards
+- Segment-wise breakdown chart (doughnut)
 - Monthly trend chart (line, last 6 months)
 - Recent transactions list
-- Loan summary widget
+- Loan summary widget (given/received totals)
 
 ### 3. Transactions (Expense & Income)
 - Add/edit/delete (soft) transactions
 - Filter by type, segment, month
 - Pagination (20 per page)
-- Amount, category, segment, description, paid-by tracking
+- Amount, category, segment, description, payment method (cash/UPI), paid-by tracking
+- Inline timeline for audit trail (created/updated/deleted events)
 
-### 4. Loans
+### 4. Loans (Owe & Lent)
 - Loan given / received tracking
-- Person name, purpose, segment
+- Person name, purpose, segment (or personal)
 - Repayment tracking (pending/partial/completed)
 - Repayment history with notes
 - Progress bar showing repayment percentage
+- Inline timeline for audit trail
 
-### 5. Reports
+### 5. Tasks (Kanban Board)
+- Kanban board with 4 columns: Backlog, To Do, In Progress, Done
+- Task priority levels: low, medium, high, urgent
+- Visibility: shared (visible to all) or personal (only creator)
+- Assignee support
+- Subtasks with individual due dates
+- Tags for organization
+
+### 6. Analytics
+- Deep dive into expense data with filters
+- Filter by segment, category, date range, person
+- Charts: category breakdown, segment comparison, person-wise spending
+- All authenticated users can access
+
+### 7. Reports
 - Monthly income vs expense summary
 - Segment breakdown table
 - Transaction detail list
@@ -64,17 +78,15 @@ A web application for managing a small farming business involving multiple users
 - **Export to PDF** (jsPDF + jspdf-autotable)
 - **Export to CSV**
 
-### 6. Audit Log (Admin only)
-- Track who created/edited/deleted entries
-- Field-level change tracking
-- Filter by entity type
-- Immutable records
-
-### 7. User Management (Admin only)
+### 8. User Management (Admin only)
 - View all users
-- Add new users
+- Add new users (register without logging out current admin)
 - Edit roles and segment assignments
 - Activate/deactivate users
+
+### 9. Data Setup (Admin only)
+- Seed default segments and categories from the UI
+- Reset or reinitialize reference data
 
 ---
 
@@ -97,10 +109,10 @@ A web application for managing a small farming business involving multiple users
 ### Collection: `segments`
 ```
 /segments/{segmentId}
-├── id: string ("goats" | "chickens" | "cows" | "fruits" | "crops")
+├── id: string ("goats" | "chickens" | "dragon")
 ├── name: string
 ├── description: string
-├── icon: string
+├── icon: string (emoji)
 ├── isActive: boolean
 └── createdAt: Timestamp
 ```
@@ -129,21 +141,25 @@ A web application for managing a small farming business involving multiple users
 ├── segment: string
 ├── segmentName: string (denormalized)
 ├── description: string
-├── paidBy: string | null (userId, expense only)
+├── paymentMethod: "cash" | "upi"
+├── paidBy: string | null (userId)
 ├── paidByName: string | null
-├── recordedBy: string | null (userId, income only)
-├── recordedByName: string | null
 ├── createdBy: string
 ├── createdByName: string
 ├── createdAt: Timestamp
-├── updatedBy: string | null
-├── updatedByName: string | null
-├── updatedAt: Timestamp | null
 ├── isDeleted: boolean (soft delete)
-├── deletedBy: string | null
-├── deletedAt: Timestamp | null
+├── timeline: TimelineEntry[] (inline audit trail)
 ├── month: string ("2026-05")
 └── year: number
+```
+
+**TimelineEntry:**
+```
+├── action: "created" | "updated" | "deleted"
+├── by: string (userId)
+├── byName: string
+├── at: Timestamp
+└── changes?: string (e.g., "amount: 5000→4500, category: Feed→Medicine")
 ```
 
 ### Collection: `loans`
@@ -155,7 +171,7 @@ A web application for managing a small farming business involving multiple users
 ├── type: "given" | "received"
 ├── personName: string
 ├── purpose: string
-├── segment: string
+├── segment: string (or "personal")
 ├── segmentName: string
 ├── repaymentStatus: "pending" | "partial" | "completed"
 ├── totalRepaid: number
@@ -163,11 +179,8 @@ A web application for managing a small farming business involving multiple users
 ├── recordedBy: string
 ├── recordedByName: string
 ├── createdAt: Timestamp
-├── updatedBy: string | null
-├── updatedAt: Timestamp | null
 ├── isDeleted: boolean
-├── deletedBy: string | null
-├── deletedAt: Timestamp | null
+├── timeline: TimelineEntry[] (inline audit trail)
 ├── month: string
 └── year: number
 ```
@@ -184,19 +197,34 @@ A web application for managing a small farming business involving multiple users
 └── createdAt: Timestamp
 ```
 
-### Collection: `auditLogs`
+### Collection: `tasks`
 ```
-/auditLogs/{logId}
+/tasks/{taskId}
 ├── id: string
-├── entityType: "transaction" | "loan" | "repayment" | "user"
-├── entityId: string
-├── action: "create" | "update" | "delete"
-├── userId: string
-├── userName: string
-├── timestamp: Timestamp
-├── changes: [{ field, oldValue, newValue }]
-├── month: string
-└── year: number
+├── title: string
+├── description: string
+├── priority: "low" | "medium" | "high" | "urgent"
+├── status: "backlog" | "todo" | "in_progress" | "done"
+├── visibility: "shared" | "personal"
+├── assignee: string | null (userId)
+├── assigneeName: string | null
+├── dueDate: Timestamp | null
+├── subtasks: Subtask[]
+├── tags: string[]
+├── kanbanOrder: number
+├── createdBy: string
+├── createdByName: string
+├── createdAt: Timestamp
+├── updatedAt: Timestamp
+└── completedAt: Timestamp | null
+```
+
+**Subtask:**
+```
+├── id: string
+├── title: string
+├── done: boolean
+└── dueDate: string | null ("YYYY-MM-DD")
 ```
 
 ### Collection: `monthlySummaries` (precomputed aggregations)
@@ -222,41 +250,78 @@ A web application for managing a small farming business involving multiple users
 ```
 farm-tracker/
 ├── src/app/
+│   ├── app.ts                  (root component with <router-outlet />)
+│   ├── app.config.ts           (providers: Firebase, Material, Charts, Router)
+│   ├── app.routes.ts           (lazy-loaded routes with guards)
 │   ├── core/
-│   │   ├── guards/          (auth.guard.ts, role.guard.ts)
-│   │   ├── services/        (auth, user, transaction, loan, audit-log, summary, export, segment, category)
-│   │   ├── models/          (TypeScript interfaces for all entities)
-│   │   └── utils/           (date & firestore helper functions)
+│   │   ├── guards/             (auth.guard.ts, role.guard.ts)
+│   │   ├── services/           (auth, user, transaction, loan, task, summary, export, segment, category)
+│   │   ├── models/             (TypeScript interfaces for all entities)
+│   │   └── utils/              (date.utils.ts, firestore.utils.ts)
 │   ├── shared/
-│   │   ├── components/      (loading-spinner, empty-state, confirm-dialog)
-│   │   ├── pipes/           (currency-inr, relative-time)
-│   │   └── directives/      (has-role)
+│   │   ├── components/         (loading-spinner, empty-state, confirm-dialog)
+│   │   ├── pipes/              (currency-inr, relative-time)
+│   │   └── directives/         (has-role)
 │   ├── layout/
-│   │   ├── shell/           (main layout with sidebar + header + content)
-│   │   ├── sidebar/         (navigation with role-based visibility)
-│   │   ├── header/          (user info, logout menu)
-│   │   └── not-found/       (404 page)
+│   │   ├── shell/              (main layout with sidebar + header + content)
+│   │   ├── sidebar/            (navigation with role-based visibility)
+│   │   ├── header/             (user info, logout menu)
+│   │   └── not-found/          (404 page)
 │   ├── features/
-│   │   ├── auth/            (login, register, forgot-password)
-│   │   ├── dashboard/       (summary cards, charts, recent txns, loan widget)
-│   │   ├── transactions/    (list, form, detail)
-│   │   ├── loans/           (list, form, detail with repayments)
-│   │   ├── reports/         (monthly reports with PDF/CSV export)
-│   │   ├── audit-log/       (audit trail viewer)
-│   │   └── admin/           (user management)
-│   ├── environments/        (Firebase config)
-│   ├── app.config.ts        (providers: Firebase, Material, Charts, Router)
-│   └── app.routes.ts        (lazy-loaded routes with guards)
-├── firebase/
-│   └── set-custom-claims.js (Node script for setting user roles)
+│   │   ├── auth/               (login, register, forgot-password)
+│   │   ├── dashboard/          (summary cards, charts, recent txns, loan widget)
+│   │   ├── transactions/       (list, form, detail)
+│   │   ├── loans/              (list, form, detail with repayments)
+│   │   ├── tasks/              (kanban-board, form, detail)
+│   │   ├── analytics/          (analytics with filters and charts)
+│   │   ├── reports/            (monthly reports with PDF/CSV export)
+│   │   └── admin/              (user management, user form, data setup)
+│   └── environments/           (Firebase config for dev and prod)
 ├── scripts/
-│   ├── create-user.js        (Create users with role & segments via CLI)
-│   ├── clean-db.js           (Clean/reset database collections)
-│   └── README.md             (Detailed script documentation)
-├── firestore.rules           (Security rules with role-based access)
-├── firestore.indexes.json    (Composite indexes for efficient queries)
-└── DOCUMENTATION.md          (this file)
+│   ├── setup-collections.js    (Seed default segments & categories)
+│   ├── create-user.js          (Create users with role & segments via CLI)
+│   ├── clean-db.js             (Clean/reset database collections)
+│   ├── import-expenses.js      (Bulk import transactions from Excel)
+│   └── README.md               (Detailed script documentation)
+├── firebase/
+│   └── set-custom-claims.js    (Node script for setting user roles)
+├── firestore.rules             (Security rules with role-based access)
+├── firestore.indexes.json      (Composite indexes for efficient queries)
+└── DOCUMENTATION.md            (this file)
 ```
+
+---
+
+## Routes
+
+| Path | Feature | Guard | Access |
+|------|---------|-------|--------|
+| `/dashboard` | Dashboard page | authGuard | All authenticated |
+| `/transactions` | Transaction list/form/detail | authGuard + roleGuard | Admin, Manager |
+| `/loans` | Loan list/form/detail | authGuard + roleGuard | Admin, Manager |
+| `/tasks` | Kanban board/form/detail | authGuard | All authenticated |
+| `/analytics` | Analytics charts | authGuard | All authenticated |
+| `/reports` | Reports with export | authGuard | All authenticated |
+| `/admin` | User management | authGuard + roleGuard | Admin only |
+| `/admin/register` | Register new user | authGuard + roleGuard | Admin only |
+| `/admin/data-setup` | Seed reference data | authGuard + roleGuard | Admin only |
+| `/auth/login` | Login page | — | Public |
+| `/auth/forgot-password` | Password reset | — | Public |
+
+---
+
+## Sidebar Navigation
+
+| Item | Icon | Visible To |
+|------|------|------------|
+| Dashboard | dashboard | All |
+| Transactions | receipt_long | Admin, Manager |
+| Owe & Lent | account_balance | Admin, Manager |
+| Tasks | view_kanban | All |
+| Analytics | analytics | All |
+| Reports | assessment | All |
+| Admin | admin_panel_settings | Admin |
+| Data Setup | dataset | Admin |
 
 ---
 
@@ -271,7 +336,7 @@ farm-tracker/
 6. Copy the Firebase config object
 
 ### 2. Configure Environment
-Edit `src/app/environments/environment.ts`:
+Edit `src/app/environments/environment.ts` and `environment.prod.ts`:
 ```typescript
 export const environment = {
   production: false,
@@ -279,7 +344,7 @@ export const environment = {
     apiKey: 'YOUR_API_KEY',
     authDomain: 'YOUR_PROJECT.firebaseapp.com',
     projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_PROJECT.appspot.com',
+    storageBucket: 'YOUR_PROJECT.firebasestorage.app',
     messagingSenderId: 'YOUR_SENDER_ID',
     appId: 'YOUR_APP_ID',
   },
@@ -297,7 +362,7 @@ App runs at http://localhost:4200
 ### 4. Setup Scripts
 ```bash
 cd scripts
-npm install firebase-admin
+npm install
 ```
 Download service account key from Firebase Console:
 - Project Settings → Service Accounts → Generate New Private Key
@@ -306,25 +371,38 @@ Download service account key from Firebase Console:
 ### 5. Seed Database & Create Admin
 ```bash
 # Seed default segments and categories
-node scripts/clean-db.js seed
+node scripts/setup-collections.js
 
 # Create your first admin user
 node scripts/create-user.js yourname@email.com YourPass123! "Your Name" admin
 
 # Create team members
-node scripts/create-user.js friend1@email.com Pass123! "Friend 1" manager goats,cows
+node scripts/create-user.js friend1@email.com Pass123! "Friend 1" manager goats chickens
 node scripts/create-user.js friend2@email.com Pass123! "Friend 2" viewer
 ```
 
-See `scripts/README.md` for full documentation on all scripts.
+### 6. Clean Database (if needed)
+```bash
+node scripts/clean-db.js all           # Delete transactions, loans, tasks, summaries
+node scripts/clean-db.js transactions   # Delete transactions + summaries only
+node scripts/clean-db.js loans          # Delete loans + repayments
+node scripts/clean-db.js tasks          # Delete all tasks
+node scripts/clean-db.js summaries      # Delete monthly summaries
+```
 
-### 6. Deploy Firestore Rules
+### 7. Import Transactions from Excel
+```bash
+node scripts/import-expenses.js
+```
+Reads `scripts/Details.xlsx` (Expenses sheet) and creates transaction documents with monthly summaries.
+
+### 8. Deploy Firestore Rules & Indexes
 ```bash
 firebase deploy --only firestore:rules
 firebase deploy --only firestore:indexes
 ```
 
-### 7. Deploy to Firebase Hosting (Free)
+### 9. Deploy to Firebase Hosting (Free)
 ```bash
 ng build --configuration production
 firebase deploy --only hosting
@@ -359,10 +437,19 @@ firebase deploy --only hosting
 - Can be "undeleted" if needed
 - Filtered out in queries via `isDeleted == false`
 
+### Why inline `timeline` instead of separate `auditLogs` collection?
+- Reduces Firestore reads (no extra collection query)
+- Timeline is always available with the document
+- Simpler security rules — no separate audit collection to manage
+
 ### Why client-side aggregation (no Cloud Functions)?
 - Cloud Functions require Blaze (paid) plan
 - Batch writes with `increment()` are atomic
 - Acceptable for a small team (5 users, ~50 transactions/day)
+
+### Why `paymentMethod` field?
+- Tracks whether transaction was paid via cash or UPI
+- Useful for reconciliation and person-wise expense tracking
 
 ---
 
@@ -371,7 +458,7 @@ firebase deploy --only hosting
 | Resource | Limit | Our Usage (5 users, ~50 txns/day) |
 |----------|-------|-----------------------------------|
 | Firestore reads | 50K/day | ~3,000/day |
-| Firestore writes | 20K/day | ~150/day (50 × 3 docs per batch) |
+| Firestore writes | 20K/day | ~150/day (50 x 3 docs per batch) |
 | Firestore storage | 1 GB | ~18 MB/year |
 | Auth users | Unlimited | No issue |
 | Hosting storage | 10 GB | ~5 MB (Angular app) |
@@ -381,13 +468,24 @@ firebase deploy --only hosting
 
 ## Security
 
+### Firestore Rules
+
+| Collection | Read | Create | Update | Delete |
+|------------|------|--------|--------|--------|
+| `users` | Authenticated | Self or Admin | Self or Admin | Admin |
+| `segments` | Authenticated | Admin | Admin | Admin |
+| `categories` | Authenticated | Admin | Admin | Admin |
+| `transactions` | Authenticated | Manager/Admin (segment check) | Manager/Admin (segment check) | Admin |
+| `loans` | Authenticated | Manager/Admin (segment or personal) | Manager/Admin (segment or personal) | Admin |
+| `loans/repayments` | Authenticated | Manager/Admin | Admin | Admin |
+| `monthlySummaries` | Authenticated | Manager/Admin | Manager/Admin | — |
+| `tasks` | Authenticated | Authenticated | Authenticated | Authenticated |
+
+### Key Security Features
 - Firebase Auth custom claims enforce roles at the database level
-- Firestore security rules validate:
-  - User authentication
-  - Role-based access (admin/manager/viewer)
-  - Segment-based access for managers
-  - createdBy/updatedBy must match authenticated user
-- Audit logs are immutable (no update/delete allowed)
+- Segment-based access control for managers
+- `createdBy` must match authenticated user on transaction creation
+- Transactions must be created with `isDeleted == false`
 - Soft deletes prevent data loss
 - All mutations use atomic batch writes
 
@@ -396,9 +494,23 @@ firebase deploy --only hosting
 ## Firestore Indexes
 
 Defined in `firestore.indexes.json`. Required for:
-- Transactions filtered by isDeleted + type/segment/month/createdBy + ordered by date
-- Loans filtered by isDeleted + type/status/segment + ordered by date
-- Audit logs filtered by entityType + ordered by timestamp
+
+**Transactions (5 indexes):**
+- `(isDeleted, date)` — base query
+- `(isDeleted, type, date)` — filter by transaction type
+- `(isDeleted, segment, date)` — filter by segment
+- `(isDeleted, month, date)` — filter by month
+- `(isDeleted, createdBy, date)` — filter by creator
+
+**Loans (4 indexes):**
+- `(isDeleted, date)` — base query
+- `(isDeleted, type, date)` — filter by loan type
+- `(isDeleted, repaymentStatus, date)` — filter by repayment status
+- `(isDeleted, segment, date)` — filter by segment
+
+**Audit Logs (2 indexes, legacy):**
+- `(entityType, timestamp)` — base audit query
+- `(entityType, entityId, timestamp)` — entity-specific audit
 
 Deploy with: `firebase deploy --only firestore:indexes`
 
@@ -406,11 +518,19 @@ Deploy with: `firebase deploy --only firestore:indexes`
 
 ## Libraries Used
 
-| Library | Purpose | License |
-|---------|---------|---------|
-| @angular/fire | Firebase SDK for Angular | MIT |
-| @angular/material | UI components (forms, tables, dialogs) | MIT |
-| chart.js + ng2-charts | Dashboard charts | MIT |
-| jspdf + jspdf-autotable | PDF export | MIT |
+| Library | Version | Purpose | License |
+|---------|---------|---------|---------|
+| @angular/fire | 20.0.1 | Firebase SDK for Angular | MIT |
+| @angular/material | 21.2.10 | UI components (forms, tables, dialogs, icons) | MIT |
+| chart.js + ng2-charts | 4.5.1 / 10.0.0 | Dashboard & analytics charts | MIT |
+| jspdf + jspdf-autotable | 4.2.1 / 5.0.7 | PDF export | MIT |
+| firebase | 12.13.0 | Firebase client SDK | Apache-2.0 |
+| rxjs | 7.8.0 | Reactive programming | Apache-2.0 |
+
+**Scripts Dependencies** (in `scripts/package.json`):
+| Library | Purpose |
+|---------|---------|
+| firebase-admin | Server-side Firebase access for CLI scripts |
+| xlsx | Excel file parsing for import-expenses script |
 
 All free and open-source.

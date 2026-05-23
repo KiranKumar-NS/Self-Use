@@ -28,13 +28,13 @@
  *
  * Commands:
  *
- *   all           - Delete transactions, loans & summaries
+ *   all           - Delete transactions, loans, tasks & summaries
  *                   (keeps users, segments, categories safe)
  *
  *   transactions  - Delete all transactions + monthly summaries
  *   loans         - Delete all loans and their repayment subcollections
+ *   tasks         - Delete all tasks
  *   summaries     - Delete all monthly summary documents
- *   seed          - Re-seed segments and categories (adds missing ones)
  *
  * ────────────────────────────────────────────────────────────
  * EXAMPLES
@@ -49,9 +49,6 @@
  *   # Clear only loans and repayments
  *   node scripts/clean-db.js loans
  *
- *   # Reset segments and categories to defaults
- *   node scripts/clean-db.js seed
- *
  * ────────────────────────────────────────────────────────────
  * COLLECTIONS IN THE DATABASE
  * ────────────────────────────────────────────────────────────
@@ -60,6 +57,7 @@
  *   segments          - Business segments (goats, chickens, cows, fruits, crops)
  *   categories        - Transaction categories (Feed, Medicine, Milk, etc.)
  *   transactions      - All expense and income records (with inline timeline)
+ *   tasks             - Task records
  *   loans             - Owe & Lent records (with inline timeline)
  *     └─ repayments   - Subcollection: repayment history per loan
  *   monthlySummaries  - Precomputed monthly totals per segment
@@ -70,7 +68,6 @@
  *
  *   - This script permanently deletes data. There is NO undo.
  *   - A confirmation prompt is shown before destructive actions.
- *   - The "all" command also deletes Firebase Auth users.
  *   - Subcollections (loan repayments) are deleted recursively.
  *   - Monthly summaries are cleaned when transactions are cleared.
  *
@@ -102,18 +99,18 @@ const db = admin.firestore();
 // ── Parse Arguments ────────────────────────────────────────
 const command = process.argv[2];
 
-const VALID_COMMANDS = ['all', 'transactions', 'loans', 'summaries', 'seed'];
+const VALID_COMMANDS = ['all', 'transactions', 'loans', 'tasks', 'summaries'];
 
 if (!command || !VALID_COMMANDS.includes(command)) {
   console.error('');
   console.error('Usage: node scripts/clean-db.js <command>');
   console.error('');
   console.error('Commands:');
-  console.error('  all           - Delete transactions, loans & summaries (keeps users/segments/categories)');
+  console.error('  all           - Delete transactions, loans, tasks & summaries (keeps users/segments/categories)');
   console.error('  transactions  - Delete all transactions and summaries');
   console.error('  loans         - Delete all loans and repayments');
+  console.error('  tasks         - Delete all tasks');
   console.error('  summaries     - Delete all monthly summaries');
-  console.error('  seed          - Re-seed segments and categories (adds missing ones)');
   console.error('');
   process.exit(1);
 }
@@ -184,66 +181,6 @@ async function deleteCollectionWithSubcollections(collectionPath, subcollectionN
   return deleted;
 }
 
-async function deleteAllAuthUsers() {
-  let deleted = 0;
-  let nextPageToken;
-
-  do {
-    const result = await admin.auth().listUsers(1000, nextPageToken);
-    if (result.users.length > 0) {
-      const uids = result.users.map((u) => u.uid);
-      await admin.auth().deleteUsers(uids);
-      deleted += uids.length;
-    }
-    nextPageToken = result.pageToken;
-  } while (nextPageToken);
-
-  console.log(`  Auth users: ${deleted} users deleted`);
-  return deleted;
-}
-
-async function seedSegments() {
-  const segments = [
-    { id: 'goats', name: 'Goats', description: 'Goat farming', icon: '🐐', isActive: true },
-    { id: 'chickens', name: 'Chickens', description: 'Chicken farming', icon: '🐔', isActive: true },
-    { id: 'dragon', name: 'Dragon', description: 'Dragon farming', icon: '🐉', isActive: true },
-  ];
-
-  const batch = db.batch();
-  for (const seg of segments) {
-    batch.set(db.collection('segments').doc(seg.id), {
-      ...seg,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  }
-  await batch.commit();
-  console.log(`  segments: ${segments.length} documents seeded`);
-}
-
-async function seedCategories() {
-  const categories = [
-    { id: 'feed', name: 'Feed', type: 'expense', isActive: true },
-    { id: 'medicine', name: 'Medicine', type: 'expense', isActive: true },
-    { id: 'labor', name: 'Labor', type: 'expense', isActive: true },
-    { id: 'transport', name: 'Transport', type: 'expense', isActive: true },
-    { id: 'maintenance', name: 'Maintenance', type: 'expense', isActive: true },
-    { id: 'other-expense', name: 'Other', type: 'expense', isActive: true },
-    { id: 'milk', name: 'Milk', type: 'income', isActive: true },
-    { id: 'eggs', name: 'Eggs', type: 'income', isActive: true },
-    { id: 'animal-sales', name: 'Animal Sales', type: 'income', isActive: true },
-    { id: 'crop-sales', name: 'Crop Sales', type: 'income', isActive: true },
-    { id: 'fruit-sales', name: 'Fruit Sales', type: 'income', isActive: true },
-    { id: 'other-income', name: 'Other', type: 'income', isActive: true },
-  ];
-
-  const batch = db.batch();
-  for (const cat of categories) {
-    batch.set(db.collection('categories').doc(cat.id), cat);
-  }
-  await batch.commit();
-  console.log(`  categories: ${categories.length} documents seeded`);
-}
-
 // ── Main Execution ─────────────────────────────────────────
 
 async function run() {
@@ -264,6 +201,7 @@ async function run() {
       console.log('Deleting transaction data...');
       await deleteCollection('transactions');
       await deleteCollectionWithSubcollections('loans', 'repayments');
+      await deleteCollection('tasks');
       await deleteCollection('monthlySummaries');
       console.log('');
       console.log('Done. Users, segments, and categories are preserved.');
@@ -291,6 +229,15 @@ async function run() {
       break;
     }
 
+    case 'tasks': {
+      const ok = await confirm('Delete all tasks?');
+      if (!ok) { console.log('Cancelled.'); process.exit(0); }
+      console.log('');
+      console.log('Deleting tasks...');
+      await deleteCollection('tasks');
+      console.log('Done.');
+      break;
+    }
 
     case 'summaries': {
       const ok = await confirm('Delete all monthly summaries?');
@@ -302,15 +249,6 @@ async function run() {
       break;
     }
 
-    case 'seed': {
-      console.log('Re-seeding segments and categories...');
-      await deleteCollection('segments');
-      await deleteCollection('categories');
-      await seedSegments();
-      await seedCategories();
-      console.log('Done. Default segments and categories created.');
-      break;
-    }
   }
 
   console.log('');

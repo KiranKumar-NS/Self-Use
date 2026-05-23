@@ -4,8 +4,15 @@ import autoTable from 'jspdf-autotable';
 import { Transaction } from '../models/transaction.model';
 import { Loan } from '../models/loan.model';
 import { MonthlySummary } from '../models/monthly-summary.model';
-import { formatCurrency } from '../utils/firestore.utils';
 import { getMonthName } from '../utils/date.utils';
+
+function pdfCurrency(amount: number): string {
+  const formatted = new Intl.NumberFormat('en-IN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+  return `Rs. ${formatted}`;
+}
 
 @Injectable({ providedIn: 'root' })
 export class ExportService {
@@ -23,18 +30,18 @@ export class ExportService {
     pdf.text(`Month: ${monthName}`, 14, 32);
     pdf.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, 14, 40);
 
-    // Summary table
-    const totalIncome = summaries.reduce((s, m) => s + (m.totalIncome || 0), 0);
-    const totalExpense = summaries.reduce((s, m) => s + (m.totalExpense || 0), 0);
+    // Summary table — compute from actual transactions for accuracy
+    const totalIncome = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const totalExpense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
     const netProfit = totalIncome - totalExpense;
 
     autoTable(pdf, {
       startY: 50,
       head: [['Metric', 'Amount']],
       body: [
-        ['Total Income', formatCurrency(totalIncome)],
-        ['Total Expense', formatCurrency(totalExpense)],
-        ['Net Profit/Loss', formatCurrency(netProfit)],
+        ['Total Income', pdfCurrency(totalIncome)],
+        ['Total Expense', pdfCurrency(totalExpense)],
+        ['Net Profit/Loss', pdfCurrency(netProfit)],
       ],
       theme: 'grid',
     });
@@ -45,9 +52,9 @@ export class ExportService {
         head: [['Segment', 'Income', 'Expense', 'Net']],
         body: summaries.map((s) => [
           s.segment,
-          formatCurrency(s.totalIncome || 0),
-          formatCurrency(s.totalExpense || 0),
-          formatCurrency(s.netProfit || 0),
+          pdfCurrency(s.totalIncome || 0),
+          pdfCurrency(s.totalExpense || 0),
+          pdfCurrency(s.netProfit || 0),
         ]),
         theme: 'striped',
       });
@@ -62,17 +69,28 @@ export class ExportService {
       autoTable(pdf, {
         startY: 30,
         head: [['Date', 'Type', 'Segment', 'Category', 'Amount', 'By', 'Description']],
-        body: transactions.map((t) => [
-          t.date.toDate().toLocaleDateString('en-IN'),
-          t.type,
-          t.segmentName,
-          t.categoryName,
-          formatCurrency(t.amount),
-          t.createdByName,
-          t.description,
-        ]),
+        body: [
+          ...transactions.map((t) => [
+            t.date.toDate().toLocaleDateString('en-IN'),
+            t.type,
+            t.segmentName,
+            t.categoryName,
+            pdfCurrency(t.amount),
+            t.createdByName,
+            t.description,
+          ]),
+          ['', '', '', 'Total Income', pdfCurrency(totalIncome), '', ''],
+          ['', '', '', 'Total Expense', pdfCurrency(totalExpense), '', ''],
+          ['', '', '', 'Net Profit/Loss', pdfCurrency(netProfit), '', ''],
+        ],
         theme: 'striped',
         styles: { fontSize: 8 },
+        didParseCell: (data: any) => {
+          const rowCount = transactions.length;
+          if (data.section === 'body' && data.row.index >= rowCount) {
+            data.cell.styles.fontStyle = 'bold';
+          }
+        },
       });
     }
 
@@ -94,9 +112,9 @@ export class ExportService {
         l.date.toDate().toLocaleDateString('en-IN'),
         l.type,
         l.personName,
-        formatCurrency(l.amount),
-        formatCurrency(l.totalRepaid),
-        formatCurrency(l.balanceRemaining),
+        pdfCurrency(l.amount),
+        pdfCurrency(l.totalRepaid),
+        pdfCurrency(l.balanceRemaining),
         l.repaymentStatus,
         l.segmentName,
       ]),
@@ -115,7 +133,12 @@ export class ExportService {
       )
       .join('\n');
 
-    this.downloadFile(headers + rows, `${filename}.csv`, 'text/csv');
+    const totalIncome = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const totalExpense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const netProfit = totalIncome - totalExpense;
+    const totalsRows = `\n,,,,,,\n,,,Total Income,${totalIncome},,\n,,,Total Expense,${totalExpense},,\n,,,Net Profit/Loss,${netProfit},,`;
+
+    this.downloadFile(headers + rows + totalsRows, `${filename}.csv`, 'text/csv');
   }
 
   exportLoansCsv(loans: Loan[], filename: string): void {

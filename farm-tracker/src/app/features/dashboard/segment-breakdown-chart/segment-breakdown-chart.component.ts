@@ -1,8 +1,9 @@
 import { Component, Input, OnChanges } from '@angular/core';
 import { BaseChartDirective } from 'ng2-charts';
-import { ChartConfiguration } from 'chart.js';
+import { ChartConfiguration, TooltipItem } from 'chart.js';
 import { MonthlySummary } from '../../../core/models/monthly-summary.model';
 import { MatCardModule } from '@angular/material/card';
+import { formatCurrency } from '../../../core/utils/firestore.utils';
 
 @Component({
   selector: 'app-segment-breakdown-chart',
@@ -25,11 +26,36 @@ import { MatCardModule } from '@angular/material/card';
 })
 export class SegmentBreakdownChartComponent implements OnChanges {
   @Input() summaries: MonthlySummary[] = [];
+  @Input() personBreakdown: Record<string, Record<string, { income: number; expense: number }>> = {};
 
   chartData: ChartConfiguration<'bar'>['data'] = { labels: [], datasets: [] };
   chartOptions: ChartConfiguration<'bar'>['options'] = {
     responsive: true,
-    plugins: { legend: { position: 'top' } },
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: {
+        callbacks: {
+          afterBody: (items: TooltipItem<'bar'>[]) => {
+            if (!items.length) return '';
+            const item = items[0];
+            const segment = item.label;
+            const type = item.datasetIndex === 0 ? 'income' : 'expense';
+            const persons = this.personBreakdown[segment];
+            if (!persons) return '';
+
+            const heading = type === 'expense' ? '── Who spent ──' : '── Who earned ──';
+            const lines: string[] = ['', heading];
+            for (const [name, data] of Object.entries(persons)) {
+              const amount = type === 'income' ? data.income : data.expense;
+              if (amount > 0) {
+                lines.push(`${name}: ${formatCurrency(amount)}`);
+              }
+            }
+            return lines.length > 2 ? lines : '';
+          },
+        },
+      },
+    },
     scales: { y: { beginAtZero: true } },
   };
 

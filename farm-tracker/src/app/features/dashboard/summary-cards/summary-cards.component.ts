@@ -33,13 +33,6 @@ import { MatIconModule } from '@angular/material/icon';
         </div>
       </mat-card>
 
-      <mat-card class="summary-card loans">
-        <mat-icon>account_balance</mat-icon>
-        <div class="card-content">
-          <span class="label">Pending Loans</span>
-          <span class="value">{{ pendingLoans | currencyInr }}</span>
-        </div>
-      </mat-card>
     </div>
   `,
   styles: [`
@@ -64,14 +57,10 @@ import { MatIconModule } from '@angular/material/icon';
     .loss { border-color: #dc2626; }
     .loss .value { color: #dc2626; }
     .loss mat-icon { color: #dc2626; }
-    .loans { border-color: #d97706; }
-    .loans .value { color: #d97706; }
-    .loans mat-icon { color: #d97706; }
   `],
 })
 export class SummaryCardsComponent {
   @Input() totalIncome = 0;
   @Input() totalExpense = 0;
   @Input() netProfit = 0;
-  @Input() pendingLoans = 0;
 }

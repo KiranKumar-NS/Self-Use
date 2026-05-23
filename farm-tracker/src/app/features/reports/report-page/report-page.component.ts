@@ -11,8 +11,6 @@ import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { getMonthString, getMonthName } from '../../../core/utils/date.utils';
 import { MatCardModule } from '@angular/material/card';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -23,7 +21,7 @@ import { DatePipe } from '@angular/common';
   standalone: true,
   imports: [
     FormsModule, DatePipe, CurrencyInrPipe, LoadingSpinnerComponent,
-    MatCardModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatTabsModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatTabsModule,
   ],
   template: `
     <div class="page-header">
@@ -39,10 +37,8 @@ import { DatePipe } from '@angular/common';
     </div>
 
     <mat-card class="filter-card">
-      <mat-form-field appearance="outline">
-        <mat-label>Select Month</mat-label>
-        <input matInput type="month" [(ngModel)]="selectedMonth" (change)="loadReport()" />
-      </mat-form-field>
+      <label class="month-label">Select Month</label>
+      <input class="month-input" type="month" [(ngModel)]="selectedMonth" (change)="loadReport()" />
     </mat-card>
 
     @if (loading()) {
@@ -147,7 +143,13 @@ import { DatePipe } from '@angular/common';
     .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; }
     .export-buttons { display: flex; gap: 0.5rem; }
-    .filter-card { margin-bottom: 1rem; padding: 1rem; }
+    .filter-card { margin-bottom: 1rem; padding: 1rem; display: flex; align-items: center; gap: 0.75rem; }
+    .month-label { font-size: 0.875rem; font-weight: 600; color: #1e293b; white-space: nowrap; }
+    .month-input {
+      padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px;
+      font-size: 0.875rem; color: #1e293b; background: white; cursor: pointer;
+    }
+    .month-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
     .tab-content { padding: 1rem 0; }
     .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
     .metric-card { padding: 1.5rem; display: flex; flex-direction: column; }

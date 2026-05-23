@@ -4,7 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { LoanService } from '../../../core/services/loan.service';
 import { Loan, Repayment } from '../../../core/models/loan.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
-import { RelativeTimePipe } from '../../../shared/pipes/relative-time.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -20,7 +19,7 @@ import { DatePipe } from '@angular/common';
   selector: 'app-loan-detail',
   standalone: true,
   imports: [
-    FormsModule, DatePipe, CurrencyInrPipe, RelativeTimePipe, LoadingSpinnerComponent,
+    FormsModule, DatePipe, CurrencyInrPipe, LoadingSpinnerComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatDatepickerModule, MatNativeDateModule, MatProgressBarModule,
   ],
