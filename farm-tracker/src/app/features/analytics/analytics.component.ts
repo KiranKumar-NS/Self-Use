@@ -3,7 +3,6 @@ import { FormsModule } from '@angular/forms';
 import { DatePipe, UpperCasePipe } from '@angular/common';
 import { Transaction } from '../../core/models/transaction.model';
 import { TransactionService } from '../../core/services/transaction.service';
-import { LoanService } from '../../core/services/loan.service';
 import { CurrencyInrPipe } from '../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
 import { BaseChartDirective } from 'ng2-charts';
@@ -123,10 +122,6 @@ import { getMonthString } from '../../core/utils/date.utils';
               <div class="invest-row">
                 <span class="invest-label">Expenses paid</span>
                 <span class="invest-value expense">{{ p.expensesPaid | currencyInr }}</span>
-              </div>
-              <div class="invest-row">
-                <span class="invest-label">Loan repaid</span>
-                <span class="invest-value expense">{{ p.loanRepaid | currencyInr }}</span>
               </div>
               <div class="invest-row">
                 <span class="invest-label">Income received</span>
@@ -286,7 +281,6 @@ import { getMonthString } from '../../core/utils/date.utils';
 })
 export class AnalyticsComponent implements OnInit {
   private transactionService = inject(TransactionService);
-  private loanService = inject(LoanService);
 
   loading = signal(true);
   allTransactions = signal<Transaction[]>([]);
@@ -309,7 +303,7 @@ export class AnalyticsComponent implements OnInit {
   totalExpense = signal(0);
   segmentTotals = signal<{ name: string; total: number; count: number }[]>([]);
   personTotals = signal<{ name: string; total: number; segments: { name: string; total: number }[] }[]>([]);
-  investmentSummary = signal<{ name: string; expensesPaid: number; loanRepaid: number; incomeReceived: number; net: number }[]>([]);
+  investmentSummary = signal<{ name: string; expensesPaid: number; incomeReceived: number; net: number }[]>([]);
   maxInvestment = signal(0);
 
   // Charts
@@ -377,13 +371,13 @@ export class AnalyticsComponent implements OnInit {
   }
 
   private async buildInvestmentSummary(expenseTxns: Transaction[]): Promise<void> {
-    // 1. Expenses paid per person (from expense transactions)
-    const personMap: Record<string, { expensesPaid: number; loanRepaid: number; incomeReceived: number }> = {};
+    const personMap: Record<string, { expensesPaid: number; incomeReceived: number }> = {};
 
     const ensurePerson = (name: string) => {
-      if (!personMap[name]) personMap[name] = { expensesPaid: 0, loanRepaid: 0, incomeReceived: 0 };
+      if (!personMap[name]) personMap[name] = { expensesPaid: 0, incomeReceived: 0 };
     };
 
+    // 1. Expenses paid per person (includes loan repayments as expense category)
     for (const txn of expenseTxns) {
       if (txn.payers?.length) {
         for (const p of txn.payers) {
@@ -397,21 +391,7 @@ export class AnalyticsComponent implements OnInit {
       }
     }
 
-    // 2. Loan repayments per person
-    try {
-      const loanResult = await this.loanService.getAll({}, 100);
-      for (const loan of loanResult.loans) {
-        const repayments = await this.loanService.getRepayments(loan.id);
-        for (const r of repayments) {
-          if (r.amount <= 0) continue; // skip disbursements
-          const name = r.paidByName || r.recordedByName || 'Unknown';
-          ensurePerson(name);
-          personMap[name].loanRepaid += r.amount;
-        }
-      }
-    } catch {}
-
-    // 3. Income distributions received per person
+    // 2. Income distributions received per person
     try {
       const incomeResult = await this.transactionService.getAll({ type: 'income' }, 200);
       for (const txn of incomeResult.transactions) {
@@ -429,7 +409,7 @@ export class AnalyticsComponent implements OnInit {
       .map(([name, data]) => ({
         name,
         ...data,
-        net: data.expensesPaid + data.loanRepaid - data.incomeReceived,
+        net: data.expensesPaid - data.incomeReceived,
       }))
       .sort((a, b) => b.net - a.net);
 
