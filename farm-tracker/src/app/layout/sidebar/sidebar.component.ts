@@ -31,6 +31,11 @@ import { MatIconModule } from '@angular/material/icon';
             <mat-icon>account_balance</mat-icon>
             <span>Owe & Lent</span>
           </a>
+
+          <a routerLink="/inventory" routerLinkActive="active" class="nav-item">
+            <mat-icon>inventory_2</mat-icon>
+            <span>Inventory</span>
+          </a>
         }
 
         <a routerLink="/tasks" routerLinkActive="active" class="nav-item">

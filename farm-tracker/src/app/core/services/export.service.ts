@@ -94,6 +94,55 @@ export class ExportService {
       });
     }
 
+    // Distribution summary for income transactions
+    const incomeWithDist = transactions.filter(t => t.type === 'income' && t.distributions?.length);
+    if (incomeWithDist.length > 0) {
+      pdf.addPage();
+      pdf.setFontSize(14);
+      pdf.text('Income Distribution Summary', 14, 22);
+
+      // Per-person totals
+      const personTotals: Record<string, number> = {};
+      let totalDist = 0;
+      for (const txn of incomeWithDist) {
+        for (const d of txn.distributions!) {
+          personTotals[d.name] = (personTotals[d.name] || 0) + d.amount;
+          totalDist += d.amount;
+        }
+      }
+
+      autoTable(pdf, {
+        startY: 30,
+        head: [['Person', 'Total Received']],
+        body: [
+          ...Object.entries(personTotals).map(([name, amt]) => [name, pdfCurrency(amt)]),
+          ['Total Distributed', pdfCurrency(totalDist)],
+          ['Undistributed', pdfCurrency(totalIncome - totalDist)],
+        ],
+        theme: 'grid',
+        didParseCell: (data: any) => {
+          const rowCount = Object.keys(personTotals).length;
+          if (data.section === 'body' && data.row.index >= rowCount) {
+            data.cell.styles.fontStyle = 'bold';
+          }
+        },
+      });
+
+      // Per-transaction distribution detail
+      pdf.setFontSize(12);
+      autoTable(pdf, {
+        head: [['Date', 'Segment', 'Amount', 'Distributed To']],
+        body: incomeWithDist.map(t => [
+          t.date.toDate().toLocaleDateString('en-IN'),
+          t.segmentName,
+          pdfCurrency(t.amount),
+          t.distributions!.map(d => `${d.name}: ${pdfCurrency(d.amount)}`).join(', '),
+        ]),
+        theme: 'striped',
+        styles: { fontSize: 8 },
+      });
+    }
+
     pdf.save(`farm-report-${month}.pdf`);
   }
 
@@ -125,18 +174,22 @@ export class ExportService {
   }
 
   exportTransactionsCsv(transactions: Transaction[], filename: string): void {
-    const headers = 'Date,Type,Segment,Category,Amount,Description,Created By\n';
+    const headers = 'Date,Type,Segment,Category,Amount,Description,Created By,Distribution\n';
     const rows = transactions
       .map(
-        (t) =>
-          `${t.date.toDate().toLocaleDateString('en-IN')},${t.type},${t.segmentName},${t.categoryName},${t.amount},"${t.description}",${t.createdByName}`
+        (t) => {
+          const distStr = t.distributions?.length
+            ? `"${t.distributions.map(d => `${d.name}: ${d.amount}`).join('; ')}"`
+            : '';
+          return `${t.date.toDate().toLocaleDateString('en-IN')},${t.type},${t.segmentName},${t.categoryName},${t.amount},"${t.description}",${t.createdByName},${distStr}`;
+        }
       )
       .join('\n');
 
     const totalIncome = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
     const totalExpense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
     const netProfit = totalIncome - totalExpense;
-    const totalsRows = `\n,,,,,,\n,,,Total Income,${totalIncome},,\n,,,Total Expense,${totalExpense},,\n,,,Net Profit/Loss,${netProfit},,`;
+    const totalsRows = `\n,,,,,,,\n,,,Total Income,${totalIncome},,,\n,,,Total Expense,${totalExpense},,,\n,,,Net Profit/Loss,${netProfit},,,`;
 
     this.downloadFile(headers + rows + totalsRows, `${filename}.csv`, 'text/csv');
   }

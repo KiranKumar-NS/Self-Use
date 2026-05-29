@@ -216,6 +216,36 @@ import {
 
           </div>
         </mat-tab>
+        <!-- BUDGETS TAB -->
+        <mat-tab label="Budgets">
+          <div class="tab-content">
+            <div class="section-header">
+              <h3>Monthly Budget per Segment</h3>
+            </div>
+            <p class="budget-hint">Set monthly expense limits per segment. Dashboard will show progress and warn at 80%.</p>
+
+            @for (seg of segments(); track seg.id) {
+              <mat-card class="budget-item">
+                <div class="budget-seg-header">
+                  <span class="item-icon">{{ seg.icon }}</span>
+                  <strong>{{ seg.name }}</strong>
+                </div>
+                <div class="budget-fields">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Monthly Expense Limit</mat-label>
+                    <input matInput type="number" [value]="seg.budgets?.monthlyExpenseLimit || ''"
+                      (change)="onBudgetChange(seg.id, 'monthlyExpenseLimit', $event)" min="0" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Monthly Income Target</mat-label>
+                    <input matInput type="number" [value]="seg.budgets?.monthlyIncomeTarget || ''"
+                      (change)="onBudgetChange(seg.id, 'monthlyIncomeTarget', $event)" min="0" />
+                  </mat-form-field>
+                </div>
+              </mat-card>
+            }
+          </div>
+        </mat-tab>
       </mat-tab-group>
     }
   `,
@@ -254,6 +284,11 @@ import {
     .add-form-card h4 { margin: 0 0 1rem; font-size: 0.9rem; color: #1e293b; }
     .add-form { display: flex; gap: 0.75rem; align-items: flex-start; flex-wrap: wrap; }
     .add-form mat-form-field { flex: 1; min-width: 150px; }
+    .budget-hint { font-size: 0.8rem; color: #64748b; margin: 0 0 1rem; }
+    .budget-item { padding: 1rem; margin-bottom: 0.75rem; }
+    .budget-seg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 0.75rem; }
+    .budget-fields { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .budget-fields mat-form-field { flex: 1; min-width: 200px; }
   `],
 })
 export class DataSetupComponent implements OnInit {
@@ -404,6 +439,20 @@ export class DataSetupComponent implements OnInit {
       await this.loadData();
     } catch (err: any) {
       this.errorMsg.set(err.message);
+    }
+  }
+
+  async onBudgetChange(segmentId: string, field: 'monthlyExpenseLimit' | 'monthlyIncomeTarget', event: Event): Promise<void> {
+    this.clearMessages();
+    const value = parseFloat((event.target as HTMLInputElement).value) || 0;
+    const seg = this.segments().find(s => s.id === segmentId);
+    const budgets = { ...(seg?.budgets || {}), [field]: value };
+    try {
+      await this.segmentService.updateBudget(segmentId, budgets);
+      this.successMsg.set(`Budget updated for ${seg?.name || segmentId}`);
+      await this.loadData();
+    } catch (err: any) {
+      this.errorMsg.set(err.message || 'Failed to update budget');
     }
   }
 

@@ -35,25 +35,41 @@ A web application for managing a small farming business involving multiple users
 - Admin can register new users (without logging out)
 
 ### 2. Dashboard
+- **Month picker** with prev/next arrows and "Today" button — view any month's data
 - Total income, expense, net profit/loss summary cards
+- Distributed / Undistributed income cards
+- **Budget vs Actual** widget — progress bars per segment (green/yellow/red)
+- **Current Stock** widget — animal counts per segment from inventory
 - Segment-wise breakdown chart (doughnut)
-- Monthly trend chart (line, last 6 months)
-- Recent transactions list
+- Monthly trend chart (line, last 6 months from selected month)
 - Loan summary widget (given/received totals)
 
 ### 3. Transactions (Expense & Income)
 - Add/edit/delete (soft) transactions
+- **Search** by description, person, category, segment, amount (client-side, zero extra reads)
 - Filter by type, segment, month
 - Pagination (20 per page)
 - Amount, category, segment, description, payment method (cash/UPI), paid-by tracking
-- Inline timeline for audit trail (created/updated/deleted events)
+- Inline timeline for audit trail (created/updated/deleted/distributed events)
+- **Income Distribution:** Admin/Manager can distribute income among partners
+  - Distribute from transaction detail page via dialog
+  - Track per-person amounts (e.g., "Kiran: 5000, Ravi: 3000")
+  - Reinvestment tracking (undistributed amount kept for business)
+  - Distribution status shown in transaction list (Distributed/Partial/Undistributed)
+  - Can edit distributions at any time
+  - Distributions cleared if transaction amount changes
 
 ### 4. Loans (Owe & Lent)
 - Loan given / received tracking
 - Person name, purpose, segment (or personal)
+- **Add More Amount** — give additional money to same person, loan total increases, tracked in history
+  - Always available (even on completed loans — reopens the loan)
+  - Recorded as negative entry in repayments subcollection (disbursement)
+  - Timeline tracks: "added more: +₹5,000 (total: ₹15,000)"
 - Repayment tracking (pending/partial/completed)
-- Repayment history with notes
+- **Transaction History** — shows both repayments (green) and disbursements (yellow) in one view
 - Progress bar showing repayment percentage
+- **Hard delete** on completed loans (admin/manager, with confirmation dialog)
 - Inline timeline for audit trail
 
 ### 5. Tasks (Kanban Board)
@@ -74,19 +90,48 @@ A web application for managing a small farming business involving multiple users
 - Monthly income vs expense summary
 - Segment breakdown table
 - Transaction detail list
+- **Distributions tab** — person-wise totals, per-transaction breakdown
 - Loan summary
-- **Export to PDF** (jsPDF + jspdf-autotable)
-- **Export to CSV**
+- **Export to PDF** (jsPDF + jspdf-autotable) — includes distribution summary page
+- **Export to CSV** — includes distribution column for income transactions
 
-### 8. User Management (Admin only)
+### 8. Inventory Tracking
+- Track animal stock per segment (e.g., 10 goats, 50 chickens)
+- Record events: birth, death, purchase, sale, adjustment
+- Current stock displayed on dashboard and dedicated inventory page
+- Event history table with segment filter
+- Stock updated atomically via batch writes (event + segment.currentStock)
+- Accessible to admin and managers
+
+### 9. Notifications/Reminders (client-side)
+- Notification bell in header with badge count
+- **Loan overdue** — loans pending > 30 days
+- **Task overdue** — tasks with dueDate past and not done
+- **Budget warning** — expense >= 80% of segment budget
+- **Budget exceeded** — expense >= 100% of segment budget
+- Dismiss individually or "Clear All"
+- Dismissed IDs persisted in localStorage
+- Computed on app init from existing data (zero extra Firestore collections)
+
+### 10. Budget/Target per Segment
+- Admin sets monthly expense limit and income target per segment
+- Configured in Data Setup > Budgets tab
+- Dashboard shows budget vs actual with color-coded progress bars
+  - Green: < 80% spent
+  - Yellow: 80-99% spent
+  - Red: >= 100% (exceeded)
+- Stored on segment document (zero extra reads — uses cached segments)
+
+### 11. User Management (Admin only)
 - View all users
 - Add new users (register without logging out current admin)
 - Edit roles and segment assignments
 - Activate/deactivate users
 
-### 9. Data Setup (Admin only)
+### 12. Data Setup (Admin only)
 - Seed default segments and categories from the UI
 - Reset or reinitialize reference data
+- **Budgets tab** — set monthly expense limits and income targets per segment
 
 ---
 
@@ -114,6 +159,8 @@ A web application for managing a small farming business involving multiple users
 ├── description: string
 ├── icon: string (emoji)
 ├── isActive: boolean
+├── currentStock?: number (denormalized animal count)
+├── budgets?: { monthlyExpenseLimit?: number, monthlyIncomeTarget?: number }
 └── createdAt: Timestamp
 ```
 
@@ -148,14 +195,22 @@ A web application for managing a small farming business involving multiple users
 ├── createdByName: string
 ├── createdAt: Timestamp
 ├── isDeleted: boolean (soft delete)
+├── distributions?: DistributionEntry[] (income only)
 ├── timeline: TimelineEntry[] (inline audit trail)
 ├── month: string ("2026-05")
 └── year: number
 ```
 
+**DistributionEntry:**
+```
+├── uid: string (user UID or "reinvestment")
+├── name: string (display name or "Reinvestment")
+└── amount: number
+```
+
 **TimelineEntry:**
 ```
-├── action: "created" | "updated" | "deleted"
+├── action: "created" | "updated" | "deleted" | "distributed"
 ├── by: string (userId)
 ├── byName: string
 ├── at: Timestamp
@@ -190,7 +245,7 @@ A web application for managing a small farming business involving multiple users
 /loans/{loanId}/repayments/{repaymentId}
 ├── id: string
 ├── date: Timestamp
-├── amount: number
+├── amount: number (positive = repayment, negative = additional disbursement)
 ├── note: string
 ├── recordedBy: string
 ├── recordedByName: string
@@ -227,6 +282,23 @@ A web application for managing a small farming business involving multiple users
 └── dueDate: string | null ("YYYY-MM-DD")
 ```
 
+### Collection: `inventoryEvents`
+```
+/inventoryEvents/{eventId}
+├── id: string
+├── segment: string
+├── segmentName: string
+├── eventType: "birth" | "death" | "purchase" | "sale" | "adjustment"
+├── count: number (positive = add, negative = remove)
+├── note: string
+├── date: Timestamp
+├── createdBy: string
+├── createdByName: string
+├── createdAt: Timestamp
+├── month: string
+└── year: number
+```
+
 ### Collection: `monthlySummaries` (precomputed aggregations)
 ```
 /monthlySummaries/{year-month-segment}
@@ -238,6 +310,10 @@ A web application for managing a small farming business involving multiple users
 ├── netProfit: number
 ├── expenseByCategory: { feed: number, medicine: number, ... }
 ├── incomeBySource: { milk: number, eggs: number, ... }
+├── expenseByPerson?: { uid: amount, ... }
+├── incomeByPerson?: { uid: amount, ... }
+├── totalDistributed?: number
+├── distributionByPerson?: { uid: amount, ... }
 └── updatedAt: Timestamp
 ```
 
@@ -255,27 +331,29 @@ farm-tracker/
 │   ├── app.routes.ts           (lazy-loaded routes with guards)
 │   ├── core/
 │   │   ├── guards/             (auth.guard.ts, role.guard.ts)
-│   │   ├── services/           (auth, user, transaction, loan, task, summary, export, segment, category)
-│   │   ├── models/             (TypeScript interfaces for all entities)
+│   │   ├── services/           (auth, user, transaction, loan, task, summary, export, segment, category, inventory, notification)
+│   │   ├── models/             (TypeScript interfaces: transaction, loan, task, segment, category, inventory, notification, user, monthly-summary)
 │   │   └── utils/              (date.utils.ts, firestore.utils.ts)
 │   ├── shared/
 │   │   ├── components/         (loading-spinner, empty-state, confirm-dialog)
 │   │   ├── pipes/              (currency-inr, relative-time)
 │   │   └── directives/         (has-role)
 │   ├── layout/
-│   │   ├── shell/              (main layout with sidebar + header + content)
+│   │   ├── shell/              (main layout, triggers notification refresh)
 │   │   ├── sidebar/            (navigation with role-based visibility)
-│   │   ├── header/             (user info, logout menu)
+│   │   ├── header/             (user info, notification bell, logout menu)
+│   │   ├── notification-bell/  (bell icon with badge + dropdown)
 │   │   └── not-found/          (404 page)
 │   ├── features/
 │   │   ├── auth/               (login, register, forgot-password)
-│   │   ├── dashboard/          (summary cards, charts, recent txns, loan widget)
-│   │   ├── transactions/       (list, form, detail)
-│   │   ├── loans/              (list, form, detail with repayments)
+│   │   ├── dashboard/          (summary cards, charts, loan widget, budget widget, stock widget)
+│   │   ├── transactions/       (list, form, detail, distribution-dialog)
+│   │   ├── loans/              (list, form, detail with repayments + add-more)
+│   │   ├── inventory/          (inventory-page, inventory-event-dialog)
 │   │   ├── tasks/              (kanban-board, form, detail)
 │   │   ├── analytics/          (analytics with filters and charts)
 │   │   ├── reports/            (monthly reports with PDF/CSV export)
-│   │   └── admin/              (user management, user form, data setup)
+│   │   └── admin/              (user management, user form, data setup + budgets)
 │   └── environments/           (Firebase config for dev and prod)
 ├── scripts/
 │   ├── setup-collections.js    (Seed default segments & categories)
@@ -299,6 +377,7 @@ farm-tracker/
 | `/dashboard` | Dashboard page | authGuard | All authenticated |
 | `/transactions` | Transaction list/form/detail | authGuard + roleGuard | Admin, Manager |
 | `/loans` | Loan list/form/detail | authGuard + roleGuard | Admin, Manager |
+| `/inventory` | Inventory stock + events | authGuard + roleGuard | Admin, Manager |
 | `/tasks` | Kanban board/form/detail | authGuard | All authenticated |
 | `/analytics` | Analytics charts | authGuard | All authenticated |
 | `/reports` | Reports with export | authGuard | All authenticated |
@@ -317,6 +396,7 @@ farm-tracker/
 | Dashboard | dashboard | All |
 | Transactions | receipt_long | Admin, Manager |
 | Owe & Lent | account_balance | Admin, Manager |
+| Inventory | inventory_2 | Admin, Manager |
 | Tasks | view_kanban | All |
 | Analytics | analytics | All |
 | Reports | assessment | All |
@@ -447,6 +527,18 @@ firebase deploy --only hosting
 - Batch writes with `increment()` are atomic
 - Acceptable for a small team (5 users, ~50 transactions/day)
 
+### Why in-memory caching on reference data?
+- Segments, categories, and users rarely change but are needed on every page
+- Cached after first fetch, reused across navigations (zero extra reads)
+- Cache cleared automatically on writes (seed, update, toggleActive)
+- Reduces daily Firestore reads by ~70-80%
+
+### Why client-side notifications (no Cloud Functions)?
+- Spark plan doesn't support Cloud Functions
+- Notifications computed from existing data (loans, tasks, summaries, budgets)
+- Dismissed state stored in localStorage (zero Firestore writes)
+- Refreshed once on app init
+
 ### Why `paymentMethod` field?
 - Tracks whether transaction was paid via cash or UPI
 - Useful for reconciliation and person-wise expense tracking
@@ -457,7 +549,7 @@ firebase deploy --only hosting
 
 | Resource | Limit | Our Usage (5 users, ~50 txns/day) |
 |----------|-------|-----------------------------------|
-| Firestore reads | 50K/day | ~3,000/day |
+| Firestore reads | 50K/day | ~1,000-2,000/day (with caching) |
 | Firestore writes | 20K/day | ~150/day (50 x 3 docs per batch) |
 | Firestore storage | 1 GB | ~18 MB/year |
 | Auth users | Unlimited | No issue |
@@ -473,11 +565,12 @@ firebase deploy --only hosting
 | Collection | Read | Create | Update | Delete |
 |------------|------|--------|--------|--------|
 | `users` | Authenticated | Self or Admin | Self or Admin | Admin |
-| `segments` | Authenticated | Admin | Admin | Admin |
+| `segments` | Authenticated | Manager/Admin | Manager/Admin | Manager/Admin |
 | `categories` | Authenticated | Admin | Admin | Admin |
 | `transactions` | Authenticated | Manager/Admin (segment check) | Manager/Admin (segment check) | Admin |
-| `loans` | Authenticated | Manager/Admin (segment or personal) | Manager/Admin (segment or personal) | Admin |
-| `loans/repayments` | Authenticated | Manager/Admin | Admin | Admin |
+| `loans` | Authenticated | Manager/Admin (segment or personal) | Manager/Admin (segment or personal) | Manager/Admin |
+| `loans/repayments` | Authenticated | Manager/Admin | Manager/Admin | Manager/Admin |
+| `inventoryEvents` | Authenticated | Manager/Admin (segment check) | Admin | Admin |
 | `monthlySummaries` | Authenticated | Manager/Admin | Manager/Admin | — |
 | `tasks` | Authenticated | Authenticated | Authenticated | Authenticated |
 

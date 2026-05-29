@@ -45,7 +45,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
       <div class="filter-header">
         <mat-icon>filter_list</mat-icon>
         <span>Filters</span>
-        @if (filterType || filterSegment || filterMonth) {
+        @if (filterType || filterSegment || filterMonth || searchTerm) {
           <button mat-button class="clear-btn" (click)="clearFilters()">Clear All</button>
         }
       </div>
@@ -78,20 +78,27 @@ import { getMonthString } from '../../../core/utils/date.utils';
             }
           </mat-select>
         </mat-form-field>
+        <mat-form-field appearance="outline" class="filter-field search-field">
+          <mat-label>Search</mat-label>
+          <input matInput [(ngModel)]="searchTerm" placeholder="Description, person, amount..." />
+          @if (searchTerm) {
+            <button matSuffix mat-icon-button (click)="searchTerm = ''"><mat-icon>close</mat-icon></button>
+          }
+        </mat-form-field>
       </div>
     </mat-card>
 
     <!-- Content -->
     @if (loading()) {
       <app-loading-spinner />
-    } @else if (transactions().length === 0) {
+    } @else if (displayedTransactions().length === 0) {
       <app-empty-state icon="📋" title="No transactions" message="No transactions found. Try changing the filters or add a new transaction." />
     } @else {
       <!-- Summary Bar -->
       <div class="summary-bar">
         <div class="summary-item">
           <span class="summary-label">Showing</span>
-          <span class="summary-value">{{ transactions().length }} records</span>
+          <span class="summary-value">{{ displayedTransactions().length }} records</span>
         </div>
       </div>
 
@@ -113,7 +120,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
               </tr>
             </thead>
             <tbody>
-              @for (txn of transactions(); track txn.id) {
+              @for (txn of displayedTransactions(); track txn.id) {
                 <tr (click)="viewDetail(txn.id)" class="clickable-row">
                   <td class="date-cell">{{ txn.date.toDate() | date:'dd MMM yyyy' }}</td>
                   <td>
@@ -121,6 +128,9 @@ import { getMonthString } from '../../../core/utils/date.utils';
                       <mat-icon class="type-icon">{{ txn.type === 'expense' ? 'arrow_downward' : 'arrow_upward' }}</mat-icon>
                       {{ txn.type }}
                     </span>
+                    @if (txn.type === 'income') {
+                      <span class="dist-chip" [class]="getDistStatus(txn)">{{ getDistLabel(txn) }}</span>
+                    }
                   </td>
                   <td>{{ txn.segmentName }}</td>
                   <td>{{ txn.categoryName }}</td>
@@ -172,6 +182,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
     .clear-btn { margin-left: auto; font-size: 0.8rem; color: #4f46e5; }
     .filters { display: flex; gap: 1rem; flex-wrap: wrap; }
     .filter-field { flex: 1; min-width: 180px; }
+    .search-field { min-width: 250px; }
 
     .summary-bar {
       display: flex; gap: 1rem; margin-bottom: 0.75rem; padding: 0 4px;
@@ -229,6 +240,15 @@ import { getMonthString } from '../../../core/utils/date.utils';
     .actions-cell button { opacity: 0.6; }
     .clickable-row:hover .actions-cell button { opacity: 1; }
 
+    .dist-chip {
+      display: inline-block; margin-left: 6px; padding: 2px 6px;
+      border-radius: 4px; font-size: 0.6rem; font-weight: 700;
+      text-transform: uppercase; vertical-align: middle;
+    }
+    .dist-chip.full { background: #f0fdf4; color: #16a34a; }
+    .dist-chip.partial { background: #fef3c7; color: #d97706; }
+    .dist-chip.none { background: #f1f5f9; color: #94a3b8; }
+
     .load-more { text-align: center; padding: 1.5rem; }
     .load-more button { padding: 8px 24px; }
   `],
@@ -249,6 +269,7 @@ export class TransactionListComponent implements OnInit {
   filterType = '';
   filterSegment = '';
   filterMonth = '';
+  searchTerm = '';
 
   // Generate last 12 months for month filter
   availableMonths = this.generateMonths(12);
@@ -285,10 +306,24 @@ export class TransactionListComponent implements OnInit {
     this.hasMore.set(result.transactions.length === 20);
   }
 
+  displayedTransactions(): Transaction[] {
+    const term = this.searchTerm.toLowerCase().trim();
+    if (!term) return this.transactions();
+    return this.transactions().filter(txn =>
+      txn.description?.toLowerCase().includes(term) ||
+      txn.paidByName?.toLowerCase().includes(term) ||
+      txn.createdByName?.toLowerCase().includes(term) ||
+      txn.categoryName?.toLowerCase().includes(term) ||
+      txn.segmentName?.toLowerCase().includes(term) ||
+      txn.amount.toString().includes(term)
+    );
+  }
+
   clearFilters(): void {
     this.filterType = '';
     this.filterSegment = '';
     this.filterMonth = '';
+    this.searchTerm = '';
     this.loadData();
   }
 
@@ -319,6 +354,19 @@ export class TransactionListComponent implements OnInit {
         await this.loadData();
       }
     });
+  }
+
+  getDistStatus(txn: Transaction): string {
+    if (!txn.distributions?.length) return 'none';
+    const total = txn.distributions.reduce((s, d) => s + d.amount, 0);
+    return total >= txn.amount ? 'full' : 'partial';
+  }
+
+  getDistLabel(txn: Transaction): string {
+    const status = this.getDistStatus(txn);
+    if (status === 'full') return 'Distributed';
+    if (status === 'partial') return 'Partial';
+    return 'Undistributed';
   }
 
   private generateMonths(count: number): { value: string; label: string }[] {

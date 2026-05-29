@@ -26,6 +26,11 @@ export const routes: Routes = [
         canActivate: [roleGuard(['admin', 'manager'])],
       },
       {
+        path: 'inventory',
+        loadChildren: () => import('./features/inventory/inventory.routes').then(m => m.INVENTORY_ROUTES),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
         path: 'tasks',
         loadChildren: () => import('./features/tasks/tasks.routes').then(m => m.TASK_ROUTES),
       },

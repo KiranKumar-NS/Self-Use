@@ -23,11 +23,21 @@ export function getMonthName(monthStr: string): string {
 }
 
 export function getLast6Months(): string[] {
+  return getLast6MonthsFrom(getMonthString(new Date()));
+}
+
+export function getLast6MonthsFrom(baseMonth: string): string[] {
+  const [year, month] = baseMonth.split('-').map(Number);
   const months: string[] = [];
-  const now = new Date();
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const d = new Date(year, month - 1 - i, 1);
     months.push(getMonthString(d));
   }
   return months;
+}
+
+export function shiftMonth(monthStr: string, delta: number): string {
+  const [year, month] = monthStr.split('-').map(Number);
+  const d = new Date(year, month - 1 + delta, 1);
+  return getMonthString(d);
 }

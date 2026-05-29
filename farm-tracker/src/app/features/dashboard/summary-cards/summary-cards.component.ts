@@ -33,6 +33,22 @@ import { MatIconModule } from '@angular/material/icon';
         </div>
       </mat-card>
 
+      <mat-card class="summary-card distributed">
+        <mat-icon>account_balance_wallet</mat-icon>
+        <div class="card-content">
+          <span class="label">Distributed</span>
+          <span class="value">{{ totalDistributed | currencyInr }}</span>
+        </div>
+      </mat-card>
+
+      <mat-card class="summary-card reinvestment">
+        <mat-icon>savings</mat-icon>
+        <div class="card-content">
+          <span class="label">Undistributed</span>
+          <span class="value">{{ totalIncome - totalDistributed | currencyInr }}</span>
+        </div>
+      </mat-card>
+
     </div>
   `,
   styles: [`
@@ -57,10 +73,17 @@ import { MatIconModule } from '@angular/material/icon';
     .loss { border-color: #dc2626; }
     .loss .value { color: #dc2626; }
     .loss mat-icon { color: #dc2626; }
+    .distributed { border-color: #7c3aed; }
+    .distributed .value { color: #7c3aed; }
+    .distributed mat-icon { color: #7c3aed; }
+    .reinvestment { border-color: #0891b2; }
+    .reinvestment .value { color: #0891b2; }
+    .reinvestment mat-icon { color: #0891b2; }
   `],
 })
 export class SummaryCardsComponent {
   @Input() totalIncome = 0;
   @Input() totalExpense = 0;
   @Input() netProfit = 0;
+  @Input() totalDistributed = 0;
 }

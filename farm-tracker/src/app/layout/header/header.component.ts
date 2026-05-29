@@ -5,16 +5,18 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
+import { NotificationBellComponent } from '../notification-bell/notification-bell.component';
 
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [MatToolbarModule, MatButtonModule, MatIconModule, MatMenuModule],
+  imports: [MatToolbarModule, MatButtonModule, MatIconModule, MatMenuModule, NotificationBellComponent],
   template: `
     <mat-toolbar class="header">
       <span class="spacer"></span>
 
       <div class="user-info">
+        <app-notification-bell />
         <span class="user-name">{{ auth.userProfile()?.displayName }}</span>
 
         <button mat-icon-button [matMenuTriggerFor]="menu">

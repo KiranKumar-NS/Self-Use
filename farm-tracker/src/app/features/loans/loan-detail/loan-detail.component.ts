@@ -13,6 +13,8 @@ import { MatInputModule } from '@angular/material/input';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatDialog } from '@angular/material/dialog';
+import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { DatePipe } from '@angular/common';
 
 @Component({
@@ -33,6 +35,11 @@ import { DatePipe } from '@angular/common';
           @if (loan()!.repaymentStatus === 'pending') {
             <button mat-stroked-button (click)="edit()">
               <mat-icon>edit</mat-icon> Edit
+            </button>
+          }
+          @if (loan()!.repaymentStatus === 'completed') {
+            <button mat-stroked-button color="warn" (click)="confirmHardDelete()">
+              <mat-icon>delete_forever</mat-icon> Delete
             </button>
           }
           <button mat-button (click)="back()">Back</button>
@@ -81,6 +88,33 @@ import { DatePipe } from '@angular/common';
         </div>
       </mat-card>
 
+      <!-- Add More Amount (always visible — reopens completed loans) -->
+      <h3 class="section-title">Add More Amount</h3>
+      <mat-card class="repayment-form-card">
+        @if (addMoreError()) {
+          <div class="error-message">{{ addMoreError() }}</div>
+        }
+        <div class="repayment-form">
+          <mat-form-field appearance="outline">
+            <mat-label>Additional Amount</mat-label>
+            <input matInput type="number" [(ngModel)]="addMoreAmount" min="1" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Date</mat-label>
+            <input matInput [matDatepicker]="mPicker" [(ngModel)]="addMoreDate" />
+            <mat-datepicker-toggle matIconSuffix [for]="mPicker" />
+            <mat-datepicker #mPicker />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Note</mat-label>
+            <input matInput [(ngModel)]="addMoreNote" />
+          </mat-form-field>
+          <button mat-flat-button color="accent" (click)="addMore()" [disabled]="savingAddMore()">
+            {{ savingAddMore() ? 'Adding...' : 'Add More' }}
+          </button>
+        </div>
+      </mat-card>
+
       <!-- Add Repayment -->
       @if (loan()!.repaymentStatus !== 'completed') {
         <h3 class="section-title">Add Repayment</h3>
@@ -110,14 +144,18 @@ import { DatePipe } from '@angular/common';
         </mat-card>
       }
 
-      <!-- Repayment History -->
+      <!-- Transaction History (Repayments + Disbursements) -->
       @if (repayments().length > 0) {
-        <h3 class="section-title">Repayment History</h3>
+        <h3 class="section-title">Transaction History</h3>
         <mat-card>
           @for (r of repayments(); track r.id) {
-            <div class="repayment-entry">
+            <div class="repayment-entry" [class.disbursement]="r.amount < 0">
               <div class="repayment-info">
-                <strong>{{ r.amount | currencyInr }}</strong>
+                @if (r.amount < 0) {
+                  <strong class="disbursement-amount">+ {{ (-r.amount) | currencyInr }} given</strong>
+                } @else {
+                  <strong class="repayment-amount">{{ r.amount | currencyInr }} repaid</strong>
+                }
                 <span class="repayment-date">{{ r.date.toDate() | date:'dd MMM yyyy' }}</span>
               </div>
               <div class="repayment-meta">
@@ -156,12 +194,16 @@ import { DatePipe } from '@angular/common';
     .repayment-date { color: #94a3b8; }
     .repayment-meta { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
     .error-message { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .disbursement { background: #fefce8; }
+    .disbursement-amount { color: #d97706; }
+    .repayment-amount { color: #16a34a; }
   `],
 })
 export class LoanDetailComponent implements OnInit {
   private loanService = inject(LoanService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private dialog = inject(MatDialog);
 
   loan = signal<Loan | null>(null);
   repayments = signal<Repayment[]>([]);
@@ -172,6 +214,12 @@ export class LoanDetailComponent implements OnInit {
   repaymentNote = '';
   repaymentError = signal('');
   savingRepayment = signal(false);
+
+  addMoreAmount = 0;
+  addMoreDate = new Date();
+  addMoreNote = '';
+  addMoreError = signal('');
+  savingAddMore = signal(false);
 
   private loanId = '';
 
@@ -210,6 +258,45 @@ export class LoanDetailComponent implements OnInit {
     } finally {
       this.savingRepayment.set(false);
     }
+  }
+
+  async addMore(): Promise<void> {
+    if (this.addMoreAmount <= 0) {
+      this.addMoreError.set('Amount must be greater than 0');
+      return;
+    }
+    this.addMoreError.set('');
+    this.savingAddMore.set(true);
+    try {
+      await this.loanService.addMore(
+        this.loanId, this.addMoreAmount, this.addMoreNote, this.addMoreDate
+      );
+      this.addMoreAmount = 0;
+      this.addMoreNote = '';
+      await this.loadData();
+    } catch (err: any) {
+      this.addMoreError.set(err.message || 'Failed to add amount');
+    } finally {
+      this.savingAddMore.set(false);
+    }
+  }
+
+  confirmHardDelete(): void {
+    const loan = this.loan()!;
+    const ref = this.dialog.open(ConfirmDialogComponent, {
+      data: {
+        title: 'Permanently Delete Loan',
+        message: `This will permanently delete the loan to ${loan.personName} (${loan.amount.toLocaleString('en-IN')}). This cannot be undone.`,
+        confirmText: 'Delete Forever',
+      } as ConfirmDialogData,
+    });
+
+    ref.afterClosed().subscribe(async (confirmed) => {
+      if (confirmed) {
+        await this.loanService.hardDelete(this.loanId);
+        this.router.navigate(['/loans']);
+      }
+    });
   }
 
   edit(): void { this.router.navigate(['/loans', this.loanId, 'edit']); }

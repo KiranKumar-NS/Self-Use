@@ -39,7 +39,7 @@ service cloud.firestore {
     // Segments (reference data)
     match /segments/{segmentId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isManagerOrAdmin();
     }
 
     // Categories (reference data)
@@ -67,13 +67,13 @@ service cloud.firestore {
         && (request.resource.data.segment == 'personal' || hasSegmentAccess(request.resource.data.segment));
       allow update: if isManagerOrAdmin()
         && (resource.data.segment == 'personal' || hasSegmentAccess(resource.data.segment));
-      allow delete: if isAdmin();
+      allow delete: if isManagerOrAdmin();
 
       // Repayments subcollection
       match /repayments/{repaymentId} {
         allow read: if isAuthenticated();
         allow create: if isManagerOrAdmin();
-        allow update, delete: if isAdmin();
+        allow update, delete: if isManagerOrAdmin();
       }
     }
 
@@ -81,6 +81,14 @@ service cloud.firestore {
     match /monthlySummaries/{summaryId} {
       allow read: if isAuthenticated();
       allow write: if isManagerOrAdmin();
+    }
+
+    // Inventory events
+    match /inventoryEvents/{eventId} {
+      allow read: if isAuthenticated();
+      allow create: if isManagerOrAdmin()
+        && hasSegmentAccess(request.resource.data.segment);
+      allow update, delete: if isAdmin();
     }
 
     // Tasks - all authenticated users can manage

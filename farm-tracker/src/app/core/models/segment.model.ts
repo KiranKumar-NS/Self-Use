@@ -1,11 +1,18 @@
 import { Timestamp } from '@angular/fire/firestore';
 
+export interface SegmentBudget {
+  monthlyExpenseLimit?: number;
+  monthlyIncomeTarget?: number;
+}
+
 export interface Segment {
   id: string;
   name: string;
   description: string;
   icon: string;
   isActive: boolean;
+  currentStock?: number;
+  budgets?: SegmentBudget;
   createdAt: Timestamp;
 }
 

@@ -1,7 +1,8 @@
-import { Component } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { SidebarComponent } from '../sidebar/sidebar.component';
 import { HeaderComponent } from '../header/header.component';
+import { NotificationService } from '../../core/services/notification.service';
 
 @Component({
   selector: 'app-shell',
@@ -36,4 +37,10 @@ import { HeaderComponent } from '../header/header.component';
     }
   `],
 })
-export class ShellComponent {}
+export class ShellComponent implements OnInit {
+  private notificationService = inject(NotificationService);
+
+  ngOnInit(): void {
+    this.notificationService.refresh().catch(() => {});
+  }
+}

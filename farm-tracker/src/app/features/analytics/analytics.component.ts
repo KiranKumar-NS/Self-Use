@@ -1,15 +1,8 @@
 import { Component, inject, signal, OnInit, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe, UpperCasePipe } from '@angular/common';
-import {
-  Firestore,
-  collection,
-  getDocs,
-  query,
-  where,
-  orderBy,
-} from '@angular/fire/firestore';
 import { Transaction } from '../../core/models/transaction.model';
+import { TransactionService } from '../../core/services/transaction.service';
 import { CurrencyInrPipe } from '../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
 import { BaseChartDirective } from 'ng2-charts';
@@ -50,7 +43,7 @@ import { getMonthString } from '../../core/utils/date.utils';
       <div class="filters">
         <mat-form-field appearance="outline" class="filter-field">
           <mat-label>From Month</mat-label>
-          <mat-select [(ngModel)]="filterFromMonth" (selectionChange)="applyFilters()">
+          <mat-select [(ngModel)]="filterFromMonth" (selectionChange)="loadTransactions()">
             <mat-option value="">All Time</mat-option>
             @for (m of availableMonths; track m.value) {
               <mat-option [value]="m.value">{{ m.label }}</mat-option>
@@ -59,7 +52,7 @@ import { getMonthString } from '../../core/utils/date.utils';
         </mat-form-field>
         <mat-form-field appearance="outline" class="filter-field">
           <mat-label>To Month</mat-label>
-          <mat-select [(ngModel)]="filterToMonth" (selectionChange)="applyFilters()">
+          <mat-select [(ngModel)]="filterToMonth" (selectionChange)="loadTransactions()">
             <mat-option value="">All Time</mat-option>
             @for (m of availableMonths; track m.value) {
               <mat-option [value]="m.value">{{ m.label }}</mat-option>
@@ -276,15 +269,15 @@ import { getMonthString } from '../../core/utils/date.utils';
   `],
 })
 export class AnalyticsComponent implements OnInit {
-  private firestore = inject(Firestore);
+  private transactionService = inject(TransactionService);
 
   loading = signal(true);
   allTransactions = signal<Transaction[]>([]);
   filtered = signal<Transaction[]>([]);
 
-  // Filters
-  filterFromMonth = '';
-  filterToMonth = '';
+  // Filters — default to current month
+  filterFromMonth = getMonthString(new Date());
+  filterToMonth = getMonthString(new Date());
   filterSegment = '';
   filterPaidBy = '';
   filterCategory = '';
@@ -320,31 +313,47 @@ export class AnalyticsComponent implements OnInit {
   private colors = ['#4f46e5', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#be123c', '#65a30d'];
 
   async ngOnInit(): Promise<void> {
-    const q = query(
-      collection(this.firestore, 'transactions'),
-      where('isDeleted', '==', false),
-      where('type', '==', 'expense'),
-      orderBy('date', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    const txns = snapshot.docs.map((d) => d.data() as Transaction);
+    // Generate last 12 months for filter dropdowns
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const value = getMonthString(d);
+      const label = d.toLocaleDateString('en-IN', { year: 'numeric', month: 'long' });
+      this.availableMonths.push({ value, label });
+    }
+
+    await this.loadTransactions();
+    this.loading.set(false);
+  }
+
+  async loadTransactions(): Promise<void> {
+    // Fetch only expense transactions for the selected month range
+    const filters: any = { type: 'expense' as const };
+    // If both months are same, use single month filter (1 query)
+    if (this.filterFromMonth && this.filterFromMonth === this.filterToMonth) {
+      filters.month = this.filterFromMonth;
+    }
+
+    const result = await this.transactionService.getAll(filters, 200);
+    let txns = result.transactions;
+
+    // Client-side month range filter if from != to
+    if (this.filterFromMonth && this.filterToMonth && this.filterFromMonth !== this.filterToMonth) {
+      txns = txns.filter(t => t.month >= this.filterFromMonth && t.month <= this.filterToMonth);
+    } else if (this.filterFromMonth && !this.filterToMonth) {
+      txns = txns.filter(t => t.month >= this.filterFromMonth);
+    } else if (!this.filterFromMonth && this.filterToMonth) {
+      txns = txns.filter(t => t.month <= this.filterToMonth);
+    }
+
     this.allTransactions.set(txns);
 
-    // Build unique values
+    // Build unique values from loaded data
     this.allSegments.set([...new Set(txns.map((t) => t.segmentName))].sort());
     this.allPaidBy.set([...new Set(txns.map((t) => t.paidByName || 'Unknown'))].sort());
     this.allCategories.set([...new Set(txns.map((t) => t.categoryName))].sort());
 
-    // Build month list from data
-    const months = [...new Set(txns.map((t) => t.month))].sort().reverse();
-    this.availableMonths = months.map((m) => {
-      const [y, mo] = m.split('-');
-      const d = new Date(parseInt(y), parseInt(mo) - 1);
-      return { value: m, label: d.toLocaleDateString('en-IN', { year: 'numeric', month: 'long' }) };
-    });
-
     this.applyFilters();
-    this.loading.set(false);
   }
 
   hasFilters(): boolean {
@@ -352,12 +361,12 @@ export class AnalyticsComponent implements OnInit {
   }
 
   clearFilters(): void {
-    this.filterFromMonth = '';
-    this.filterToMonth = '';
+    this.filterFromMonth = getMonthString(new Date());
+    this.filterToMonth = getMonthString(new Date());
     this.filterSegment = '';
     this.filterPaidBy = '';
     this.filterCategory = '';
-    this.applyFilters();
+    this.loadTransactions();
   }
 
   applyFilters(): void {

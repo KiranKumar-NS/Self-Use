@@ -4,7 +4,7 @@ export type TransactionType = 'expense' | 'income';
 export type PaymentMethod = 'cash' | 'upi';
 
 export interface TimelineEntry {
-  action: 'created' | 'updated' | 'deleted';
+  action: 'created' | 'updated' | 'deleted' | 'distributed';
   by: string;
   byName: string;
   at: Timestamp;
@@ -36,9 +36,18 @@ export interface Transaction {
   // Status Timeline (replaces separate auditLogs collection)
   timeline: TimelineEntry[];
 
+  // Income distribution (only for type === 'income')
+  distributions?: DistributionEntry[];
+
   // For queries
   month: string;
   year: number;
+}
+
+export interface DistributionEntry {
+  uid: string;        // user UID or 'reinvestment'
+  name: string;       // display name or 'Reinvestment'
+  amount: number;
 }
 
 export interface TransactionFormData {

@@ -1,14 +1,17 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TransactionService } from '../../../core/services/transaction.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Transaction } from '../../../core/models/transaction.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { RelativeTimePipe } from '../../../shared/pipes/relative-time.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
+import { DistributionDialogComponent } from '../distribution-dialog/distribution-dialog.component';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatDialog } from '@angular/material/dialog';
 import { DatePipe } from '@angular/common';
 
 @Component({
@@ -74,12 +77,66 @@ import { DatePipe } from '@angular/common';
         </div>
       </mat-card>
 
+      <!-- Distribution Section (income only) -->
+      @if (transaction()!.type === 'income') {
+        <div class="dist-header">
+          <h3 class="section-title">Distribution</h3>
+          @if (!auth.isViewer()) {
+            <button mat-stroked-button (click)="openDistributionDialog()">
+              <mat-icon>{{ hasDistributions() ? 'edit' : 'account_balance_wallet' }}</mat-icon>
+              {{ hasDistributions() ? 'Edit Distribution' : 'Distribute' }}
+            </button>
+          }
+        </div>
+
+        <mat-card class="dist-card">
+          @if (hasDistributions()) {
+            <div class="dist-table">
+              @for (d of transaction()!.distributions; track d.uid) {
+                <div class="dist-row">
+                  <span class="dist-name" [class.reinvestment]="d.uid === 'reinvestment'">
+                    @if (d.uid === 'reinvestment') {
+                      <mat-icon class="dist-icon">savings</mat-icon>
+                    } @else {
+                      <mat-icon class="dist-icon">person</mat-icon>
+                    }
+                    {{ d.name }}
+                  </span>
+                  <span class="dist-amount">{{ d.amount | currencyInr }}</span>
+                  <span class="dist-pct">{{ ((d.amount / transaction()!.amount) * 100).toFixed(0) }}%</span>
+                </div>
+              }
+              @if (undistributed() > 0) {
+                <div class="dist-row undistributed">
+                  <span class="dist-name">
+                    <mat-icon class="dist-icon">hourglass_empty</mat-icon>
+                    Undistributed
+                  </span>
+                  <span class="dist-amount">{{ undistributed() | currencyInr }}</span>
+                  <span class="dist-pct">{{ ((undistributed() / transaction()!.amount) * 100).toFixed(0) }}%</span>
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="dist-empty">
+              <mat-icon>info_outline</mat-icon>
+              <span>Not yet distributed. Full amount available for distribution or reinvestment.</span>
+            </div>
+          }
+        </mat-card>
+      }
+
       @if (transaction()!.timeline && transaction()!.timeline.length > 0) {
         <h3 class="section-title">Timeline</h3>
         <mat-card>
           @for (entry of transaction()!.timeline; track $index) {
             <div class="audit-entry">
-              <strong>{{ entry.byName }}</strong> {{ entry.action }} this transaction
+              <strong>{{ entry.byName }}</strong>
+              @if (entry.action === 'distributed') {
+                distributed this income
+              } @else {
+                {{ entry.action }} this transaction
+              }
               <span class="audit-time">{{ entry.at | relativeTime }}</span>
               @if (entry.changes) {
                 <div class="changes">{{ entry.changes }}</div>
@@ -107,6 +164,20 @@ import { DatePipe } from '@angular/common';
     .payment-badge.cash { background: #fef3c7; color: #d97706; }
     .payment-badge.upi { background: #dbeafe; color: #2563eb; }
     .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: #1e293b; }
+    .dist-header { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; }
+    .dist-header .section-title { margin: 0; }
+    .dist-card { padding: 1rem; margin-top: 0.5rem; }
+    .dist-table { display: flex; flex-direction: column; }
+    .dist-row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+    .dist-row:last-child { border-bottom: none; }
+    .dist-row.undistributed { opacity: 0.6; font-style: italic; }
+    .dist-name { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 0.95rem; }
+    .dist-name.reinvestment { color: #7c3aed; font-weight: 600; }
+    .dist-icon { font-size: 20px; width: 20px; height: 20px; color: #64748b; }
+    .dist-name.reinvestment .dist-icon { color: #7c3aed; }
+    .dist-amount { font-weight: 600; min-width: 100px; text-align: right; }
+    .dist-pct { color: #64748b; font-size: 0.8rem; min-width: 50px; text-align: right; }
+    .dist-empty { display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 0.9rem; padding: 8px 0; }
     .audit-entry { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.875rem; }
     .audit-time { color: #94a3b8; margin-left: 8px; }
     .changes { margin: 4px 0 0 1rem; font-size: 0.8rem; color: #64748b; }
@@ -116,18 +187,51 @@ export class TransactionDetailComponent implements OnInit {
   private transactionService = inject(TransactionService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private dialog = inject(MatDialog);
+  auth = inject(AuthService);
 
   transaction = signal<Transaction | null>(null);
   loading = signal(true);
 
+  private txnId = '';
+
   async ngOnInit(): Promise<void> {
-    const id = this.route.snapshot.params['id'];
-    this.transaction.set(await this.transactionService.getById(id));
+    this.txnId = this.route.snapshot.params['id'];
+    await this.loadTransaction();
+  }
+
+  async loadTransaction(): Promise<void> {
+    this.loading.set(true);
+    this.transaction.set(await this.transactionService.getById(this.txnId));
     this.loading.set(false);
   }
 
+  hasDistributions(): boolean {
+    return !!(this.transaction()?.distributions?.length);
+  }
+
+  undistributed(): number {
+    const txn = this.transaction();
+    if (!txn?.distributions?.length) return txn?.amount || 0;
+    const distributed = txn.distributions.reduce((s, d) => s + d.amount, 0);
+    return txn.amount - distributed;
+  }
+
+  openDistributionDialog(): void {
+    const ref = this.dialog.open(DistributionDialogComponent, {
+      width: '500px',
+      data: { transaction: this.transaction() },
+    });
+
+    ref.afterClosed().subscribe(async (result) => {
+      if (result) {
+        await this.loadTransaction();
+      }
+    });
+  }
+
   edit(): void {
-    this.router.navigate(['/transactions', this.transaction()!.id, 'edit']);
+    this.router.navigate(['/transactions', this.txnId, 'edit']);
   }
 
   back(): void {

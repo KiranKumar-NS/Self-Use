@@ -127,6 +127,45 @@ export class LoanService {
     });
   }
 
+  async addMore(loanId: string, amount: number, note: string, date: Date): Promise<void> {
+    const user = this.authService.userProfile()!;
+
+    await runTransaction(this.firestore, async (transaction) => {
+      const loanRef = doc(this.firestore, 'loans', loanId);
+      const loanSnap = await transaction.get(loanRef);
+      const loan = loanSnap.data() as Loan;
+
+      const newAmount = loan.amount + amount;
+      const newBalance = loan.balanceRemaining + amount;
+      const newStatus = loan.totalRepaid > 0 ? 'partial' : 'pending';
+
+      transaction.update(loanRef, {
+        amount: newAmount,
+        balanceRemaining: newBalance,
+        repaymentStatus: newStatus,
+        timeline: arrayUnion({
+          action: 'updated',
+          by: user.uid,
+          byName: user.displayName,
+          at: Timestamp.now(),
+          changes: `added more: +₹${amount.toLocaleString('en-IN')} (total: ₹${newAmount.toLocaleString('en-IN')})`,
+        }),
+      });
+
+      // Also record as a repayment-like entry (negative repayment = disbursement)
+      const disbursementRef = doc(collection(this.firestore, `loans/${loanId}/repayments`));
+      transaction.set(disbursementRef, {
+        id: disbursementRef.id,
+        date: Timestamp.fromDate(date),
+        amount: -amount, // negative = additional disbursement
+        note: note || 'Additional amount given',
+        recordedBy: user.uid,
+        recordedByName: user.displayName,
+        createdAt: serverTimestamp(),
+      });
+    });
+  }
+
   async softDelete(id: string): Promise<void> {
     const user = this.authService.userProfile()!;
     const loanRef = doc(this.firestore, 'loans', id);
@@ -142,6 +181,17 @@ export class LoanService {
       }),
     });
 
+    await batch.commit();
+  }
+
+  async hardDelete(id: string): Promise<void> {
+    // Delete repayments subcollection first
+    const repSnap = await getDocs(collection(this.firestore, `loans/${id}/repayments`));
+    const batch = writeBatch(this.firestore);
+    for (const repDoc of repSnap.docs) {
+      batch.delete(repDoc.ref);
+    }
+    batch.delete(doc(this.firestore, 'loans', id));
     await batch.commit();
   }
 

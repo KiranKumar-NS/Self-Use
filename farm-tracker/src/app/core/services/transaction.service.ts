@@ -17,7 +17,7 @@ import {
   DocumentSnapshot,
   arrayUnion,
 } from '@angular/fire/firestore';
-import { Transaction, TransactionFormData, TimelineEntry } from '../models/transaction.model';
+import { Transaction, TransactionFormData, TimelineEntry, DistributionEntry } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 
 @Injectable({ providedIn: 'root' })
@@ -69,10 +69,16 @@ export class TransactionService {
       ? `expenseByCategory.${data.category}`
       : `incomeBySource.${data.category}`;
 
+    const personKey = data.paidBy || user.uid;
+    const personField = data.type === 'expense'
+      ? `expenseByPerson.${personKey}`
+      : `incomeByPerson.${personKey}`;
+
     batch.set(summaryRef, {
       [incField]: increment(data.amount),
       netProfit: increment(profitDelta),
       [catField]: increment(data.amount),
+      [personField]: increment(data.amount),
       month: data.month,
       year: data.year,
       segment: data.segment,
@@ -108,12 +114,29 @@ export class TransactionService {
       ? `expenseByCategory.${oldData.category}`
       : `incomeBySource.${oldData.category}`;
 
-    batch.set(oldSummaryRef, {
+    const oldPersonKey = oldData.paidBy || oldData.createdBy;
+    const oldPersonField = oldData.type === 'expense'
+      ? `expenseByPerson.${oldPersonKey}`
+      : `incomeByPerson.${oldPersonKey}`;
+
+    const oldSummaryUpdates: Record<string, any> = {
       [oldIncField]: increment(-oldData.amount),
       netProfit: increment(oldProfitDelta),
       [oldCatField]: increment(-oldData.amount),
+      [oldPersonField]: increment(-oldData.amount),
       updatedAt: serverTimestamp(),
-    }, { merge: true });
+    };
+
+    // Reverse old distribution totals if amount/segment changed
+    if (oldData.distributions?.length && (oldData.amount !== data.amount || oldData.segment !== data.segment)) {
+      const oldTotalDist = oldData.distributions.reduce((s, d) => s + d.amount, 0);
+      oldSummaryUpdates['totalDistributed'] = increment(-oldTotalDist);
+      for (const d of oldData.distributions) {
+        oldSummaryUpdates[`distributionByPerson.${d.uid}`] = increment(-d.amount);
+      }
+    }
+
+    batch.set(oldSummaryRef, oldSummaryUpdates, { merge: true });
 
     // Apply new summary
     const newSummaryId = `${data.month}-${data.segment}`;
@@ -124,10 +147,16 @@ export class TransactionService {
       ? `expenseByCategory.${data.category}`
       : `incomeBySource.${data.category}`;
 
+    const newPersonKey = data.paidBy || user.uid;
+    const newPersonField = data.type === 'expense'
+      ? `expenseByPerson.${newPersonKey}`
+      : `incomeByPerson.${newPersonKey}`;
+
     batch.set(newSummaryRef, {
       [newIncField]: increment(data.amount),
       netProfit: increment(newProfitDelta),
       [newCatField]: increment(data.amount),
+      [newPersonField]: increment(data.amount),
       month: data.month,
       year: data.year,
       segment: data.segment,
@@ -135,7 +164,7 @@ export class TransactionService {
     }, { merge: true });
 
     // Update transaction + add timeline entry
-    batch.update(txnRef, {
+    const txnUpdates: Record<string, any> = {
       type: data.type,
       date: Timestamp.fromDate(data.date),
       amount: data.amount,
@@ -156,7 +185,14 @@ export class TransactionService {
         at: Timestamp.now(),
         changes: changesStr,
       }),
-    });
+    };
+
+    // Clear distributions if amount changed (splits no longer valid)
+    if (oldData.distributions?.length && oldData.amount !== data.amount) {
+      txnUpdates['distributions'] = [];
+    }
+
+    batch.update(txnRef, txnUpdates);
 
     await batch.commit();
   }
@@ -178,12 +214,29 @@ export class TransactionService {
       ? `expenseByCategory.${oldData.category}`
       : `incomeBySource.${oldData.category}`;
 
-    batch.set(summaryRef, {
+    const delPersonKey = oldData.paidBy || oldData.createdBy;
+    const delPersonField = oldData.type === 'expense'
+      ? `expenseByPerson.${delPersonKey}`
+      : `incomeByPerson.${delPersonKey}`;
+
+    const summaryUpdates: Record<string, any> = {
       [incField]: increment(-oldData.amount),
       netProfit: increment(profitDelta),
       [catField]: increment(-oldData.amount),
+      [delPersonField]: increment(-oldData.amount),
       updatedAt: serverTimestamp(),
-    }, { merge: true });
+    };
+
+    // Reverse distribution totals if any
+    if (oldData.distributions?.length) {
+      const oldTotalDist = oldData.distributions.reduce((s, d) => s + d.amount, 0);
+      summaryUpdates['totalDistributed'] = increment(-oldTotalDist);
+      for (const d of oldData.distributions) {
+        summaryUpdates[`distributionByPerson.${d.uid}`] = increment(-d.amount);
+      }
+    }
+
+    batch.set(summaryRef, summaryUpdates, { merge: true });
 
     batch.update(txnRef, {
       isDeleted: true,
@@ -194,6 +247,82 @@ export class TransactionService {
         at: Timestamp.now(),
       }),
     });
+
+    await batch.commit();
+  }
+
+  async updateDistribution(transactionId: string, distributions: DistributionEntry[]): Promise<void> {
+    const batch = writeBatch(this.firestore);
+    const user = this.authService.userProfile()!;
+    const txnRef = doc(this.firestore, 'transactions', transactionId);
+
+    const oldDoc = await getDoc(txnRef);
+    const oldData = oldDoc.data() as Transaction;
+
+    if (oldData.type !== 'income') throw new Error('Can only distribute income');
+
+    const totalDist = distributions.reduce((s, d) => s + d.amount, 0);
+    if (totalDist > oldData.amount) throw new Error('Distribution exceeds income amount');
+
+    // Filter out zero-amount entries
+    const nonZero = distributions.filter(d => d.amount > 0);
+
+    // Build changes description
+    const oldDist = oldData.distributions || [];
+    const changesList: string[] = [];
+    for (const d of nonZero) {
+      const old = oldDist.find(o => o.uid === d.uid);
+      const oldAmt = old?.amount || 0;
+      if (oldAmt !== d.amount) changesList.push(`${d.name}: ${oldAmt}→${d.amount}`);
+    }
+    // Check for removed entries
+    for (const old of oldDist) {
+      if (!nonZero.find(d => d.uid === old.uid)) {
+        changesList.push(`${old.name}: ${old.amount}→0`);
+      }
+    }
+
+    // Update transaction
+    batch.update(txnRef, {
+      distributions: nonZero,
+      timeline: arrayUnion({
+        action: 'distributed' as const,
+        by: user.uid,
+        byName: user.displayName,
+        at: Timestamp.now(),
+        changes: changesList.join(', ') || 'distribution updated',
+      }),
+    });
+
+    // Update monthly summary distribution totals
+    const summaryId = `${oldData.month}-${oldData.segment}`;
+    const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
+
+    const summaryUpdates: Record<string, any> = {
+      updatedAt: serverTimestamp(),
+    };
+
+    // Reverse old distributions
+    const oldTotalDist = oldDist.reduce((s, d) => s + d.amount, 0);
+    for (const d of oldDist) {
+      summaryUpdates[`distributionByPerson.${d.uid}`] = increment(-d.amount);
+    }
+
+    // Apply new distributions
+    const newTotalDist = nonZero.reduce((s, d) => s + d.amount, 0);
+    for (const d of nonZero) {
+      const existing = summaryUpdates[`distributionByPerson.${d.uid}`];
+      if (existing) {
+        // Already has a reverse increment, add net
+        summaryUpdates[`distributionByPerson.${d.uid}`] = increment(d.amount - (oldDist.find(o => o.uid === d.uid)?.amount || 0));
+      } else {
+        summaryUpdates[`distributionByPerson.${d.uid}`] = increment(d.amount);
+      }
+    }
+
+    summaryUpdates['totalDistributed'] = increment(newTotalDist - oldTotalDist);
+
+    batch.set(summaryRef, summaryUpdates, { merge: true });
 
     await batch.commit();
   }

@@ -112,6 +112,65 @@ import { DatePipe } from '@angular/common';
           </div>
         </mat-tab>
 
+        <mat-tab label="Distributions">
+          <div class="tab-content">
+            @if (incomeWithDistributions().length === 0) {
+              <p class="empty-text">No distributions recorded for this month.</p>
+            } @else {
+              <div class="summary-grid">
+                <mat-card class="metric-card">
+                  <span class="metric-label">Total Distributed</span>
+                  <span class="metric-value distributed">{{ totalDistributed() | currencyInr }}</span>
+                </mat-card>
+                <mat-card class="metric-card">
+                  <span class="metric-label">Undistributed</span>
+                  <span class="metric-value reinvest">{{ totalIncome() - totalDistributed() | currencyInr }}</span>
+                </mat-card>
+              </div>
+
+              <h3>Person-wise Distribution</h3>
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr><th>Person</th><th>Total Received</th></tr>
+                  </thead>
+                  <tbody>
+                    @for (entry of personDistTotals(); track entry.name) {
+                      <tr>
+                        <td>{{ entry.name }}</td>
+                        <td class="distributed">{{ entry.amount | currencyInr }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+
+              <h3>Per-Transaction Breakdown</h3>
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr><th>Date</th><th>Segment</th><th>Income</th><th>Distributed To</th></tr>
+                  </thead>
+                  <tbody>
+                    @for (t of incomeWithDistributions(); track t.id) {
+                      <tr>
+                        <td>{{ t.date.toDate() | date:'dd MMM' }}</td>
+                        <td>{{ t.segmentName }}</td>
+                        <td class="income">{{ t.amount | currencyInr }}</td>
+                        <td class="dist-detail">
+                          @for (d of t.distributions!; track d.uid) {
+                            <span class="dist-person">{{ d.name }}: {{ d.amount | currencyInr }}</span>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+        </mat-tab>
+
         <mat-tab label="Loans">
           <div class="tab-content">
             <div class="table-container">
@@ -171,6 +230,14 @@ import { DatePipe } from '@angular/common';
     .status-badge.pending { background: #fef2f2; color: #dc2626; }
     .status-badge.partial { background: #fef3c7; color: #d97706; }
     .status-badge.completed { background: #f0fdf4; color: #16a34a; }
+    .distributed { color: #7c3aed; }
+    .reinvest { color: #0891b2; }
+    .empty-text { text-align: center; color: #94a3b8; padding: 2rem; }
+    .dist-detail { display: flex; flex-wrap: wrap; gap: 6px; }
+    .dist-person {
+      display: inline-block; background: #f1f5f9; padding: 2px 8px;
+      border-radius: 4px; font-size: 0.8rem; color: #334155;
+    }
   `],
 })
 export class ReportPageComponent implements OnInit {
@@ -187,6 +254,9 @@ export class ReportPageComponent implements OnInit {
   totalIncome = signal(0);
   totalExpense = signal(0);
   netProfit = signal(0);
+  totalDistributed = signal(0);
+  incomeWithDistributions = signal<Transaction[]>([]);
+  personDistTotals = signal<{ name: string; amount: number }[]>([]);
 
   async ngOnInit(): Promise<void> {
     await this.loadReport();
@@ -196,7 +266,7 @@ export class ReportPageComponent implements OnInit {
     this.loading.set(true);
     const [summaries, txnResult, loanResult] = await Promise.all([
       this.summaryService.getForMonth(this.selectedMonth),
-      this.transactionService.getAll({ month: this.selectedMonth }, 100),
+      this.transactionService.getAll({ month: this.selectedMonth }, 500),
       this.loanService.getAll({}, 100),
     ]);
 
@@ -208,6 +278,24 @@ export class ReportPageComponent implements OnInit {
     this.totalIncome.set(agg.totalIncome);
     this.totalExpense.set(agg.totalExpense);
     this.netProfit.set(agg.netProfit);
+
+    // Compute distribution data
+    const incDist = txnResult.transactions.filter(t => t.type === 'income' && t.distributions?.length);
+    this.incomeWithDistributions.set(incDist);
+
+    const personMap: Record<string, number> = {};
+    let distTotal = 0;
+    for (const txn of incDist) {
+      for (const d of txn.distributions!) {
+        personMap[d.name] = (personMap[d.name] || 0) + d.amount;
+        distTotal += d.amount;
+      }
+    }
+    this.totalDistributed.set(distTotal);
+    this.personDistTotals.set(
+      Object.entries(personMap).map(([name, amount]) => ({ name, amount }))
+        .sort((a, b) => b.amount - a.amount)
+    );
 
     this.loading.set(false);
   }
