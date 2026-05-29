@@ -113,6 +113,7 @@ const CATEGORIES = [
   { id: 'labor',         name: 'Labor',        type: 'expense' },
   { id: 'transport',     name: 'Transport',    type: 'expense' },
   { id: 'maintenance',   name: 'Maintenance',  type: 'expense' },
+  { id: 'loan-repayment', name: 'Loan Repayment', type: 'expense' },
   { id: 'other-expense', name: 'Other',        type: 'expense' },
   // Income categories
   { id: 'milk',          name: 'Milk',         type: 'income' },

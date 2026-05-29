@@ -2,9 +2,12 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { LoanService } from '../../../core/services/loan.service';
+import { UserService } from '../../../core/services/user.service';
 import { Loan, Repayment } from '../../../core/models/loan.model';
+import { AppUser } from '../../../core/models/user.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
+import { MatSelectModule } from '@angular/material/select';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -23,7 +26,7 @@ import { DatePipe } from '@angular/common';
   imports: [
     FormsModule, DatePipe, CurrencyInrPipe, LoadingSpinnerComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
-    MatDatepickerModule, MatNativeDateModule, MatProgressBarModule,
+    MatDatepickerModule, MatNativeDateModule, MatProgressBarModule, MatSelectModule,
   ],
   template: `
     @if (loading()) {
@@ -142,6 +145,14 @@ import { DatePipe } from '@angular/common';
               <mat-datepicker #rPicker />
             </mat-form-field>
             <mat-form-field appearance="outline">
+              <mat-label>Paid By</mat-label>
+              <mat-select [(ngModel)]="repaymentPaidBy">
+                @for (u of activeUsers(); track u.uid) {
+                  <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
               <mat-label>Note</mat-label>
               <input matInput [(ngModel)]="repaymentNote" />
             </mat-form-field>
@@ -167,7 +178,10 @@ import { DatePipe } from '@angular/common';
                 <span class="repayment-date">{{ r.date.toDate() | date:'dd MMM yyyy' }}</span>
               </div>
               <div class="repayment-meta">
-                {{ r.note }} &middot; by {{ r.recordedByName }}
+                @if (r.paidByName && r.paidByName !== r.recordedByName) {
+                  paid by {{ r.paidByName }} &middot;
+                }
+                {{ r.note }} &middot; recorded by {{ r.recordedByName }}
               </div>
             </div>
           }
@@ -211,17 +225,20 @@ import { DatePipe } from '@angular/common';
 })
 export class LoanDetailComponent implements OnInit {
   private loanService = inject(LoanService);
+  private userService = inject(UserService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private dialog = inject(MatDialog);
 
   loan = signal<Loan | null>(null);
   repayments = signal<Repayment[]>([]);
+  activeUsers = signal<AppUser[]>([]);
   loading = signal(true);
 
   repaymentAmount = 0;
   repaymentDate = new Date();
   repaymentNote = '';
+  repaymentPaidBy = '';
   repaymentError = signal('');
   savingRepayment = signal(false);
 
@@ -235,6 +252,11 @@ export class LoanDetailComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.loanId = this.route.snapshot.params['id'];
+    const users = await this.userService.getAll();
+    this.activeUsers.set(users.filter(u => u.isActive));
+    // Default paid by to current user
+    const currentUid = this.activeUsers().find(u => u.uid)?.uid || '';
+    this.repaymentPaidBy = currentUid;
     await this.loadData();
   }
 
@@ -257,8 +279,10 @@ export class LoanDetailComponent implements OnInit {
     this.repaymentError.set('');
     this.savingRepayment.set(true);
     try {
+      const payer = this.activeUsers().find(u => u.uid === this.repaymentPaidBy);
       await this.loanService.addRepayment(
-        this.loanId, this.repaymentAmount, this.repaymentNote, this.repaymentDate
+        this.loanId, this.repaymentAmount, this.repaymentNote, this.repaymentDate,
+        this.repaymentPaidBy, payer?.displayName
       );
       this.repaymentAmount = 0;
       this.repaymentNote = '';

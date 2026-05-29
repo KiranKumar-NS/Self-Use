@@ -35,6 +35,8 @@ export interface Repayment {
   date: Timestamp;
   amount: number;
   note: string;
+  paidBy?: string;
+  paidByName?: string;
   recordedBy: string;
   recordedByName: string;
   createdAt: Timestamp;

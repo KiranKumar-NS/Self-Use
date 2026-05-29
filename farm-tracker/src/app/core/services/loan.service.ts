@@ -87,7 +87,7 @@ export class LoanService {
     await batch.commit();
   }
 
-  async addRepayment(loanId: string, amount: number, note: string, date: Date): Promise<void> {
+  async addRepayment(loanId: string, amount: number, note: string, date: Date, paidByUid?: string, paidByName?: string): Promise<void> {
     const user = this.authService.userProfile()!;
 
     await runTransaction(this.firestore, async (transaction) => {
@@ -99,6 +99,8 @@ export class LoanService {
       const newBalance = loan.amount - newTotalRepaid;
       const newStatus = newBalance <= 0 ? 'completed' : 'partial';
 
+      const payer = paidByName || user.displayName;
+
       // Add repayment subcollection doc
       const repaymentRef = doc(collection(this.firestore, `loans/${loanId}/repayments`));
       transaction.set(repaymentRef, {
@@ -106,6 +108,8 @@ export class LoanService {
         date: Timestamp.fromDate(date),
         amount,
         note,
+        paidBy: paidByUid || user.uid,
+        paidByName: payer,
         recordedBy: user.uid,
         recordedByName: user.displayName,
         createdAt: serverTimestamp(),
@@ -121,7 +125,7 @@ export class LoanService {
           by: user.uid,
           byName: user.displayName,
           at: Timestamp.now(),
-          changes: `repayment: +${amount} (${newStatus})`,
+          changes: `repayment: +₹${amount.toLocaleString('en-IN')} by ${payer} (${newStatus})`,
         }),
       });
     });

@@ -1,8 +1,9 @@
-import { Component, inject, signal, OnInit, computed } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe, UpperCasePipe } from '@angular/common';
 import { Transaction } from '../../core/models/transaction.model';
 import { TransactionService } from '../../core/services/transaction.service';
+import { LoanService } from '../../core/services/loan.service';
 import { CurrencyInrPipe } from '../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
 import { BaseChartDirective } from 'ng2-charts';
@@ -108,20 +109,29 @@ import { getMonthString } from '../../core/utils/date.utils';
         }
       </div>
 
-      <!-- Who Spent How Much -->
-      <h3 class="section-title">Who Spent How Much</h3>
+      <!-- Person Investment Summary -->
+      <h3 class="section-title">Person Investment Summary</h3>
       <div class="person-grid">
-        @for (p of personTotals(); track p.name) {
+        @for (p of investmentSummary(); track p.name) {
           <mat-card class="person-card">
             <div class="person-name">{{ p.name }}</div>
-            <div class="person-amount">{{ p.total | currencyInr }}</div>
+            <div class="person-amount">Net: {{ p.net | currencyInr }}</div>
             <div class="person-bar">
-              <div class="person-fill" [style.width.%]="(p.total / totalExpense()) * 100"></div>
+              <div class="person-fill" [style.width.%]="p.net > 0 ? (p.net / maxInvestment()) * 100 : 0"></div>
             </div>
-            <div class="person-details">
-              @for (seg of p.segments; track seg.name) {
-                <span class="person-seg">{{ seg.name }}: {{ seg.total | currencyInr }}</span>
-              }
+            <div class="invest-details">
+              <div class="invest-row">
+                <span class="invest-label">Expenses paid</span>
+                <span class="invest-value expense">{{ p.expensesPaid | currencyInr }}</span>
+              </div>
+              <div class="invest-row">
+                <span class="invest-label">Loan repaid</span>
+                <span class="invest-value expense">{{ p.loanRepaid | currencyInr }}</span>
+              </div>
+              <div class="invest-row">
+                <span class="invest-label">Income received</span>
+                <span class="invest-value income">-{{ p.incomeReceived | currencyInr }}</span>
+              </div>
             </div>
           </mat-card>
         }
@@ -244,6 +254,12 @@ import { getMonthString } from '../../core/utils/date.utils';
     .person-fill { height: 100%; background: #4f46e5; border-radius: 3px; transition: width 0.3s; }
     .person-details { display: flex; flex-wrap: wrap; gap: 6px; }
     .person-seg { font-size: 0.7rem; background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; }
+    .invest-details { display: flex; flex-direction: column; gap: 6px; }
+    .invest-row { display: flex; justify-content: space-between; font-size: 0.8rem; }
+    .invest-label { color: #64748b; }
+    .invest-value { font-weight: 600; }
+    .invest-value.expense { color: #dc2626; }
+    .invest-value.income { color: #16a34a; }
 
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
     .chart-card { padding: 1.25rem; }
@@ -270,6 +286,7 @@ import { getMonthString } from '../../core/utils/date.utils';
 })
 export class AnalyticsComponent implements OnInit {
   private transactionService = inject(TransactionService);
+  private loanService = inject(LoanService);
 
   loading = signal(true);
   allTransactions = signal<Transaction[]>([]);
@@ -292,6 +309,8 @@ export class AnalyticsComponent implements OnInit {
   totalExpense = signal(0);
   segmentTotals = signal<{ name: string; total: number; count: number }[]>([]);
   personTotals = signal<{ name: string; total: number; segments: { name: string; total: number }[] }[]>([]);
+  investmentSummary = signal<{ name: string; expensesPaid: number; loanRepaid: number; incomeReceived: number; net: number }[]>([]);
+  maxInvestment = signal(0);
 
   // Charts
   segmentChartData: ChartConfiguration<'doughnut'>['data'] = { labels: [], datasets: [] };
@@ -354,6 +373,68 @@ export class AnalyticsComponent implements OnInit {
     this.allCategories.set([...new Set(txns.map((t) => t.categoryName))].sort());
 
     this.applyFilters();
+    await this.buildInvestmentSummary(txns);
+  }
+
+  private async buildInvestmentSummary(expenseTxns: Transaction[]): Promise<void> {
+    // 1. Expenses paid per person (from expense transactions)
+    const personMap: Record<string, { expensesPaid: number; loanRepaid: number; incomeReceived: number }> = {};
+
+    const ensurePerson = (name: string) => {
+      if (!personMap[name]) personMap[name] = { expensesPaid: 0, loanRepaid: 0, incomeReceived: 0 };
+    };
+
+    for (const txn of expenseTxns) {
+      if (txn.payers?.length) {
+        for (const p of txn.payers) {
+          ensurePerson(p.name);
+          personMap[p.name].expensesPaid += p.amount;
+        }
+      } else {
+        const name = txn.paidByName || txn.createdByName || 'Unknown';
+        ensurePerson(name);
+        personMap[name].expensesPaid += txn.amount;
+      }
+    }
+
+    // 2. Loan repayments per person
+    try {
+      const loanResult = await this.loanService.getAll({}, 100);
+      for (const loan of loanResult.loans) {
+        const repayments = await this.loanService.getRepayments(loan.id);
+        for (const r of repayments) {
+          if (r.amount <= 0) continue; // skip disbursements
+          const name = r.paidByName || r.recordedByName || 'Unknown';
+          ensurePerson(name);
+          personMap[name].loanRepaid += r.amount;
+        }
+      }
+    } catch {}
+
+    // 3. Income distributions received per person
+    try {
+      const incomeResult = await this.transactionService.getAll({ type: 'income' }, 200);
+      for (const txn of incomeResult.transactions) {
+        if (!txn.distributions?.length) continue;
+        for (const d of txn.distributions) {
+          if (d.uid === 'reinvestment') continue;
+          ensurePerson(d.name);
+          personMap[d.name].incomeReceived += d.amount;
+        }
+      }
+    } catch {}
+
+    // Build summary
+    const summary = Object.entries(personMap)
+      .map(([name, data]) => ({
+        name,
+        ...data,
+        net: data.expensesPaid + data.loanRepaid - data.incomeReceived,
+      }))
+      .sort((a, b) => b.net - a.net);
+
+    this.investmentSummary.set(summary);
+    this.maxInvestment.set(summary.length > 0 ? Math.max(...summary.map(s => s.net)) : 0);
   }
 
   hasFilters(): boolean {

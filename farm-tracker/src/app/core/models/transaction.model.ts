@@ -39,6 +39,9 @@ export interface Transaction {
   // Income distribution (only for type === 'income')
   distributions?: DistributionEntry[];
 
+  // Split payers (for expenses paid by multiple people)
+  payers?: PayerEntry[];
+
   // For queries
   month: string;
   year: number;
@@ -47,6 +50,12 @@ export interface Transaction {
 export interface DistributionEntry {
   uid: string;        // user UID or 'reinvestment'
   name: string;       // display name or 'Reinvestment'
+  amount: number;
+}
+
+export interface PayerEntry {
+  uid: string;
+  name: string;
   amount: number;
 }
 
@@ -62,6 +71,7 @@ export interface TransactionFormData {
   paymentMethod: PaymentMethod;
   paidBy?: string;
   paidByName?: string;
+  payers?: PayerEntry[];
   month: string;
   year: number;
 }

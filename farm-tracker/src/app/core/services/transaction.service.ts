@@ -17,7 +17,7 @@ import {
   DocumentSnapshot,
   arrayUnion,
 } from '@angular/fire/firestore';
-import { Transaction, TransactionFormData, TimelineEntry, DistributionEntry } from '../models/transaction.model';
+import { Transaction, TransactionFormData, DistributionEntry } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 
 @Injectable({ providedIn: 'root' })
@@ -40,7 +40,7 @@ export class TransactionService {
       at: Timestamp.now(),
     };
 
-    batch.set(txnRef, {
+    const txnDoc: Record<string, any> = {
       id: txnRef.id,
       type: data.type,
       date: Timestamp.fromDate(data.date),
@@ -60,7 +60,13 @@ export class TransactionService {
       timeline: [timelineEntry],
       month: data.month,
       year: data.year,
-    });
+    };
+
+    if (data.payers?.length) {
+      txnDoc['payers'] = data.payers;
+    }
+
+    batch.set(txnRef, txnDoc);
 
     // Update monthly summary
     const incField = data.type === 'expense' ? 'totalExpense' : 'totalIncome';
@@ -69,21 +75,31 @@ export class TransactionService {
       ? `expenseByCategory.${data.category}`
       : `incomeBySource.${data.category}`;
 
-    const personKey = data.paidBy || user.uid;
-    const personField = data.type === 'expense'
-      ? `expenseByPerson.${personKey}`
-      : `incomeByPerson.${personKey}`;
-
-    batch.set(summaryRef, {
+    const summaryData: Record<string, any> = {
       [incField]: increment(data.amount),
       netProfit: increment(profitDelta),
       [catField]: increment(data.amount),
-      [personField]: increment(data.amount),
       month: data.month,
       year: data.year,
       segment: data.segment,
       updatedAt: serverTimestamp(),
-    }, { merge: true });
+    };
+
+    // Track per-person: split payers or single payer
+    if (data.payers?.length) {
+      for (const p of data.payers) {
+        const pField = data.type === 'expense' ? `expenseByPerson.${p.uid}` : `incomeByPerson.${p.uid}`;
+        summaryData[pField] = increment(p.amount);
+      }
+    } else {
+      const personKey = data.paidBy || user.uid;
+      const personField = data.type === 'expense'
+        ? `expenseByPerson.${personKey}`
+        : `incomeByPerson.${personKey}`;
+      summaryData[personField] = increment(data.amount);
+    }
+
+    batch.set(summaryRef, summaryData, { merge: true });
 
     await batch.commit();
     return txnRef.id;
@@ -114,18 +130,26 @@ export class TransactionService {
       ? `expenseByCategory.${oldData.category}`
       : `incomeBySource.${oldData.category}`;
 
-    const oldPersonKey = oldData.paidBy || oldData.createdBy;
-    const oldPersonField = oldData.type === 'expense'
-      ? `expenseByPerson.${oldPersonKey}`
-      : `incomeByPerson.${oldPersonKey}`;
-
     const oldSummaryUpdates: Record<string, any> = {
       [oldIncField]: increment(-oldData.amount),
       netProfit: increment(oldProfitDelta),
       [oldCatField]: increment(-oldData.amount),
-      [oldPersonField]: increment(-oldData.amount),
       updatedAt: serverTimestamp(),
     };
+
+    // Reverse old per-person
+    if (oldData.payers?.length) {
+      for (const p of oldData.payers) {
+        const pField = oldData.type === 'expense' ? `expenseByPerson.${p.uid}` : `incomeByPerson.${p.uid}`;
+        oldSummaryUpdates[pField] = increment(-p.amount);
+      }
+    } else {
+      const oldPersonKey = oldData.paidBy || oldData.createdBy;
+      const oldPersonField = oldData.type === 'expense'
+        ? `expenseByPerson.${oldPersonKey}`
+        : `incomeByPerson.${oldPersonKey}`;
+      oldSummaryUpdates[oldPersonField] = increment(-oldData.amount);
+    }
 
     // Reverse old distribution totals if amount/segment changed
     if (oldData.distributions?.length && (oldData.amount !== data.amount || oldData.segment !== data.segment)) {
@@ -147,21 +171,31 @@ export class TransactionService {
       ? `expenseByCategory.${data.category}`
       : `incomeBySource.${data.category}`;
 
-    const newPersonKey = data.paidBy || user.uid;
-    const newPersonField = data.type === 'expense'
-      ? `expenseByPerson.${newPersonKey}`
-      : `incomeByPerson.${newPersonKey}`;
-
-    batch.set(newSummaryRef, {
+    const newSummaryData: Record<string, any> = {
       [newIncField]: increment(data.amount),
       netProfit: increment(newProfitDelta),
       [newCatField]: increment(data.amount),
-      [newPersonField]: increment(data.amount),
       month: data.month,
       year: data.year,
       segment: data.segment,
       updatedAt: serverTimestamp(),
-    }, { merge: true });
+    };
+
+    // Apply new per-person
+    if (data.payers?.length) {
+      for (const p of data.payers) {
+        const pField = data.type === 'expense' ? `expenseByPerson.${p.uid}` : `incomeByPerson.${p.uid}`;
+        newSummaryData[pField] = increment(p.amount);
+      }
+    } else {
+      const newPersonKey = data.paidBy || user.uid;
+      const newPersonField = data.type === 'expense'
+        ? `expenseByPerson.${newPersonKey}`
+        : `incomeByPerson.${newPersonKey}`;
+      newSummaryData[newPersonField] = increment(data.amount);
+    }
+
+    batch.set(newSummaryRef, newSummaryData, { merge: true });
 
     // Update transaction + add timeline entry
     const txnUpdates: Record<string, any> = {
@@ -186,6 +220,13 @@ export class TransactionService {
         changes: changesStr,
       }),
     };
+
+    // Save payers if split payment
+    if (data.payers?.length) {
+      txnUpdates['payers'] = data.payers;
+    } else if (oldData.payers?.length) {
+      txnUpdates['payers'] = []; // clear old payers if switching to single
+    }
 
     // Clear distributions if amount changed (splits no longer valid)
     if (oldData.distributions?.length && oldData.amount !== data.amount) {
@@ -214,18 +255,26 @@ export class TransactionService {
       ? `expenseByCategory.${oldData.category}`
       : `incomeBySource.${oldData.category}`;
 
-    const delPersonKey = oldData.paidBy || oldData.createdBy;
-    const delPersonField = oldData.type === 'expense'
-      ? `expenseByPerson.${delPersonKey}`
-      : `incomeByPerson.${delPersonKey}`;
-
     const summaryUpdates: Record<string, any> = {
       [incField]: increment(-oldData.amount),
       netProfit: increment(profitDelta),
       [catField]: increment(-oldData.amount),
-      [delPersonField]: increment(-oldData.amount),
       updatedAt: serverTimestamp(),
     };
+
+    // Reverse per-person: split payers or single payer
+    if (oldData.payers?.length) {
+      for (const p of oldData.payers) {
+        const pField = oldData.type === 'expense' ? `expenseByPerson.${p.uid}` : `incomeByPerson.${p.uid}`;
+        summaryUpdates[pField] = increment(-p.amount);
+      }
+    } else {
+      const delPersonKey = oldData.paidBy || oldData.createdBy;
+      const delPersonField = oldData.type === 'expense'
+        ? `expenseByPerson.${delPersonKey}`
+        : `incomeByPerson.${delPersonKey}`;
+      summaryUpdates[delPersonField] = increment(-oldData.amount);
+    }
 
     // Reverse distribution totals if any
     if (oldData.distributions?.length) {
