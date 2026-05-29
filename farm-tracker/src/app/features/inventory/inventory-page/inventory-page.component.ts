@@ -14,6 +14,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDialog } from '@angular/material/dialog';
+import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-inventory-page',
@@ -76,6 +77,9 @@ import { MatDialog } from '@angular/material/dialog';
                 <th>Count</th>
                 <th>Note</th>
                 <th>By</th>
+                @if (!auth.isViewer()) {
+                  <th class="actions-th">Actions</th>
+                }
               </tr>
             </thead>
             <tbody>
@@ -89,10 +93,20 @@ import { MatDialog } from '@angular/material/dialog';
                   </td>
                   <td class="note-cell">{{ ev.note || '-' }}</td>
                   <td>{{ ev.createdByName }}</td>
+                  @if (!auth.isViewer()) {
+                    <td class="actions-cell">
+                      <button mat-icon-button (click)="editEvent(ev)" title="Edit">
+                        <mat-icon>edit</mat-icon>
+                      </button>
+                      <button mat-icon-button color="warn" (click)="confirmDeleteEvent(ev)" title="Delete">
+                        <mat-icon>delete</mat-icon>
+                      </button>
+                    </td>
+                  }
                 </tr>
               }
               @if (events().length === 0) {
-                <tr><td colspan="6" class="empty-cell">No inventory events recorded yet.</td></tr>
+                <tr><td [attr.colspan]="auth.isViewer() ? 6 : 7" class="empty-cell">No inventory events recorded yet.</td></tr>
               }
             </tbody>
           </table>
@@ -128,6 +142,10 @@ import { MatDialog } from '@angular/material/dialog';
     .count-cell.negative { color: #dc2626; }
     .note-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #94a3b8; }
     .empty-cell { text-align: center; color: #94a3b8; padding: 2rem !important; }
+    .actions-th { text-align: center; }
+    .actions-cell { white-space: nowrap; text-align: center; }
+    .actions-cell button { opacity: 0.5; }
+    tr:hover .actions-cell button { opacity: 1; }
   `],
 })
 export class InventoryPageComponent implements OnInit {
@@ -152,9 +170,45 @@ export class InventoryPageComponent implements OnInit {
   }
 
   openEventDialog(): void {
-    const ref = this.dialog.open(InventoryEventDialogComponent, { width: '500px' });
+    const ref = this.dialog.open(InventoryEventDialogComponent, {
+      width: '500px',
+      data: {},
+    });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
+        this.segmentService.clearCache();
+        this.segments.set(await this.segmentService.getAll());
+        await this.loadEvents();
+      }
+    });
+  }
+
+  editEvent(ev: InventoryEvent): void {
+    const ref = this.dialog.open(InventoryEventDialogComponent, {
+      width: '500px',
+      data: { event: ev },
+    });
+    ref.afterClosed().subscribe(async (result) => {
+      if (result) {
+        this.segmentService.clearCache();
+        this.segments.set(await this.segmentService.getAll());
+        await this.loadEvents();
+      }
+    });
+  }
+
+  confirmDeleteEvent(ev: InventoryEvent): void {
+    const ref = this.dialog.open(ConfirmDialogComponent, {
+      data: {
+        title: 'Delete Inventory Event',
+        message: `Delete this ${ev.eventType} event (${Math.abs(ev.count)} ${ev.segmentName})? Stock will be adjusted.`,
+        confirmText: 'Delete',
+      } as ConfirmDialogData,
+    });
+    ref.afterClosed().subscribe(async (confirmed) => {
+      if (confirmed) {
+        await this.inventoryService.deleteEvent(ev.id, ev.segment, ev.count);
+        this.segmentService.clearCache();
         this.segments.set(await this.segmentService.getAll());
         await this.loadEvents();
       }

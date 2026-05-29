@@ -10,8 +10,12 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { InventoryService } from '../../../core/services/inventory.service';
 import { SegmentService } from '../../../core/services/segment.service';
 import { Segment } from '../../../core/models/segment.model';
-import { InventoryEventType } from '../../../core/models/inventory.model';
+import { InventoryEvent, InventoryEventType } from '../../../core/models/inventory.model';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
+
+export interface InventoryEventDialogData {
+  event?: InventoryEvent; // if provided, edit mode
+}
 
 @Component({
   selector: 'app-inventory-event-dialog',
@@ -21,7 +25,7 @@ import { getMonthString, getYear } from '../../../core/utils/date.utils';
     MatInputModule, MatSelectModule, MatDatepickerModule, MatNativeDateModule,
   ],
   template: `
-    <h2 mat-dialog-title>Record Inventory Event</h2>
+    <h2 mat-dialog-title>{{ isEdit ? 'Edit' : 'Record' }} Inventory Event</h2>
     <mat-dialog-content>
       <div class="form-grid">
         <mat-form-field appearance="outline">
@@ -72,7 +76,7 @@ import { getMonthString, getYear } from '../../../core/utils/date.utils';
       <button mat-flat-button color="primary"
         [disabled]="saving() || !segment || !eventType || !count"
         (click)="save()">
-        {{ saving() ? 'Saving...' : 'Record Event' }}
+        {{ saving() ? 'Saving...' : (isEdit ? 'Update' : 'Record Event') }}
       </button>
     </mat-dialog-actions>
   `,
@@ -83,6 +87,7 @@ import { getMonthString, getYear } from '../../../core/utils/date.utils';
   `],
 })
 export class InventoryEventDialogComponent implements OnInit {
+  data = inject<InventoryEventDialogData>(MAT_DIALOG_DATA);
   dialogRef = inject(MatDialogRef<InventoryEventDialogComponent>);
   private inventoryService = inject(InventoryService);
   private segmentService = inject(SegmentService);
@@ -91,6 +96,7 @@ export class InventoryEventDialogComponent implements OnInit {
   saving = signal(false);
   error = signal('');
 
+  isEdit = false;
   segment = '';
   eventType: InventoryEventType = 'birth';
   count = 1;
@@ -99,6 +105,17 @@ export class InventoryEventDialogComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.segments.set(await this.segmentService.getAll());
+
+    // Pre-fill if editing
+    if (this.data?.event) {
+      this.isEdit = true;
+      const ev = this.data.event;
+      this.segment = ev.segment;
+      this.eventType = ev.eventType;
+      this.count = Math.abs(ev.count);
+      this.date = ev.date.toDate();
+      this.note = ev.note;
+    }
   }
 
   async save(): Promise<void> {
@@ -106,7 +123,7 @@ export class InventoryEventDialogComponent implements OnInit {
     this.error.set('');
     try {
       const seg = this.segments().find(s => s.id === this.segment);
-      await this.inventoryService.recordEvent({
+      const formData = {
         segment: this.segment,
         segmentName: seg?.name || this.segment,
         eventType: this.eventType,
@@ -115,10 +132,16 @@ export class InventoryEventDialogComponent implements OnInit {
         date: this.date,
         month: getMonthString(this.date),
         year: getYear(this.date),
-      });
+      };
+
+      if (this.isEdit && this.data.event) {
+        await this.inventoryService.updateEvent(this.data.event.id, this.data.event, formData);
+      } else {
+        await this.inventoryService.recordEvent(formData);
+      }
       this.dialogRef.close(true);
     } catch (err: any) {
-      this.error.set(err.message || 'Failed to record event');
+      this.error.set(err.message || 'Failed to save event');
     } finally {
       this.saving.set(false);
     }

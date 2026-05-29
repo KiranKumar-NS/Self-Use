@@ -57,8 +57,16 @@ import { DatePipe } from '@angular/common';
             <span>{{ loan()!.date.toDate() | date:'dd MMM yyyy' }}</span>
           </div>
           <div class="detail-item">
-            <label>Amount</label>
-            <span class="amount-large">{{ loan()!.amount | currencyInr }}</span>
+            <label>Total Given</label>
+            <span class="amount-total">{{ loan()!.amount | currencyInr }}</span>
+          </div>
+          <div class="detail-item">
+            <label>Balance Due</label>
+            <span class="amount-large">{{ loan()!.balanceRemaining | currencyInr }}</span>
+          </div>
+          <div class="detail-item">
+            <label>Repaid</label>
+            <span class="amount-repaid">{{ loan()!.totalRepaid | currencyInr }}</span>
           </div>
           <div class="detail-item">
             <label>Person</label>
@@ -175,7 +183,9 @@ import { DatePipe } from '@angular/common';
     .detail-item label { display: block; font-size: 0.75rem; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
     .detail-item span { font-size: 1rem; color: #1e293b; }
     .detail-item.full { grid-column: 1 / -1; }
-    .amount-large { font-size: 1.5rem !important; font-weight: 700; color: #4f46e5 !important; }
+    .amount-total { font-size: 1.1rem !important; font-weight: 600; color: #64748b !important; }
+    .amount-large { font-size: 1.5rem !important; font-weight: 700; color: #dc2626 !important; }
+    .amount-repaid { font-size: 1.1rem !important; font-weight: 600; color: #16a34a !important; }
     .type-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
     .type-badge.given { background: #fef3c7; color: #d97706; }
     .type-badge.received { background: #dbeafe; color: #2563eb; }
