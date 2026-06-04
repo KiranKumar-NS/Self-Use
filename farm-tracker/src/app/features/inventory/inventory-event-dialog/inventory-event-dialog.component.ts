@@ -50,7 +50,7 @@ export interface InventoryEventDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Count</mat-label>
-          <input matInput type="number" [(ngModel)]="count" min="1" step="1" required />
+          <input matInput type="number" [(ngModel)]="count" [min]="eventType === 'adjustment' ? null : 1" step="1" required />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -112,7 +112,7 @@ export class InventoryEventDialogComponent implements OnInit {
       const ev = this.data.event;
       this.segment = ev.segment;
       this.eventType = ev.eventType;
-      this.count = Math.abs(ev.count);
+      this.count = ev.eventType === 'adjustment' ? ev.count : Math.abs(ev.count);
       this.date = ev.date.toDate();
       this.note = ev.note;
     }

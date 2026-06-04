@@ -129,14 +129,20 @@ export class LoanFormComponent implements OnInit {
     if (this.editId) {
       this.isEdit.set(true);
       const loan = await this.loanService.getById(this.editId);
-      if (loan) {
-        this.type = loan.type;
-        this.date = loan.date.toDate();
-        this.amount = loan.amount;
-        this.personName = loan.personName;
-        this.segment = loan.segment;
-        this.purpose = loan.purpose;
+      if (!loan) {
+        this.router.navigate(['/loans']);
+        return;
       }
+      if (loan.repaymentStatus !== 'pending') {
+        this.router.navigate(['/loans', this.editId]);
+        return;
+      }
+      this.type = loan.type;
+      this.date = loan.date.toDate();
+      this.amount = loan.amount;
+      this.personName = loan.personName;
+      this.segment = loan.segment;
+      this.purpose = loan.purpose;
     }
   }
 

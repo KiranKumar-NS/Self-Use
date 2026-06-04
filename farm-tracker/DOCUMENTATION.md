@@ -40,7 +40,7 @@ A web application for managing a small farming business involving multiple users
 - Distributed / Undistributed income cards
 - **Budget vs Actual** widget — progress bars per segment (green/yellow/red)
 - **Current Stock** widget — animal counts per segment from inventory
-- Segment-wise breakdown chart (doughnut)
+- Income vs Expense by Segment (grouped bar chart) with person breakdown tooltip (hover shows who spent/earned)
 - Monthly trend chart (line, last 6 months from selected month)
 - Loan summary widget (given/received totals)
 
@@ -74,6 +74,8 @@ A web application for managing a small farming business involving multiple users
 
 ### 5. Tasks (Kanban Board)
 - Kanban board with 4 columns: Backlog, To Do, In Progress, Done
+- **Drag & drop** cards between columns to change status
+- **View filter:** "All Tasks" / "My Tasks" toggle (assigned to me or created by me)
 - Task priority levels: low, medium, high, urgent
 - Visibility: shared (visible to all) or personal (only creator)
 - Assignee support
@@ -82,8 +84,15 @@ A web application for managing a small farming business involving multiple users
 
 ### 6. Analytics
 - Deep dive into expense data with filters
-- Filter by segment, category, date range, person
-- Charts: category breakdown, segment comparison, person-wise spending
+- **Default filter:** Current month (not all-time)
+- Filter by segment, category, date range (from/to month), paid-by person
+- Clear all filters button
+- **Person Investment Summary** — per-person cards showing:
+  - Net investment (expenses paid − income received)
+  - Visual progress bar
+  - Breakdown: expenses paid (red), income received (green)
+- Charts: segment breakdown (doughnut), category breakdown (doughnut), person-wise spending (bar), monthly expense trend (bar)
+- Transaction detail table with totals
 - All authenticated users can access
 
 ### 7. Reports
@@ -247,6 +256,8 @@ A web application for managing a small farming business involving multiple users
 ├── date: Timestamp
 ├── amount: number (positive = repayment, negative = additional disbursement)
 ├── note: string
+├── paidBy?: string (userId)
+├── paidByName?: string
 ├── recordedBy: string
 ├── recordedByName: string
 └── createdAt: Timestamp
@@ -538,6 +549,12 @@ firebase deploy --only hosting
 - Notifications computed from existing data (loans, tasks, summaries, budgets)
 - Dismissed state stored in localStorage (zero Firestore writes)
 - Refreshed once on app init
+
+### Why custom paidBy uses sanitized name as summary key?
+- When a non-registered person pays (e.g., "Raju"), paidBy is stored as `"other"` with paidByName = `"Raju"`
+- In monthlySummaries, each external person gets their own key (e.g., `expenseByPerson.Raju`) instead of all pooling under `expenseByPerson.other`
+- Dashboard person breakdown can then distinguish between different external people
+- Names are sanitized (dots/special chars replaced with `_`) to avoid Firestore nested path issues
 
 ### Why `paymentMethod` field?
 - Tracks whether transaction was paid via cash or UPI

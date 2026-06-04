@@ -51,7 +51,7 @@ export class CategoryService {
 
   async seedDefaults(): Promise<void> {
     for (const cat of DEFAULT_CATEGORIES) {
-      await setDoc(doc(this.firestore, 'categories', cat.id), cat);
+      await setDoc(doc(this.firestore, 'categories', cat.id), cat, { merge: true });
     }
     this.clearCache();
   }

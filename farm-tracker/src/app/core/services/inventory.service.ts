@@ -30,9 +30,12 @@ export class InventoryService {
     const eventRef = doc(collection(this.firestore, 'inventoryEvents'));
 
     // Determine count sign based on event type
-    const countDelta = ['birth', 'purchase', 'adjustment'].includes(data.eventType)
-      ? Math.abs(data.count)
-      : -Math.abs(data.count);
+    // Adjustment keeps user-provided sign (can be positive or negative for count corrections)
+    const countDelta = data.eventType === 'adjustment'
+      ? data.count
+      : ['birth', 'purchase'].includes(data.eventType)
+        ? Math.abs(data.count)
+        : -Math.abs(data.count);
 
     batch.set(eventRef, {
       id: eventRef.id,
@@ -85,9 +88,11 @@ export class InventoryService {
     const batch = writeBatch(this.firestore);
     const user = this.authService.userProfile()!;
 
-    const newCountDelta = ['birth', 'purchase', 'adjustment'].includes(data.eventType)
-      ? Math.abs(data.count)
-      : -Math.abs(data.count);
+    const newCountDelta = data.eventType === 'adjustment'
+      ? data.count
+      : ['birth', 'purchase'].includes(data.eventType)
+        ? Math.abs(data.count)
+        : -Math.abs(data.count);
 
     // Update the event document
     batch.update(doc(this.firestore, 'inventoryEvents', eventId), {

@@ -64,6 +64,18 @@ export class LoanService {
     const user = this.authService.userProfile()!;
     const loanRef = doc(this.firestore, 'loans', id);
 
+    const oldDoc = await getDoc(loanRef);
+    const oldData = oldDoc.data() as Loan;
+
+    // Recalculate balance when amount changes
+    const newBalance = data.amount - oldData.totalRepaid;
+    const newStatus = newBalance <= 0 ? 'completed' : oldData.totalRepaid > 0 ? 'partial' : 'pending';
+
+    const changesList: string[] = [];
+    if (oldData.amount !== data.amount) changesList.push(`amount: ₹${oldData.amount.toLocaleString('en-IN')}→₹${data.amount.toLocaleString('en-IN')}`);
+    if (oldData.personName !== data.personName) changesList.push(`person: ${oldData.personName}→${data.personName}`);
+    if (oldData.segment !== data.segment) changesList.push(`segment: ${oldData.segmentName}→${data.segmentName}`);
+
     const batch = writeBatch(this.firestore);
     batch.update(loanRef, {
       date: Timestamp.fromDate(data.date),
@@ -73,6 +85,8 @@ export class LoanService {
       purpose: data.purpose,
       segment: data.segment,
       segmentName: data.segmentName,
+      balanceRemaining: Math.max(0, newBalance),
+      repaymentStatus: newStatus,
       month: data.month,
       year: data.year,
       timeline: arrayUnion({
@@ -80,7 +94,7 @@ export class LoanService {
         by: user.uid,
         byName: user.displayName,
         at: Timestamp.now(),
-        changes: 'details updated',
+        changes: changesList.length > 0 ? changesList.join(', ') : 'details updated',
       }),
     });
 
@@ -94,6 +108,10 @@ export class LoanService {
       const loanRef = doc(this.firestore, 'loans', loanId);
       const loanSnap = await transaction.get(loanRef);
       const loan = loanSnap.data() as Loan;
+
+      if (amount > loan.balanceRemaining) {
+        throw new Error(`Repayment ₹${amount.toLocaleString('en-IN')} exceeds balance ₹${loan.balanceRemaining.toLocaleString('en-IN')}`);
+      }
 
       const newTotalRepaid = loan.totalRepaid + amount;
       const newBalance = loan.amount - newTotalRepaid;
@@ -225,7 +243,9 @@ export class LoanService {
 
   async getById(id: string): Promise<Loan | null> {
     const docSnap = await getDoc(doc(this.firestore, 'loans', id));
-    return docSnap.exists() ? (docSnap.data() as Loan) : null;
+    if (!docSnap.exists()) return null;
+    const data = docSnap.data() as Loan;
+    return data.isDeleted ? null : data;
   }
 
   async getRepayments(loanId: string): Promise<Repayment[]> {

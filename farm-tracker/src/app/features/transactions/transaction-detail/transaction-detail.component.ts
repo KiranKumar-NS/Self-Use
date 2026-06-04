@@ -58,17 +58,9 @@ import { DatePipe } from '@angular/common';
             <label>Payment Method</label>
             <span class="payment-badge" [class]="transaction()!.paymentMethod || 'cash'">{{ (transaction()!.paymentMethod || 'cash').toUpperCase() }}</span>
           </div>
-          <div class="detail-item" [class.full]="transaction()!.payers?.length">
+          <div class="detail-item">
             <label>{{ transaction()!.type === 'expense' ? 'Paid By' : 'Received By' }}</label>
-            @if (transaction()!.payers?.length) {
-              <div class="payers-list">
-                @for (p of transaction()!.payers; track p.uid) {
-                  <span class="payer-chip">{{ p.name }}: {{ p.amount | currencyInr }}</span>
-                }
-              </div>
-            } @else {
-              <span>{{ transaction()!.paidByName || transaction()!.createdByName }}</span>
-            }
+            <span>{{ transaction()!.paidByName || transaction()!.createdByName }}</span>
           </div>
           <div class="detail-item full">
             <label>Description</label>
@@ -185,8 +177,6 @@ import { DatePipe } from '@angular/common';
     .dist-name.reinvestment .dist-icon { color: #7c3aed; }
     .dist-amount { font-weight: 600; min-width: 100px; text-align: right; }
     .dist-pct { color: #64748b; font-size: 0.8rem; min-width: 50px; text-align: right; }
-    .payers-list { display: flex; flex-wrap: wrap; gap: 6px; }
-    .payer-chip { background: #eff6ff; color: #2563eb; padding: 4px 10px; border-radius: 6px; font-size: 0.85rem; font-weight: 500; }
     .dist-empty { display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 0.9rem; padding: 8px 0; }
     .audit-entry { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.875rem; }
     .audit-time { color: #94a3b8; margin-left: 8px; }

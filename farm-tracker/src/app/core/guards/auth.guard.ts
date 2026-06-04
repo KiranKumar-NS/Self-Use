@@ -11,9 +11,12 @@ export const authGuard: CanActivateFn = () => {
       const interval = setInterval(() => {
         if (!auth.isLoading()) {
           clearInterval(interval);
-          if (auth.currentUser()) {
+          if (auth.currentUser() && auth.userProfile()?.isActive !== false) {
             resolve(true);
           } else {
+            if (auth.currentUser() && auth.userProfile()?.isActive === false) {
+              auth.logout();
+            }
             router.navigate(['/auth/login']);
             resolve(false);
           }
@@ -22,6 +25,12 @@ export const authGuard: CanActivateFn = () => {
     });
   }
 
-  if (auth.currentUser()) return true;
+  if (auth.currentUser()) {
+    if (auth.userProfile()?.isActive === false) {
+      auth.logout();
+      return router.createUrlTree(['/auth/login']);
+    }
+    return true;
+  }
   return router.createUrlTree(['/auth/login']);
 };

@@ -377,18 +377,11 @@ export class AnalyticsComponent implements OnInit {
       if (!personMap[name]) personMap[name] = { expensesPaid: 0, incomeReceived: 0 };
     };
 
-    // 1. Expenses paid per person (includes loan repayments as expense category)
+    // 1. Expenses paid per person
     for (const txn of expenseTxns) {
-      if (txn.payers?.length) {
-        for (const p of txn.payers) {
-          ensurePerson(p.name);
-          personMap[p.name].expensesPaid += p.amount;
-        }
-      } else {
-        const name = txn.paidByName || txn.createdByName || 'Unknown';
-        ensurePerson(name);
-        personMap[name].expensesPaid += txn.amount;
-      }
+      const name = txn.paidByName || txn.createdByName || 'Unknown';
+      ensurePerson(name);
+      personMap[name].expensesPaid += txn.amount;
     }
 
     // 2. Income distributions received per person

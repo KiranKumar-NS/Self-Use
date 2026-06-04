@@ -39,7 +39,7 @@ export class SegmentService {
       await setDoc(doc(this.firestore, 'segments', seg.id), {
         ...seg,
         createdAt: serverTimestamp(),
-      });
+      }, { merge: true }); // merge: preserves existing budgets & custom fields
     }
     this.clearCache();
   }

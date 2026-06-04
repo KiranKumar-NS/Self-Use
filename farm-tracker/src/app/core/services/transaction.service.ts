@@ -25,6 +25,14 @@ export class TransactionService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
 
+  /** Build a unique summary key per person. Custom "other" names get sanitized as the key. */
+  private personSummaryKey(paidBy: string | null | undefined, paidByName: string | null | undefined, fallbackUid: string): string {
+    if (paidBy === 'other' && paidByName) {
+      return paidByName.replace(/[.$/\[\]#]/g, '_');
+    }
+    return paidBy || fallbackUid;
+  }
+
   async create(data: TransactionFormData): Promise<string> {
     const batch = writeBatch(this.firestore);
     const user = this.authService.userProfile()!;
@@ -62,10 +70,6 @@ export class TransactionService {
       year: data.year,
     };
 
-    if (data.payers?.length) {
-      txnDoc['payers'] = data.payers;
-    }
-
     batch.set(txnRef, txnDoc);
 
     // Update monthly summary
@@ -85,19 +89,12 @@ export class TransactionService {
       updatedAt: serverTimestamp(),
     };
 
-    // Track per-person: split payers or single payer
-    if (data.payers?.length) {
-      for (const p of data.payers) {
-        const pField = data.type === 'expense' ? `expenseByPerson.${p.uid}` : `incomeByPerson.${p.uid}`;
-        summaryData[pField] = increment(p.amount);
-      }
-    } else {
-      const personKey = data.paidBy || user.uid;
-      const personField = data.type === 'expense'
-        ? `expenseByPerson.${personKey}`
-        : `incomeByPerson.${personKey}`;
-      summaryData[personField] = increment(data.amount);
-    }
+    // Track per-person
+    const personKey = this.personSummaryKey(data.paidBy, data.paidByName, user.uid);
+    const personField = data.type === 'expense'
+      ? `expenseByPerson.${personKey}`
+      : `incomeByPerson.${personKey}`;
+    summaryData[personField] = increment(data.amount);
 
     batch.set(summaryRef, summaryData, { merge: true });
 
@@ -138,64 +135,92 @@ export class TransactionService {
     };
 
     // Reverse old per-person
-    if (oldData.payers?.length) {
-      for (const p of oldData.payers) {
-        const pField = oldData.type === 'expense' ? `expenseByPerson.${p.uid}` : `incomeByPerson.${p.uid}`;
-        oldSummaryUpdates[pField] = increment(-p.amount);
-      }
-    } else {
-      const oldPersonKey = oldData.paidBy || oldData.createdBy;
-      const oldPersonField = oldData.type === 'expense'
-        ? `expenseByPerson.${oldPersonKey}`
-        : `incomeByPerson.${oldPersonKey}`;
-      oldSummaryUpdates[oldPersonField] = increment(-oldData.amount);
-    }
+    const oldPersonKey = this.personSummaryKey(oldData.paidBy, oldData.paidByName, oldData.createdBy);
+    const oldPersonField = oldData.type === 'expense'
+      ? `expenseByPerson.${oldPersonKey}`
+      : `incomeByPerson.${oldPersonKey}`;
+    oldSummaryUpdates[oldPersonField] = increment(-oldData.amount);
 
-    // Reverse old distribution totals if amount/segment changed
-    if (oldData.distributions?.length && (oldData.amount !== data.amount || oldData.segment !== data.segment)) {
-      const oldTotalDist = oldData.distributions.reduce((s, d) => s + d.amount, 0);
+    // Reverse old distribution totals if amount/segment/type changed
+    const shouldClearDistributions = oldData.distributions?.length &&
+      (oldData.amount !== data.amount || oldData.segment !== data.segment || oldData.type !== data.type);
+    if (shouldClearDistributions) {
+      const oldTotalDist = oldData.distributions!.reduce((s, d) => s + d.amount, 0);
       oldSummaryUpdates['totalDistributed'] = increment(-oldTotalDist);
-      for (const d of oldData.distributions) {
+      for (const d of oldData.distributions!) {
         oldSummaryUpdates[`distributionByPerson.${d.uid}`] = increment(-d.amount);
       }
     }
 
-    batch.set(oldSummaryRef, oldSummaryUpdates, { merge: true });
-
     // Apply new summary
     const newSummaryId = `${data.month}-${data.segment}`;
-    const newSummaryRef = doc(this.firestore, 'monthlySummaries', newSummaryId);
     const newIncField = data.type === 'expense' ? 'totalExpense' : 'totalIncome';
     const newProfitDelta = data.type === 'income' ? data.amount : -data.amount;
     const newCatField = data.type === 'expense'
       ? `expenseByCategory.${data.category}`
       : `incomeBySource.${data.category}`;
+    const newPersonKey = this.personSummaryKey(data.paidBy, data.paidByName, user.uid);
+    const newPersonField = data.type === 'expense'
+      ? `expenseByPerson.${newPersonKey}`
+      : `incomeByPerson.${newPersonKey}`;
 
-    const newSummaryData: Record<string, any> = {
-      [newIncField]: increment(data.amount),
-      netProfit: increment(newProfitDelta),
-      [newCatField]: increment(data.amount),
-      month: data.month,
-      year: data.year,
-      segment: data.segment,
-      updatedAt: serverTimestamp(),
-    };
+    if (oldSummaryId === newSummaryId) {
+      // Same summary doc — combine old reversal + new application into single batch.set()
+      // Two batch.set() on the same doc would cause the second to overwrite the first
+      const combinedSummary: Record<string, any> = { updatedAt: serverTimestamp(), month: data.month, year: data.year, segment: data.segment };
 
-    // Apply new per-person
-    if (data.payers?.length) {
-      for (const p of data.payers) {
-        const pField = data.type === 'expense' ? `expenseByPerson.${p.uid}` : `incomeByPerson.${p.uid}`;
-        newSummaryData[pField] = increment(p.amount);
+      // Total fields: reverse old + apply new
+      if (oldIncField === newIncField) {
+        combinedSummary[oldIncField] = increment(data.amount - oldData.amount);
+      } else {
+        combinedSummary[oldIncField] = increment(-oldData.amount);
+        combinedSummary[newIncField] = increment(data.amount);
       }
-    } else {
-      const newPersonKey = data.paidBy || user.uid;
-      const newPersonField = data.type === 'expense'
-        ? `expenseByPerson.${newPersonKey}`
-        : `incomeByPerson.${newPersonKey}`;
-      newSummaryData[newPersonField] = increment(data.amount);
-    }
+      combinedSummary['netProfit'] = increment(oldProfitDelta + newProfitDelta);
 
-    batch.set(newSummaryRef, newSummaryData, { merge: true });
+      // Category fields: reverse old + apply new
+      if (oldCatField === newCatField) {
+        combinedSummary[oldCatField] = increment(data.amount - oldData.amount);
+      } else {
+        combinedSummary[oldCatField] = increment(-oldData.amount);
+        combinedSummary[newCatField] = increment(data.amount);
+      }
+
+      // Person fields: reverse old + apply new
+      if (oldPersonField === newPersonField) {
+        combinedSummary[oldPersonField] = increment(data.amount - oldData.amount);
+      } else {
+        combinedSummary[oldPersonField] = increment(-oldData.amount);
+        combinedSummary[newPersonField] = increment(data.amount);
+      }
+
+      // Distribution reversal (if applicable)
+      if (shouldClearDistributions) {
+        const oldTotalDist = oldData.distributions!.reduce((s, d) => s + d.amount, 0);
+        combinedSummary['totalDistributed'] = increment(-oldTotalDist);
+        for (const d of oldData.distributions!) {
+          combinedSummary[`distributionByPerson.${d.uid}`] = increment(-d.amount);
+        }
+      }
+
+      batch.set(oldSummaryRef, combinedSummary, { merge: true });
+    } else {
+      // Different summary docs — safe to do two separate sets
+      batch.set(oldSummaryRef, oldSummaryUpdates, { merge: true });
+
+      const newSummaryRef = doc(this.firestore, 'monthlySummaries', newSummaryId);
+      const newSummaryData: Record<string, any> = {
+        [newIncField]: increment(data.amount),
+        netProfit: increment(newProfitDelta),
+        [newCatField]: increment(data.amount),
+        [newPersonField]: increment(data.amount),
+        month: data.month,
+        year: data.year,
+        segment: data.segment,
+        updatedAt: serverTimestamp(),
+      };
+      batch.set(newSummaryRef, newSummaryData, { merge: true });
+    }
 
     // Update transaction + add timeline entry
     const txnUpdates: Record<string, any> = {
@@ -221,15 +246,8 @@ export class TransactionService {
       }),
     };
 
-    // Save payers if split payment
-    if (data.payers?.length) {
-      txnUpdates['payers'] = data.payers;
-    } else if (oldData.payers?.length) {
-      txnUpdates['payers'] = []; // clear old payers if switching to single
-    }
-
-    // Clear distributions if amount changed (splits no longer valid)
-    if (oldData.distributions?.length && oldData.amount !== data.amount) {
+    // Clear distributions if amount, segment, or type changed (no longer valid)
+    if (shouldClearDistributions) {
       txnUpdates['distributions'] = [];
     }
 
@@ -262,19 +280,12 @@ export class TransactionService {
       updatedAt: serverTimestamp(),
     };
 
-    // Reverse per-person: split payers or single payer
-    if (oldData.payers?.length) {
-      for (const p of oldData.payers) {
-        const pField = oldData.type === 'expense' ? `expenseByPerson.${p.uid}` : `incomeByPerson.${p.uid}`;
-        summaryUpdates[pField] = increment(-p.amount);
-      }
-    } else {
-      const delPersonKey = oldData.paidBy || oldData.createdBy;
-      const delPersonField = oldData.type === 'expense'
-        ? `expenseByPerson.${delPersonKey}`
-        : `incomeByPerson.${delPersonKey}`;
-      summaryUpdates[delPersonField] = increment(-oldData.amount);
-    }
+    // Reverse per-person
+    const delPersonKey = this.personSummaryKey(oldData.paidBy, oldData.paidByName, oldData.createdBy);
+    const delPersonField = oldData.type === 'expense'
+      ? `expenseByPerson.${delPersonKey}`
+      : `incomeByPerson.${delPersonKey}`;
+    summaryUpdates[delPersonField] = increment(-oldData.amount);
 
     // Reverse distribution totals if any
     if (oldData.distributions?.length) {
@@ -308,6 +319,7 @@ export class TransactionService {
     const oldDoc = await getDoc(txnRef);
     const oldData = oldDoc.data() as Transaction;
 
+    if (oldData.isDeleted) throw new Error('Cannot distribute a deleted transaction');
     if (oldData.type !== 'income') throw new Error('Can only distribute income');
 
     const totalDist = distributions.reduce((s, d) => s + d.amount, 0);
@@ -403,7 +415,9 @@ export class TransactionService {
 
   async getById(id: string): Promise<Transaction | null> {
     const docSnap = await getDoc(doc(this.firestore, 'transactions', id));
-    return docSnap.exists() ? (docSnap.data() as Transaction) : null;
+    if (!docSnap.exists()) return null;
+    const data = docSnap.data() as Transaction;
+    return data.isDeleted ? null : data;
   }
 
   async getRecent(count = 10): Promise<Transaction[]> {
