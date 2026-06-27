@@ -44,6 +44,7 @@ import { MatIconModule } from '@angular/material/icon';
         [totalExpense]="totals().totalExpense"
         [netProfit]="totals().netProfit"
         [totalDistributed]="totalDistributed()"
+        [pendingIncome]="totals().pendingIncome"
       />
 
       <div class="charts-grid">
@@ -87,7 +88,7 @@ export class DashboardPageComponent implements OnInit {
   monthLabel = signal('');
   loading = signal(true);
   currentMonthSummaries = signal<MonthlySummary[]>([]);
-  totals = signal({ totalIncome: 0, totalExpense: 0, netProfit: 0 });
+  totals = signal({ totalIncome: 0, totalExpense: 0, netProfit: 0, pendingIncome: 0 });
   personBreakdown = signal<Record<string, Record<string, { income: number; expense: number }>>>({});
   loanSummary = signal({ totalGiven: 0, totalReceived: 0, pendingGiven: 0, pendingReceived: 0 });
   totalDistributed = signal(0);

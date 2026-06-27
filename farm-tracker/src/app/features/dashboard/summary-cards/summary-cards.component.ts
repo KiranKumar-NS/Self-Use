@@ -41,6 +41,16 @@ import { MatIconModule } from '@angular/material/icon';
         </div>
       </mat-card>
 
+      @if (pendingIncome > 0) {
+        <mat-card class="summary-card pending">
+          <mat-icon>schedule</mat-icon>
+          <div class="card-content">
+            <span class="label">Pending Income</span>
+            <span class="value">{{ pendingIncome | currencyInr }}</span>
+          </div>
+        </mat-card>
+      }
+
       <mat-card class="summary-card reinvestment">
         <mat-icon>savings</mat-icon>
         <div class="card-content">
@@ -79,6 +89,9 @@ import { MatIconModule } from '@angular/material/icon';
     .reinvestment { border-color: #0891b2; }
     .reinvestment .value { color: #0891b2; }
     .reinvestment mat-icon { color: #0891b2; }
+    .pending { border-color: #ea580c; }
+    .pending .value { color: #ea580c; }
+    .pending mat-icon { color: #ea580c; }
   `],
 })
 export class SummaryCardsComponent {
@@ -86,4 +99,5 @@ export class SummaryCardsComponent {
   @Input() totalExpense = 0;
   @Input() netProfit = 0;
   @Input() totalDistributed = 0;
+  @Input() pendingIncome = 0;
 }

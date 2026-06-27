@@ -43,14 +43,16 @@ export class SummaryService {
     totalIncome: number;
     totalExpense: number;
     netProfit: number;
+    pendingIncome: number;
   } {
     return summaries.reduce(
       (acc, s) => ({
         totalIncome: acc.totalIncome + (s.totalIncome || 0),
         totalExpense: acc.totalExpense + (s.totalExpense || 0),
         netProfit: acc.netProfit + (s.netProfit || 0),
+        pendingIncome: acc.pendingIncome + (s.pendingIncome || 0),
       }),
-      { totalIncome: 0, totalExpense: 0, netProfit: 0 }
+      { totalIncome: 0, totalExpense: 0, netProfit: 0, pendingIncome: 0 }
     );
   }
 }

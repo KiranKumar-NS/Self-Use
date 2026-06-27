@@ -2,9 +2,10 @@ import { Timestamp } from '@angular/fire/firestore';
 
 export type TransactionType = 'expense' | 'income';
 export type PaymentMethod = 'cash' | 'upi';
+export type IncomePaymentStatus = 'received' | 'pending';
 
 export interface TimelineEntry {
-  action: 'created' | 'updated' | 'deleted' | 'distributed';
+  action: 'created' | 'updated' | 'deleted' | 'distributed' | 'payment_received';
   by: string;
   byName: string;
   at: Timestamp;
@@ -39,6 +40,9 @@ export interface Transaction {
   // Income distribution (only for type === 'income')
   distributions?: DistributionEntry[];
 
+  // Payment status (only for type === 'income')
+  paymentStatus?: IncomePaymentStatus;
+
   // For queries
   month: string;
   year: number;
@@ -62,6 +66,7 @@ export interface TransactionFormData {
   paymentMethod: PaymentMethod;
   paidBy?: string;
   paidByName?: string;
+  paymentStatus?: IncomePaymentStatus;
   month: string;
   year: number;
 }

@@ -45,7 +45,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
       <div class="filter-header">
         <mat-icon>filter_list</mat-icon>
         <span>Filters</span>
-        @if (filterType || filterSegment || filterMonth || searchTerm) {
+        @if (filterType || filterSegment || filterMonth || filterPaymentStatus || searchTerm) {
           <button mat-button class="clear-btn" (click)="clearFilters()">Clear All</button>
         }
       </div>
@@ -78,6 +78,15 @@ import { getMonthString } from '../../../core/utils/date.utils';
             }
           </mat-select>
         </mat-form-field>
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Payment</mat-label>
+          <mat-select [(ngModel)]="filterPaymentStatus">
+            <mat-option value="">All</mat-option>
+            <mat-option value="received">Received</mat-option>
+            <mat-option value="pending">Pending</mat-option>
+          </mat-select>
+        </mat-form-field>
+
         <mat-form-field appearance="outline" class="filter-field search-field">
           <mat-label>Search</mat-label>
           <input matInput [(ngModel)]="searchTerm" placeholder="Description, person, amount..." />
@@ -130,6 +139,9 @@ import { getMonthString } from '../../../core/utils/date.utils';
                     </span>
                     @if (txn.type === 'income') {
                       <span class="dist-chip" [class]="getDistStatus(txn)">{{ getDistLabel(txn) }}</span>
+                      @if (txn.paymentStatus === 'pending') {
+                        <span class="pay-status-chip pending">Pending</span>
+                      }
                     }
                   </td>
                   <td>{{ txn.segmentName }}</td>
@@ -249,6 +261,13 @@ import { getMonthString } from '../../../core/utils/date.utils';
     .dist-chip.partial { background: #fef3c7; color: #d97706; }
     .dist-chip.none { background: #f1f5f9; color: #94a3b8; }
 
+    .pay-status-chip {
+      display: inline-block; margin-left: 6px; padding: 2px 6px;
+      border-radius: 4px; font-size: 0.6rem; font-weight: 700;
+      text-transform: uppercase; vertical-align: middle;
+    }
+    .pay-status-chip.pending { background: #fef2f2; color: #dc2626; }
+
     .load-more { text-align: center; padding: 1.5rem; }
     .load-more button { padding: 8px 24px; }
   `],
@@ -269,6 +288,7 @@ export class TransactionListComponent implements OnInit {
   filterType = '';
   filterSegment = '';
   filterMonth = '';
+  filterPaymentStatus = '';
   searchTerm = '';
 
   // Generate last 12 months for month filter
@@ -307,9 +327,18 @@ export class TransactionListComponent implements OnInit {
   }
 
   displayedTransactions(): Transaction[] {
+    let filtered = this.transactions();
+
+    if (this.filterPaymentStatus) {
+      filtered = filtered.filter(txn => {
+        if (this.filterPaymentStatus === 'pending') return txn.paymentStatus === 'pending';
+        return txn.type === 'expense' || txn.paymentStatus !== 'pending';
+      });
+    }
+
     const term = this.searchTerm.toLowerCase().trim();
-    if (!term) return this.transactions();
-    return this.transactions().filter(txn =>
+    if (!term) return filtered;
+    return filtered.filter(txn =>
       txn.description?.toLowerCase().includes(term) ||
       txn.paidByName?.toLowerCase().includes(term) ||
       txn.createdByName?.toLowerCase().includes(term) ||
@@ -323,6 +352,7 @@ export class TransactionListComponent implements OnInit {
     this.filterType = '';
     this.filterSegment = '';
     this.filterMonth = '';
+    this.filterPaymentStatus = '';
     this.searchTerm = '';
     this.loadData();
   }

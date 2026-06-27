@@ -3,6 +3,9 @@ import { FormsModule } from '@angular/forms';
 import { DatePipe, UpperCasePipe } from '@angular/common';
 import { Transaction } from '../../core/models/transaction.model';
 import { TransactionService } from '../../core/services/transaction.service';
+import { ExportService } from '../../core/services/export.service';
+import { SummaryService } from '../../core/services/summary.service';
+import { getMonthRange } from '../../core/utils/date.utils';
 import { CurrencyInrPipe } from '../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
 import { BaseChartDirective } from 'ng2-charts';
@@ -28,6 +31,14 @@ import { getMonthString } from '../../core/utils/date.utils';
       <div>
         <h1>Analytics</h1>
         <p class="subtitle">Deep dive into expenses — who spent what, where, and when</p>
+      </div>
+      <div class="export-buttons">
+        <button mat-stroked-button (click)="exportPdf()">
+          <mat-icon>picture_as_pdf</mat-icon> Export PDF
+        </button>
+        <button mat-stroked-button (click)="exportCsv()">
+          <mat-icon>download</mat-icon> Export CSV
+        </button>
       </div>
     </div>
 
@@ -221,9 +232,10 @@ import { getMonthString } from '../../core/utils/date.utils';
     }
   `,
   styles: [`
-    .page-header { margin-bottom: 1.5rem; }
+    .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
     .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; font-weight: 700; }
     .subtitle { margin: 4px 0 0; color: #64748b; font-size: 0.85rem; }
+    .export-buttons { display: flex; gap: 0.5rem; }
 
     .filter-card { margin-bottom: 1.25rem; padding: 1rem 1.25rem; }
     .filter-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 600; color: #475569; }
@@ -281,6 +293,8 @@ import { getMonthString } from '../../core/utils/date.utils';
 })
 export class AnalyticsComponent implements OnInit {
   private transactionService = inject(TransactionService);
+  private exportService = inject(ExportService);
+  private summaryService = inject(SummaryService);
 
   loading = signal(true);
   allTransactions = signal<Transaction[]>([]);
@@ -474,6 +488,28 @@ export class AnalyticsComponent implements OnInit {
     );
 
     this.buildCharts(txns);
+  }
+
+  private get rangeLabel(): string {
+    const from = this.filterFromMonth || 'all';
+    const to = this.filterToMonth || 'all';
+    return from === to ? from : `${from}_to_${to}`;
+  }
+
+  async exportPdf(): Promise<void> {
+    const months = (this.filterFromMonth && this.filterToMonth)
+      ? getMonthRange(this.filterFromMonth, this.filterToMonth)
+      : [];
+    const summaryChunks = [];
+    for (let i = 0; i < months.length; i += 30) {
+      summaryChunks.push(this.summaryService.getForMonths(months.slice(i, i + 30)));
+    }
+    const summaries = (await Promise.all(summaryChunks)).flat();
+    this.exportService.exportTransactionsPdf(this.filtered(), summaries, this.rangeLabel);
+  }
+
+  exportCsv(): void {
+    this.exportService.exportTransactionsCsv(this.filtered(), `transactions-${this.rangeLabel}`);
   }
 
   private buildCharts(txns: Transaction[]): void {

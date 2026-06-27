@@ -41,3 +41,16 @@ export function shiftMonth(monthStr: string, delta: number): string {
   const d = new Date(year, month - 1 + delta, 1);
   return getMonthString(d);
 }
+
+export function getMonthRange(start: string, end: string): string[] {
+  const [sy, sm] = start.split('-').map(Number);
+  const [ey, em] = end.split('-').map(Number);
+  const months: string[] = [];
+  let y = sy, m = sm;
+  while (y < ey || (y === ey && m <= em)) {
+    months.push(`${y}-${m.toString().padStart(2, '0')}`);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return months;
+}

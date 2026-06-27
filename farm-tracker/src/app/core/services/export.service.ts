@@ -16,18 +16,26 @@ function pdfCurrency(amount: number): string {
 
 @Injectable({ providedIn: 'root' })
 export class ExportService {
+  private formatPeriodLabel(period: string): string {
+    if (period.includes('_to_')) {
+      const [start, end] = period.split('_to_');
+      return `${getMonthName(start)} – ${getMonthName(end)}`;
+    }
+    return getMonthName(period);
+  }
+
   exportTransactionsPdf(
     transactions: Transaction[],
     summaries: MonthlySummary[],
-    month: string
+    period: string
   ): void {
     const pdf = new jsPDF();
-    const monthName = getMonthName(month);
+    const periodLabel = this.formatPeriodLabel(period);
 
     pdf.setFontSize(18);
     pdf.text('Farm Financial Report', 14, 22);
     pdf.setFontSize(12);
-    pdf.text(`Month: ${monthName}`, 14, 32);
+    pdf.text(`Period: ${periodLabel}`, 14, 32);
     pdf.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, 14, 40);
 
     // Summary table — compute from actual transactions for accuracy
@@ -60,6 +68,35 @@ export class ExportService {
       });
     }
 
+    // Category breakdown
+    const catMap: Record<string, number> = {};
+    for (const t of transactions) {
+      catMap[t.categoryName] = (catMap[t.categoryName] || 0) + t.amount;
+    }
+    const catEntries = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
+    if (catEntries.length > 0) {
+      autoTable(pdf, {
+        head: [['Category', 'Total Amount']],
+        body: catEntries.map(([name, amt]) => [name, pdfCurrency(amt)]),
+        theme: 'striped',
+      });
+    }
+
+    // Paid By breakdown
+    const personMap: Record<string, number> = {};
+    for (const t of transactions) {
+      const name = t.paidByName || t.createdByName || 'Unknown';
+      personMap[name] = (personMap[name] || 0) + t.amount;
+    }
+    const personEntries = Object.entries(personMap).sort((a, b) => b[1] - a[1]);
+    if (personEntries.length > 0) {
+      autoTable(pdf, {
+        head: [['Paid By', 'Total Amount']],
+        body: personEntries.map(([name, amt]) => [name, pdfCurrency(amt)]),
+        theme: 'striped',
+      });
+    }
+
     // Transactions detail
     if (transactions.length > 0) {
       pdf.addPage();
@@ -68,7 +105,7 @@ export class ExportService {
 
       autoTable(pdf, {
         startY: 30,
-        head: [['Date', 'Type', 'Segment', 'Category', 'Amount', 'By', 'Description']],
+        head: [['Date', 'Type', 'Segment', 'Category', 'Amount', 'Paid By', 'Description']],
         body: [
           ...transactions.map((t) => [
             t.date.toDate().toLocaleDateString('en-IN'),
@@ -76,7 +113,7 @@ export class ExportService {
             t.segmentName,
             t.categoryName,
             pdfCurrency(t.amount),
-            t.createdByName,
+            t.paidByName || t.createdByName,
             t.description,
           ]),
           ['', '', '', 'Total Income', pdfCurrency(totalIncome), '', ''],
@@ -143,7 +180,7 @@ export class ExportService {
       });
     }
 
-    pdf.save(`farm-report-${month}.pdf`);
+    pdf.save(`farm-report-${period}.pdf`);
   }
 
   exportLoansPdf(loans: Loan[], month: string): void {
@@ -174,14 +211,14 @@ export class ExportService {
   }
 
   exportTransactionsCsv(transactions: Transaction[], filename: string): void {
-    const headers = 'Date,Type,Segment,Category,Amount,Description,Created By,Distribution\n';
+    const headers = 'Date,Type,Segment,Category,Amount,Paid By,Description,Distribution\n';
     const rows = transactions
       .map(
         (t) => {
           const distStr = t.distributions?.length
             ? `"${t.distributions.map(d => `${d.name}: ${d.amount}`).join('; ')}"`
             : '';
-          return `${t.date.toDate().toLocaleDateString('en-IN')},${t.type},${t.segmentName},${t.categoryName},${t.amount},"${t.description}",${t.createdByName},${distStr}`;
+          return `${t.date.toDate().toLocaleDateString('en-IN')},${t.type},${t.segmentName},${t.categoryName},${t.amount},${t.paidByName || t.createdByName},"${t.description}",${distStr}`;
         }
       )
       .join('\n');
@@ -191,7 +228,24 @@ export class ExportService {
     const netProfit = totalIncome - totalExpense;
     const totalsRows = `\n,,,,,,,\n,,,Total Income,${totalIncome},,,\n,,,Total Expense,${totalExpense},,,\n,,,Net Profit/Loss,${netProfit},,,`;
 
-    this.downloadFile(headers + rows + totalsRows, `${filename}.csv`, 'text/csv');
+    // Category breakdown
+    const catMap: Record<string, number> = {};
+    for (const t of transactions) {
+      catMap[t.categoryName] = (catMap[t.categoryName] || 0) + t.amount;
+    }
+    const catRows = `\n\n,,,,,,,\nCategory,Total Amount,,,,,,\n` +
+      Object.entries(catMap).sort((a, b) => b[1] - a[1]).map(([name, amt]) => `${name},${amt},,,,,,`).join('\n');
+
+    // Paid By breakdown
+    const personMap: Record<string, number> = {};
+    for (const t of transactions) {
+      const name = t.paidByName || t.createdByName || 'Unknown';
+      personMap[name] = (personMap[name] || 0) + t.amount;
+    }
+    const personRows = `\n\n,,,,,,,\nPaid By,Total Amount,,,,,,\n` +
+      Object.entries(personMap).sort((a, b) => b[1] - a[1]).map(([name, amt]) => `${name},${amt},,,,,,`).join('\n');
+
+    this.downloadFile(headers + rows + totalsRows + catRows + personRows, `${filename}.csv`, 'text/csv');
   }
 
   exportLoansCsv(loans: Loan[], filename: string): void {

@@ -9,7 +9,7 @@ import { UserService } from '../../../core/services/user.service';
 import { Category } from '../../../core/models/category.model';
 import { Segment } from '../../../core/models/segment.model';
 import { AppUser } from '../../../core/models/user.model';
-import { TransactionFormData, PaymentMethod } from '../../../core/models/transaction.model';
+import { TransactionFormData, PaymentMethod, IncomePaymentStatus } from '../../../core/models/transaction.model';
 
 import { MatIconModule } from '@angular/material/icon';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
@@ -93,6 +93,19 @@ import { MatRadioModule } from '@angular/material/radio';
           </div>
         </div>
 
+        <!-- Payment Status (income only) -->
+        @if (type === 'income') {
+          <div class="form-row">
+            <div class="payment-method-group">
+              <label class="field-label">Payment Status</label>
+              <mat-radio-group [(ngModel)]="paymentStatus" name="paymentStatus">
+                <mat-radio-button value="received">Received</mat-radio-button>
+                <mat-radio-button value="pending">Pending</mat-radio-button>
+              </mat-radio-group>
+            </div>
+          </div>
+        }
+
         <!-- Paid By -->
         <div class="form-row">
           <mat-form-field appearance="outline">
@@ -167,6 +180,7 @@ export class TransactionFormComponent implements OnInit {
   paidBy = '';
   customPaidByName = '';
   paymentMethod: PaymentMethod = 'upi';
+  paymentStatus: IncomePaymentStatus = 'received';
 
   allCategories = signal<Category[]>([]);
   allSegments = signal<Segment[]>([]);
@@ -216,6 +230,7 @@ export class TransactionFormComponent implements OnInit {
           this.customPaidByName = txn.paidByName || '';
         }
         this.paymentMethod = txn.paymentMethod || 'cash';
+        this.paymentStatus = txn.paymentStatus || 'received';
         this.onTypeChange();
       }
     }
@@ -260,6 +275,7 @@ export class TransactionFormComponent implements OnInit {
         segmentName: selectedSegment?.name || this.segment,
         description: this.description,
         paymentMethod: this.paymentMethod,
+        paymentStatus: this.type === 'income' ? this.paymentStatus : undefined,
         paidBy: resolvedPaidBy,
         paidByName: resolvedPaidByName,
         month: getMonthString(this.date),

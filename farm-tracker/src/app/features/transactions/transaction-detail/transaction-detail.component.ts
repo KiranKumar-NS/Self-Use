@@ -24,7 +24,13 @@ import { DatePipe } from '@angular/common';
     } @else if (transaction()) {
       <div class="page-header">
         <h1>Transaction Detail</h1>
-        <div>
+        <div class="header-actions">
+          @if (transaction()!.type === 'income' && transaction()!.paymentStatus === 'pending' && !auth.isViewer()) {
+            <button mat-flat-button color="primary" (click)="markAsReceived()" [disabled]="marking()">
+              <mat-icon>check_circle</mat-icon>
+              {{ marking() ? 'Updating...' : 'Mark as Received' }}
+            </button>
+          }
           <button mat-stroked-button (click)="edit()">
             <mat-icon>edit</mat-icon> Edit
           </button>
@@ -58,6 +64,14 @@ import { DatePipe } from '@angular/common';
             <label>Payment Method</label>
             <span class="payment-badge" [class]="transaction()!.paymentMethod || 'cash'">{{ (transaction()!.paymentMethod || 'cash').toUpperCase() }}</span>
           </div>
+          @if (transaction()!.type === 'income') {
+            <div class="detail-item">
+              <label>Payment Status</label>
+              <span class="pay-status-badge" [class]="transaction()!.paymentStatus || 'received'">
+                {{ (transaction()!.paymentStatus || 'received').toUpperCase() }}
+              </span>
+            </div>
+          }
           <div class="detail-item">
             <label>{{ transaction()!.type === 'expense' ? 'Paid By' : 'Received By' }}</label>
             <span>{{ transaction()!.paidByName || transaction()!.createdByName }}</span>
@@ -134,6 +148,8 @@ import { DatePipe } from '@angular/common';
               <strong>{{ entry.byName }}</strong>
               @if (entry.action === 'distributed') {
                 distributed this income
+              } @else if (entry.action === 'payment_received') {
+                marked this income as received
               } @else {
                 {{ entry.action }} this transaction
               }
@@ -163,6 +179,10 @@ import { DatePipe } from '@angular/common';
     .payment-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
     .payment-badge.cash { background: #fef3c7; color: #d97706; }
     .payment-badge.upi { background: #dbeafe; color: #2563eb; }
+    .pay-status-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
+    .pay-status-badge.pending { background: #fef2f2; color: #dc2626; }
+    .pay-status-badge.received { background: #f0fdf4; color: #16a34a; }
+    .header-actions { display: flex; gap: 8px; align-items: center; }
     .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: #1e293b; }
     .dist-header { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; }
     .dist-header .section-title { margin: 0; }
@@ -192,6 +212,7 @@ export class TransactionDetailComponent implements OnInit {
 
   transaction = signal<Transaction | null>(null);
   loading = signal(true);
+  marking = signal(false);
 
   private txnId = '';
 
@@ -228,6 +249,16 @@ export class TransactionDetailComponent implements OnInit {
         await this.loadTransaction();
       }
     });
+  }
+
+  async markAsReceived(): Promise<void> {
+    this.marking.set(true);
+    try {
+      await this.transactionService.markAsReceived(this.txnId);
+      await this.loadTransaction();
+    } finally {
+      this.marking.set(false);
+    }
   }
 
   edit(): void {

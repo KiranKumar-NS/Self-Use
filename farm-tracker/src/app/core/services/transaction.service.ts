@@ -17,7 +17,7 @@ import {
   DocumentSnapshot,
   arrayUnion,
 } from '@angular/fire/firestore';
-import { Transaction, TransactionFormData, DistributionEntry } from '../models/transaction.model';
+import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatus } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 
 @Injectable({ providedIn: 'root' })
@@ -70,6 +70,10 @@ export class TransactionService {
       year: data.year,
     };
 
+    if (data.type === 'income') {
+      txnDoc['paymentStatus'] = data.paymentStatus || 'received';
+    }
+
     batch.set(txnRef, txnDoc);
 
     // Update monthly summary
@@ -96,6 +100,10 @@ export class TransactionService {
       : `incomeByPerson.${personKey}`;
     summaryData[personField] = increment(data.amount);
 
+    if (data.type === 'income' && (data.paymentStatus || 'received') === 'pending') {
+      summaryData['pendingIncome'] = increment(data.amount);
+    }
+
     batch.set(summaryRef, summaryData, { merge: true });
 
     await batch.commit();
@@ -116,6 +124,11 @@ export class TransactionService {
     if (oldData.category !== data.category) changesList.push(`category: ${oldData.categoryName}→${data.categoryName}`);
     if (oldData.segment !== data.segment) changesList.push(`segment: ${oldData.segmentName}→${data.segmentName}`);
     if (oldData.type !== data.type) changesList.push(`type: ${oldData.type}→${data.type}`);
+    const oldPayStatus = oldData.paymentStatus || 'received';
+    const newPayStatus = data.type === 'income' ? (data.paymentStatus || 'received') : 'received';
+    if (oldData.type === 'income' && data.type === 'income' && oldPayStatus !== newPayStatus) {
+      changesList.push(`payment: ${oldPayStatus}→${newPayStatus}`);
+    }
     const changesStr = changesList.length > 0 ? changesList.join(', ') : 'details updated';
 
     // Reverse old summary
@@ -140,6 +153,11 @@ export class TransactionService {
       ? `expenseByPerson.${oldPersonKey}`
       : `incomeByPerson.${oldPersonKey}`;
     oldSummaryUpdates[oldPersonField] = increment(-oldData.amount);
+
+    // Reverse old pending income
+    if (oldData.type === 'income' && oldPayStatus === 'pending') {
+      oldSummaryUpdates['pendingIncome'] = increment(-oldData.amount);
+    }
 
     // Reverse old distribution totals if amount/segment/type changed
     const shouldClearDistributions = oldData.distributions?.length &&
@@ -203,6 +221,13 @@ export class TransactionService {
         }
       }
 
+      // Pending income: reverse old + apply new
+      const oldPending = oldData.type === 'income' && oldPayStatus === 'pending' ? oldData.amount : 0;
+      const newPending = data.type === 'income' && newPayStatus === 'pending' ? data.amount : 0;
+      if (oldPending !== 0 || newPending !== 0) {
+        combinedSummary['pendingIncome'] = increment(newPending - oldPending);
+      }
+
       batch.set(oldSummaryRef, combinedSummary, { merge: true });
     } else {
       // Different summary docs — safe to do two separate sets
@@ -219,6 +244,9 @@ export class TransactionService {
         segment: data.segment,
         updatedAt: serverTimestamp(),
       };
+      if (data.type === 'income' && newPayStatus === 'pending') {
+        newSummaryData['pendingIncome'] = increment(data.amount);
+      }
       batch.set(newSummaryRef, newSummaryData, { merge: true });
     }
 
@@ -235,6 +263,7 @@ export class TransactionService {
       paymentMethod: data.paymentMethod || 'upi',
       paidBy: data.paidBy || user.uid,
       paidByName: data.paidByName || user.displayName,
+      paymentStatus: data.type === 'income' ? (data.paymentStatus || 'received') : null,
       month: data.month,
       year: data.year,
       timeline: arrayUnion({
@@ -286,6 +315,11 @@ export class TransactionService {
       ? `expenseByPerson.${delPersonKey}`
       : `incomeByPerson.${delPersonKey}`;
     summaryUpdates[delPersonField] = increment(-oldData.amount);
+
+    // Reverse pending income if applicable
+    if (oldData.type === 'income' && oldData.paymentStatus === 'pending') {
+      summaryUpdates['pendingIncome'] = increment(-oldData.amount);
+    }
 
     // Reverse distribution totals if any
     if (oldData.distributions?.length) {
@@ -384,6 +418,39 @@ export class TransactionService {
     summaryUpdates['totalDistributed'] = increment(newTotalDist - oldTotalDist);
 
     batch.set(summaryRef, summaryUpdates, { merge: true });
+
+    await batch.commit();
+  }
+
+  async markAsReceived(transactionId: string): Promise<void> {
+    const batch = writeBatch(this.firestore);
+    const user = this.authService.userProfile()!;
+    const txnRef = doc(this.firestore, 'transactions', transactionId);
+
+    const oldDoc = await getDoc(txnRef);
+    const oldData = oldDoc.data() as Transaction;
+
+    if (oldData.isDeleted) throw new Error('Cannot update a deleted transaction');
+    if (oldData.type !== 'income') throw new Error('Only income transactions have payment status');
+    if (oldData.paymentStatus !== 'pending') throw new Error('Transaction is already received');
+
+    batch.update(txnRef, {
+      paymentStatus: 'received' as IncomePaymentStatus,
+      timeline: arrayUnion({
+        action: 'payment_received',
+        by: user.uid,
+        byName: user.displayName,
+        at: Timestamp.now(),
+      }),
+    });
+
+    // Decrement pendingIncome in monthly summary
+    const summaryId = `${oldData.month}-${oldData.segment}`;
+    const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
+    batch.set(summaryRef, {
+      pendingIncome: increment(-oldData.amount),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
 
     await batch.commit();
   }
