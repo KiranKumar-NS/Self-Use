@@ -190,10 +190,8 @@ async function resetSegmentStock() {
   const batch = db.batch();
   let count = 0;
   for (const doc of snapshot.docs) {
-    if (doc.data().currentStock != null) {
-      batch.update(doc.ref, { currentStock: 0 });
-      count++;
-    }
+    batch.update(doc.ref, { currentStock: 0 });
+    count++;
   }
   if (count > 0) {
     await batch.commit();
