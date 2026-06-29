@@ -70,12 +70,25 @@ export class InventoryService {
 
     const q = query(collection(this.firestore, 'inventoryEvents'), ...constraints);
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => d.data() as InventoryEvent);
+    return snapshot.docs.map(d => d.data() as InventoryEvent).filter(e => !e.isDeleted);
   }
 
   async deleteEvent(eventId: string, segment: string, countDelta: number): Promise<void> {
     const batch = writeBatch(this.firestore);
     batch.delete(doc(this.firestore, 'inventoryEvents', eventId));
+    // Reverse the stock change
+    batch.update(doc(this.firestore, 'segments', segment), {
+      currentStock: increment(-countDelta),
+    });
+    await batch.commit();
+    this.segmentService.clearCache();
+  }
+
+  async softDeleteEvent(eventId: string, segment: string, countDelta: number): Promise<void> {
+    const batch = writeBatch(this.firestore);
+    batch.update(doc(this.firestore, 'inventoryEvents', eventId), {
+      isDeleted: true,
+    });
     // Reverse the stock change
     batch.update(doc(this.firestore, 'segments', segment), {
       currentStock: increment(-countDelta),

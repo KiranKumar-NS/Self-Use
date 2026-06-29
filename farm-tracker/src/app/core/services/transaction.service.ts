@@ -11,6 +11,7 @@ import {
   limit,
   startAfter,
   writeBatch,
+  deleteDoc,
   serverTimestamp,
   increment,
   Timestamp,
@@ -341,6 +342,56 @@ export class TransactionService {
         at: Timestamp.now(),
       }),
     });
+
+    await batch.commit();
+  }
+
+  async hardDelete(id: string): Promise<void> {
+    const batch = writeBatch(this.firestore);
+    const txnRef = doc(this.firestore, 'transactions', id);
+
+    const oldDoc = await getDoc(txnRef);
+    const oldData = oldDoc.data() as Transaction;
+
+    // Reverse summary
+    const summaryId = `${oldData.month}-${oldData.segment}`;
+    const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
+    const incField = oldData.type === 'expense' ? 'totalExpense' : 'totalIncome';
+    const profitDelta = oldData.type === 'income' ? -oldData.amount : oldData.amount;
+    const catField = oldData.type === 'expense'
+      ? `expenseByCategory.${oldData.category}`
+      : `incomeBySource.${oldData.category}`;
+
+    const summaryUpdates: Record<string, any> = {
+      [incField]: increment(-oldData.amount),
+      netProfit: increment(profitDelta),
+      [catField]: increment(-oldData.amount),
+      updatedAt: serverTimestamp(),
+    };
+
+    // Reverse per-person
+    const delPersonKey = this.personSummaryKey(oldData.paidBy, oldData.paidByName, oldData.createdBy);
+    const delPersonField = oldData.type === 'expense'
+      ? `expenseByPerson.${delPersonKey}`
+      : `incomeByPerson.${delPersonKey}`;
+    summaryUpdates[delPersonField] = increment(-oldData.amount);
+
+    // Reverse pending income if applicable
+    if (oldData.type === 'income' && oldData.paymentStatus === 'pending') {
+      summaryUpdates['pendingIncome'] = increment(-oldData.amount);
+    }
+
+    // Reverse distribution totals if any
+    if (oldData.distributions?.length) {
+      const oldTotalDist = oldData.distributions.reduce((s, d) => s + d.amount, 0);
+      summaryUpdates['totalDistributed'] = increment(-oldTotalDist);
+      for (const d of oldData.distributions) {
+        summaryUpdates[`distributionByPerson.${d.uid}`] = increment(-d.amount);
+      }
+    }
+
+    batch.set(summaryRef, summaryUpdates, { merge: true });
+    batch.delete(txnRef);
 
     await batch.commit();
   }

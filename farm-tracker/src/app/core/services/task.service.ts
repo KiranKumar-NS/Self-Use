@@ -56,7 +56,7 @@ export class TaskService {
     const uid = this.authService.currentUser()!.uid;
     const q = query(this.tasksRef, orderBy('kanbanOrder', 'asc'));
     const snapshot = await getDocs(q);
-    let tasks = snapshot.docs.map((d) => d.data() as Task);
+    let tasks = snapshot.docs.map((d) => d.data() as Task).filter(t => !t.isDeleted);
 
     // Filter: personal tasks only visible to creator
     tasks = tasks.filter((t) => {
@@ -113,5 +113,12 @@ export class TaskService {
 
   async delete(taskId: string): Promise<void> {
     await deleteDoc(doc(this.firestore, 'tasks', taskId));
+  }
+
+  async softDelete(taskId: string): Promise<void> {
+    await updateDoc(doc(this.firestore, 'tasks', taskId), {
+      isDeleted: true,
+      updatedAt: serverTimestamp(),
+    });
   }
 }

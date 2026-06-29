@@ -15,6 +15,7 @@ export interface InventoryEvent {
   createdAt: Timestamp;
   month: string;
   year: number;
+  isDeleted?: boolean;
 }
 
 export interface InventoryEventFormData {

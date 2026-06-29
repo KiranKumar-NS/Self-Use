@@ -74,19 +74,19 @@ import { DatePipe } from '@angular/common';
         <table class="data-table">
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Type</th>
-              <th>Person</th>
-              <th>Amount</th>
-              <th class="hide-mobile">Repaid</th>
-              <th>Balance</th>
-              <th>Status</th>
+              <th class="sortable" (click)="toggleSort('date')">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
+              <th class="sortable" (click)="toggleSort('type')">Type <span class="sort-icon">{{ getSortIcon('type') }}</span></th>
+              <th class="sortable" (click)="toggleSort('personName')">Person <span class="sort-icon">{{ getSortIcon('personName') }}</span></th>
+              <th class="sortable" (click)="toggleSort('amount')">Amount <span class="sort-icon">{{ getSortIcon('amount') }}</span></th>
+              <th class="sortable hide-mobile" (click)="toggleSort('totalRepaid')">Repaid <span class="sort-icon">{{ getSortIcon('totalRepaid') }}</span></th>
+              <th class="sortable" (click)="toggleSort('balanceRemaining')">Balance <span class="sort-icon">{{ getSortIcon('balanceRemaining') }}</span></th>
+              <th class="sortable" (click)="toggleSort('repaymentStatus')">Status <span class="sort-icon">{{ getSortIcon('repaymentStatus') }}</span></th>
               <th class="hide-mobile">Segment</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            @for (loan of loans(); track loan.id) {
+            @for (loan of paginatedLoans(); track loan.id) {
               <tr>
                 <td>{{ loan.date.toDate() | date:'dd MMM yyyy' }}</td>
                 <td>
@@ -121,6 +121,24 @@ import { DatePipe } from '@angular/common';
             }
           </tbody>
         </table>
+        <!-- Pagination -->
+        <div class="pagination">
+          <div class="page-size">
+            <span>Rows per page:</span>
+            <select [(ngModel)]="pageSize" (change)="currentPage = 1">
+              <option [ngValue]="10">10</option>
+              <option [ngValue]="20">20</option>
+              <option [ngValue]="50">50</option>
+            </select>
+          </div>
+          <span class="page-info">{{ pageStart() }}–{{ pageEnd() }} of {{ sortedLoans().length }}</span>
+          <div class="page-buttons">
+            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1"><mat-icon>first_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1"><mat-icon>chevron_left</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1"><mat-icon>chevron_right</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()"><mat-icon>last_page</mat-icon></button>
+          </div>
+        </div>
       </div>
 
       @if (hasMore()) {
@@ -152,6 +170,18 @@ import { DatePipe } from '@angular/common';
     .balance { color: #dc2626; font-weight: 600; }
     .segment-tag { font-size: 0.8rem; }
     .segment-tag.personal { color: #7c3aed; font-style: italic; }
+    .sortable { cursor: pointer; user-select: none; }
+    .sortable:hover { color: #1e293b; }
+    .sort-icon { font-size: 0.7rem; color: #94a3b8; }
+    .pagination {
+      display: flex; align-items: center; justify-content: flex-end; gap: 1rem;
+      padding: 8px 16px; border-top: 1px solid #e2e8f0; font-size: 0.8rem; color: #64748b;
+    }
+    .page-size { display: flex; align-items: center; gap: 6px; }
+    .page-size select { border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; font-size: 0.8rem; background: white; color: #334155; }
+    .page-info { font-size: 0.8rem; }
+    .page-buttons { display: flex; align-items: center; }
+    .page-buttons button { width: 32px; height: 32px; }
     .load-more { text-align: center; padding: 1rem; }
     @media (max-width: 768px) {
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
@@ -178,6 +208,11 @@ export class LoanListComponent implements OnInit {
   filterStatus = '';
   filterSegment = '';
 
+  sortColumn = '';
+  sortDirection: 'asc' | 'desc' = 'asc';
+  pageSize = 20;
+  currentPage = 1;
+
   async ngOnInit(): Promise<void> {
     await this.loadData();
   }
@@ -185,6 +220,7 @@ export class LoanListComponent implements OnInit {
   async loadData(): Promise<void> {
     this.loading.set(true);
     this.lastDoc = null;
+    this.currentPage = 1;
     const filters: any = {};
     if (this.filterType) filters.type = this.filterType;
     if (this.filterStatus) filters.repaymentStatus = this.filterStatus;
@@ -209,17 +245,64 @@ export class LoanListComponent implements OnInit {
     this.hasMore.set(result.loans.length === 20);
   }
 
+  sortedLoans(): Loan[] {
+    let data = this.loans();
+    if (this.sortColumn) {
+      data = [...data].sort((a, b) => {
+        let valA: any, valB: any;
+        if (this.sortColumn === 'date') {
+          valA = a.date.toMillis(); valB = b.date.toMillis();
+        } else {
+          valA = (a as any)[this.sortColumn]; valB = (b as any)[this.sortColumn];
+        }
+        if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = (valB || '').toLowerCase(); }
+        const cmp = valA < valB ? -1 : valA > valB ? 1 : 0;
+        return this.sortDirection === 'asc' ? cmp : -cmp;
+      });
+    }
+    return data;
+  }
+
+  paginatedLoans(): Loan[] {
+    const all = this.sortedLoans();
+    const start = (this.currentPage - 1) * this.pageSize;
+    return all.slice(start, start + this.pageSize);
+  }
+
+  totalPages(): number { return Math.max(1, Math.ceil(this.sortedLoans().length / this.pageSize)); }
+  pageStart(): number { return this.sortedLoans().length === 0 ? 0 : (this.currentPage - 1) * this.pageSize + 1; }
+  pageEnd(): number { return Math.min(this.currentPage * this.pageSize, this.sortedLoans().length); }
+
+  toggleSort(column: string): void {
+    if (this.sortColumn === column) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortColumn = column;
+      this.sortDirection = 'asc';
+    }
+    this.currentPage = 1;
+  }
+
+  getSortIcon(column: string): string {
+    if (this.sortColumn !== column) return '↕';
+    return this.sortDirection === 'asc' ? '↑' : '↓';
+  }
+
   addNew(): void { this.router.navigate(['/loans/new']); }
   viewDetail(id: string): void { this.router.navigate(['/loans', id]); }
   edit(id: string): void { this.router.navigate(['/loans', id, 'edit']); }
 
   async confirmDelete(loan: Loan): Promise<void> {
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
-      data: { title: 'Delete Entry', message: `Delete ${loan.type === 'given' ? 'lent' : 'owed'} entry of ${loan.amount} - ${loan.personName}?`, confirmText: 'Delete' } as ConfirmDialogData,
+      data: { title: 'Delete Entry', message: `Delete ${loan.type === 'given' ? 'lent' : 'owed'} entry of ${loan.amount} - ${loan.personName}?`, confirmText: 'Delete', showDeleteOptions: true } as ConfirmDialogData,
     });
-    dialogRef.afterClosed().subscribe(async (confirmed) => {
-      if (confirmed) {
-        await this.loanService.softDelete(loan.id);
+    dialogRef.afterClosed().subscribe(async (result) => {
+      if (result?.confirmed) {
+        if (result.deleteType === 'hard') {
+          await this.loanService.hardDelete(loan.id);
+        } else {
+          await this.loanService.softDelete(loan.id);
+        }
         await this.loadData();
       }
     });

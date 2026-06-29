@@ -29,4 +29,5 @@ export interface Task {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   completedAt: Timestamp | null;
+  isDeleted?: boolean;
 }

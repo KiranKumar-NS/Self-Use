@@ -202,17 +202,17 @@ import { getMonthString } from '../../core/utils/date.utils';
           <table class="data-table">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Segment</th>
-                <th>Category</th>
-                <th>Amount</th>
-                <th class="hide-mobile">Paid By</th>
+                <th class="sortable" (click)="toggleSort('date')">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
+                <th class="sortable" (click)="toggleSort('segmentName')">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('categoryName')">Category <span class="sort-icon">{{ getSortIcon('categoryName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('amount')">Amount <span class="sort-icon">{{ getSortIcon('amount') }}</span></th>
+                <th class="sortable hide-mobile" (click)="toggleSort('paidByName')">Paid By <span class="sort-icon">{{ getSortIcon('paidByName') }}</span></th>
                 <th class="hide-mobile">Via</th>
                 <th class="hide-mobile">Description</th>
               </tr>
             </thead>
             <tbody>
-              @for (txn of filtered(); track txn.id) {
+              @for (txn of paginatedFiltered(); track txn.id) {
                 <tr>
                   <td class="date-cell">{{ txn.date.toDate() | date:'dd MMM yyyy' }}</td>
                   <td>{{ txn.segmentName }}</td>
@@ -233,6 +233,25 @@ import { getMonthString } from '../../core/utils/date.utils';
             </tfoot>
           </table>
         </div>
+        @if (filtered().length > 0) {
+          <div class="pagination">
+            <div class="page-size">
+              <span>Rows per page:</span>
+              <select [(ngModel)]="pageSize" (change)="currentPage = 1">
+                <option [ngValue]="10">10</option>
+                <option [ngValue]="20">20</option>
+                <option [ngValue]="50">50</option>
+              </select>
+            </div>
+            <span class="page-info">{{ analyticsPageStart() }}–{{ analyticsPageEnd() }} of {{ sortedFiltered().length }}</span>
+            <div class="page-buttons">
+              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1"><mat-icon>first_page</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1"><mat-icon>chevron_left</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage >= analyticsTotalPages()" (click)="currentPage = currentPage + 1"><mat-icon>chevron_right</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage >= analyticsTotalPages()" (click)="currentPage = analyticsTotalPages()"><mat-icon>last_page</mat-icon></button>
+            </div>
+          </div>
+        }
       </mat-card>
     }
   `,
@@ -291,6 +310,18 @@ import { getMonthString } from '../../core/utils/date.utils';
     .payment-badge { padding: 2px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 700; }
     .payment-badge.cash { background: #fef3c7; color: #d97706; }
     .payment-badge.upi { background: #dbeafe; color: #2563eb; }
+    .sortable { cursor: pointer; user-select: none; }
+    .sortable:hover { color: #1e293b; }
+    .sort-icon { font-size: 0.7rem; color: #94a3b8; }
+    .pagination {
+      display: flex; align-items: center; justify-content: flex-end; gap: 1rem;
+      padding: 8px 16px; border-top: 1px solid #e2e8f0; font-size: 0.8rem; color: #64748b;
+    }
+    .page-size { display: flex; align-items: center; gap: 6px; }
+    .page-size select { border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; font-size: 0.8rem; background: white; color: #334155; }
+    .page-info { font-size: 0.8rem; }
+    .page-buttons { display: flex; align-items: center; }
+    .page-buttons button { width: 32px; height: 32px; }
 
     @media (max-width: 768px) {
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
@@ -320,6 +351,12 @@ export class AnalyticsComponent implements OnInit {
   filterSegment = '';
   filterPaidBy = '';
   filterCategory = '';
+
+  // Sorting & pagination
+  sortColumn = '';
+  sortDirection: 'asc' | 'desc' = 'asc';
+  pageSize = 20;
+  currentPage = 1;
 
   // Unique values for dropdowns
   allSegments = signal<string[]>([]);
@@ -452,6 +489,7 @@ export class AnalyticsComponent implements OnInit {
   }
 
   applyFilters(): void {
+    this.currentPage = 1;
     let txns = [...this.allTransactions()];
 
     if (this.filterFromMonth) {
@@ -502,6 +540,49 @@ export class AnalyticsComponent implements OnInit {
     );
 
     this.buildCharts(txns);
+  }
+
+  sortedFiltered(): Transaction[] {
+    let data = this.filtered();
+    if (this.sortColumn) {
+      data = [...data].sort((a, b) => {
+        let valA: any, valB: any;
+        if (this.sortColumn === 'date') {
+          valA = a.date.toMillis(); valB = b.date.toMillis();
+        } else {
+          valA = (a as any)[this.sortColumn]; valB = (b as any)[this.sortColumn];
+        }
+        if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = (valB || '').toLowerCase(); }
+        const cmp = valA < valB ? -1 : valA > valB ? 1 : 0;
+        return this.sortDirection === 'asc' ? cmp : -cmp;
+      });
+    }
+    return data;
+  }
+
+  paginatedFiltered(): Transaction[] {
+    const all = this.sortedFiltered();
+    const start = (this.currentPage - 1) * this.pageSize;
+    return all.slice(start, start + this.pageSize);
+  }
+
+  analyticsTotalPages(): number { return Math.max(1, Math.ceil(this.sortedFiltered().length / this.pageSize)); }
+  analyticsPageStart(): number { return this.sortedFiltered().length === 0 ? 0 : (this.currentPage - 1) * this.pageSize + 1; }
+  analyticsPageEnd(): number { return Math.min(this.currentPage * this.pageSize, this.sortedFiltered().length); }
+
+  toggleSort(column: string): void {
+    if (this.sortColumn === column) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortColumn = column;
+      this.sortDirection = 'asc';
+    }
+    this.currentPage = 1;
+  }
+
+  getSortIcon(column: string): string {
+    if (this.sortColumn !== column) return '↕';
+    return this.sortDirection === 'asc' ? '↑' : '↓';
   }
 
   private get rangeLabel(): string {

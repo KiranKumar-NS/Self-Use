@@ -71,19 +71,19 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
           <table class="data-table">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Segment</th>
-                <th>Event</th>
-                <th>Count</th>
+                <th class="sortable" (click)="toggleSort('date')">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
+                <th class="sortable" (click)="toggleSort('segmentName')">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('eventType')">Event <span class="sort-icon">{{ getSortIcon('eventType') }}</span></th>
+                <th class="sortable" (click)="toggleSort('count')">Count <span class="sort-icon">{{ getSortIcon('count') }}</span></th>
                 <th class="hide-mobile">Note</th>
-                <th class="hide-mobile">By</th>
+                <th class="sortable hide-mobile" (click)="toggleSort('createdByName')">By <span class="sort-icon">{{ getSortIcon('createdByName') }}</span></th>
                 @if (!auth.isViewer()) {
                   <th class="actions-th">Actions</th>
                 }
               </tr>
             </thead>
             <tbody>
-              @for (ev of events(); track ev.id) {
+              @for (ev of paginatedEvents(); track ev.id) {
                 <tr>
                   <td class="date-cell">{{ ev.date.toDate() | date:'dd MMM yyyy' }}</td>
                   <td>{{ ev.segmentName }}</td>
@@ -111,6 +111,25 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
             </tbody>
           </table>
         </div>
+        @if (events().length > 0) {
+          <div class="pagination">
+            <div class="page-size">
+              <span>Rows per page:</span>
+              <select [(ngModel)]="pageSize" (change)="currentPage = 1">
+                <option [ngValue]="10">10</option>
+                <option [ngValue]="20">20</option>
+                <option [ngValue]="50">50</option>
+              </select>
+            </div>
+            <span class="page-info">{{ pageStart() }}–{{ pageEnd() }} of {{ sortedEvents().length }}</span>
+            <div class="page-buttons">
+              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1"><mat-icon>first_page</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1"><mat-icon>chevron_left</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1"><mat-icon>chevron_right</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()"><mat-icon>last_page</mat-icon></button>
+            </div>
+          </div>
+        }
       </mat-card>
     }
   `,
@@ -146,6 +165,18 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
     .actions-cell { white-space: nowrap; text-align: center; }
     .actions-cell button { opacity: 0.5; }
     tr:hover .actions-cell button { opacity: 1; }
+    .sortable { cursor: pointer; user-select: none; }
+    .sortable:hover { color: #1e293b; }
+    .sort-icon { font-size: 0.7rem; color: #94a3b8; }
+    .pagination {
+      display: flex; align-items: center; justify-content: flex-end; gap: 1rem;
+      padding: 8px 16px; border-top: 1px solid #e2e8f0; font-size: 0.8rem; color: #64748b;
+    }
+    .page-size { display: flex; align-items: center; gap: 6px; }
+    .page-size select { border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; font-size: 0.8rem; background: white; color: #334155; }
+    .page-info { font-size: 0.8rem; }
+    .page-buttons { display: flex; align-items: center; }
+    .page-buttons button { width: 32px; height: 32px; }
     @media (max-width: 768px) {
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .filter-field { min-width: 0; width: 100%; }
@@ -166,6 +197,11 @@ export class InventoryPageComponent implements OnInit {
   events = signal<InventoryEvent[]>([]);
   filterSegment = '';
 
+  sortColumn = '';
+  sortDirection: 'asc' | 'desc' = 'asc';
+  pageSize = 20;
+  currentPage = 1;
+
   async ngOnInit(): Promise<void> {
     this.segments.set(await this.segmentService.getAll());
     await this.loadEvents();
@@ -173,7 +209,51 @@ export class InventoryPageComponent implements OnInit {
   }
 
   async loadEvents(): Promise<void> {
+    this.currentPage = 1;
     this.events.set(await this.inventoryService.getEvents(this.filterSegment || undefined));
+  }
+
+  sortedEvents(): InventoryEvent[] {
+    let data = this.events();
+    if (this.sortColumn) {
+      data = [...data].sort((a, b) => {
+        let valA: any, valB: any;
+        if (this.sortColumn === 'date') {
+          valA = a.date.toMillis(); valB = b.date.toMillis();
+        } else {
+          valA = (a as any)[this.sortColumn]; valB = (b as any)[this.sortColumn];
+        }
+        if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = (valB || '').toLowerCase(); }
+        const cmp = valA < valB ? -1 : valA > valB ? 1 : 0;
+        return this.sortDirection === 'asc' ? cmp : -cmp;
+      });
+    }
+    return data;
+  }
+
+  paginatedEvents(): InventoryEvent[] {
+    const all = this.sortedEvents();
+    const start = (this.currentPage - 1) * this.pageSize;
+    return all.slice(start, start + this.pageSize);
+  }
+
+  totalPages(): number { return Math.max(1, Math.ceil(this.sortedEvents().length / this.pageSize)); }
+  pageStart(): number { return this.sortedEvents().length === 0 ? 0 : (this.currentPage - 1) * this.pageSize + 1; }
+  pageEnd(): number { return Math.min(this.currentPage * this.pageSize, this.sortedEvents().length); }
+
+  toggleSort(column: string): void {
+    if (this.sortColumn === column) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortColumn = column;
+      this.sortDirection = 'asc';
+    }
+    this.currentPage = 1;
+  }
+
+  getSortIcon(column: string): string {
+    if (this.sortColumn !== column) return '↕';
+    return this.sortDirection === 'asc' ? '↑' : '↓';
   }
 
   openEventDialog(): void {
@@ -212,11 +292,16 @@ export class InventoryPageComponent implements OnInit {
         title: 'Delete Inventory Event',
         message: `Delete this ${ev.eventType} event (${Math.abs(ev.count)} ${ev.segmentName})? Stock will be adjusted.`,
         confirmText: 'Delete',
+        showDeleteOptions: true,
       } as ConfirmDialogData,
     });
-    ref.afterClosed().subscribe(async (confirmed) => {
-      if (confirmed) {
-        await this.inventoryService.deleteEvent(ev.id, ev.segment, ev.count);
+    ref.afterClosed().subscribe(async (result) => {
+      if (result?.confirmed) {
+        if (result.deleteType === 'hard') {
+          await this.inventoryService.deleteEvent(ev.id, ev.segment, ev.count);
+        } else {
+          await this.inventoryService.softDeleteEvent(ev.id, ev.segment, ev.count);
+        }
         this.segmentService.clearCache();
         this.segments.set(await this.segmentService.getAll());
         await this.loadEvents();

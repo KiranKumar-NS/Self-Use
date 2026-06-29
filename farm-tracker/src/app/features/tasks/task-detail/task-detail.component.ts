@@ -7,7 +7,9 @@ import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatDialog } from '@angular/material/dialog';
 import { DatePipe } from '@angular/common';
+import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-task-detail',
@@ -117,6 +119,7 @@ export class TaskDetailComponent implements OnInit {
   private taskService = inject(TaskService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private dialog = inject(MatDialog);
 
   task = signal<Task | null>(null);
 
@@ -136,6 +139,28 @@ export class TaskDetailComponent implements OnInit {
   }
 
   edit(): void { this.router.navigate(['/tasks', this.task()!.id, 'edit']); }
-  async deleteTask(): Promise<void> { await this.taskService.delete(this.task()!.id); this.back(); }
+
+  deleteTask(): void {
+    const task = this.task()!;
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      data: {
+        title: 'Delete Task',
+        message: `Are you sure you want to delete "${task.title}"?`,
+        confirmText: 'Delete',
+        showDeleteOptions: true,
+      } as ConfirmDialogData,
+    });
+    dialogRef.afterClosed().subscribe(async (result) => {
+      if (result?.confirmed) {
+        if (result.deleteType === 'hard') {
+          await this.taskService.delete(task.id);
+        } else {
+          await this.taskService.softDelete(task.id);
+        }
+        this.back();
+      }
+    });
+  }
+
   back(): void { this.router.navigate(['/tasks']); }
 }

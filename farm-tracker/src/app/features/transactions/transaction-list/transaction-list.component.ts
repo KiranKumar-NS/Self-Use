@@ -117,19 +117,19 @@ import { getMonthString } from '../../../core/utils/date.utils';
           <table class="data-table">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Segment</th>
-                <th>Category</th>
-                <th>Amount</th>
+                <th class="sortable" (click)="toggleSort('date')">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
+                <th class="sortable" (click)="toggleSort('type')">Type <span class="sort-icon">{{ getSortIcon('type') }}</span></th>
+                <th class="sortable" (click)="toggleSort('segmentName')">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('categoryName')">Category <span class="sort-icon">{{ getSortIcon('categoryName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('amount')">Amount <span class="sort-icon">{{ getSortIcon('amount') }}</span></th>
                 <th class="hide-mobile">Paid Via</th>
-                <th class="hide-mobile">By</th>
+                <th class="sortable hide-mobile" (click)="toggleSort('paidByName')">By <span class="sort-icon">{{ getSortIcon('paidByName') }}</span></th>
                 <th class="hide-mobile">Description</th>
                 <th class="actions-th">Actions</th>
               </tr>
             </thead>
             <tbody>
-              @for (txn of displayedTransactions(); track txn.id) {
+              @for (txn of paginatedTransactions(); track txn.id) {
                 <tr (click)="viewDetail(txn.id)" class="clickable-row">
                   <td class="date-cell">{{ txn.date.toDate() | date:'dd MMM yyyy' }}</td>
                   <td>
@@ -166,6 +166,32 @@ import { getMonthString } from '../../../core/utils/date.utils';
               }
             </tbody>
           </table>
+        </div>
+        <!-- Pagination -->
+        <div class="pagination">
+          <div class="page-size">
+            <span>Rows per page:</span>
+            <select [(ngModel)]="pageSize" (change)="currentPage = 1">
+              <option [ngValue]="10">10</option>
+              <option [ngValue]="20">20</option>
+              <option [ngValue]="50">50</option>
+            </select>
+          </div>
+          <span class="page-info">{{ pageStart() }}–{{ pageEnd() }} of {{ displayedTransactions().length }}</span>
+          <div class="page-buttons">
+            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" title="First page">
+              <mat-icon>first_page</mat-icon>
+            </button>
+            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" title="Previous page">
+              <mat-icon>chevron_left</mat-icon>
+            </button>
+            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1" title="Next page">
+              <mat-icon>chevron_right</mat-icon>
+            </button>
+            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()" title="Last page">
+              <mat-icon>last_page</mat-icon>
+            </button>
+          </div>
         </div>
       </mat-card>
 
@@ -268,6 +294,23 @@ import { getMonthString } from '../../../core/utils/date.utils';
     }
     .pay-status-chip.pending { background: #fef2f2; color: #dc2626; }
 
+    .sortable { cursor: pointer; user-select: none; }
+    .sortable:hover { color: #1e293b; }
+    .sort-icon { font-size: 0.7rem; color: #94a3b8; }
+
+    .pagination {
+      display: flex; align-items: center; justify-content: flex-end; gap: 1rem;
+      padding: 8px 16px; border-top: 1px solid #e2e8f0; font-size: 0.8rem; color: #64748b;
+    }
+    .page-size { display: flex; align-items: center; gap: 6px; }
+    .page-size select {
+      border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px;
+      font-size: 0.8rem; background: white; color: #334155;
+    }
+    .page-info { font-size: 0.8rem; }
+    .page-buttons { display: flex; align-items: center; }
+    .page-buttons button { width: 32px; height: 32px; }
+
     .load-more { text-align: center; padding: 1.5rem; }
     .load-more button { padding: 8px 24px; }
     @media (max-width: 768px) {
@@ -300,6 +343,14 @@ export class TransactionListComponent implements OnInit {
   filterPaymentStatus = '';
   searchTerm = '';
 
+  // Sorting
+  sortColumn = '';
+  sortDirection: 'asc' | 'desc' = 'asc';
+
+  // Pagination
+  pageSize = 20;
+  currentPage = 1;
+
   // Generate last 12 months for month filter
   availableMonths = this.generateMonths(12);
 
@@ -311,6 +362,7 @@ export class TransactionListComponent implements OnInit {
   async loadData(): Promise<void> {
     this.loading.set(true);
     this.lastDoc = null;
+    this.currentPage = 1;
     const filters: any = {};
     if (this.filterType) filters.type = this.filterType;
     if (this.filterSegment) filters.segment = this.filterSegment;
@@ -346,15 +398,65 @@ export class TransactionListComponent implements OnInit {
     }
 
     const term = this.searchTerm.toLowerCase().trim();
-    if (!term) return filtered;
-    return filtered.filter(txn =>
-      txn.description?.toLowerCase().includes(term) ||
-      txn.paidByName?.toLowerCase().includes(term) ||
-      txn.createdByName?.toLowerCase().includes(term) ||
-      txn.categoryName?.toLowerCase().includes(term) ||
-      txn.segmentName?.toLowerCase().includes(term) ||
-      txn.amount.toString().includes(term)
-    );
+    if (term) {
+      filtered = filtered.filter(txn =>
+        txn.description?.toLowerCase().includes(term) ||
+        txn.paidByName?.toLowerCase().includes(term) ||
+        txn.createdByName?.toLowerCase().includes(term) ||
+        txn.categoryName?.toLowerCase().includes(term) ||
+        txn.segmentName?.toLowerCase().includes(term) ||
+        txn.amount.toString().includes(term)
+      );
+    }
+
+    if (this.sortColumn) {
+      filtered = [...filtered].sort((a, b) => {
+        let valA: any, valB: any;
+        if (this.sortColumn === 'date') {
+          valA = a.date.toMillis(); valB = b.date.toMillis();
+        } else {
+          valA = (a as any)[this.sortColumn]; valB = (b as any)[this.sortColumn];
+        }
+        if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = (valB || '').toLowerCase(); }
+        const cmp = valA < valB ? -1 : valA > valB ? 1 : 0;
+        return this.sortDirection === 'asc' ? cmp : -cmp;
+      });
+    }
+
+    return filtered;
+  }
+
+  paginatedTransactions(): Transaction[] {
+    const all = this.displayedTransactions();
+    const start = (this.currentPage - 1) * this.pageSize;
+    return all.slice(start, start + this.pageSize);
+  }
+
+  totalPages(): number {
+    return Math.max(1, Math.ceil(this.displayedTransactions().length / this.pageSize));
+  }
+
+  pageStart(): number {
+    return this.displayedTransactions().length === 0 ? 0 : (this.currentPage - 1) * this.pageSize + 1;
+  }
+
+  pageEnd(): number {
+    return Math.min(this.currentPage * this.pageSize, this.displayedTransactions().length);
+  }
+
+  toggleSort(column: string): void {
+    if (this.sortColumn === column) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortColumn = column;
+      this.sortDirection = 'asc';
+    }
+    this.currentPage = 1;
+  }
+
+  getSortIcon(column: string): string {
+    if (this.sortColumn !== column) return '↕';
+    return this.sortDirection === 'asc' ? '↑' : '↓';
   }
 
   clearFilters(): void {
@@ -384,12 +486,17 @@ export class TransactionListComponent implements OnInit {
         title: 'Delete Transaction',
         message: `Are you sure you want to delete this ${txn.type} of ${txn.amount}?`,
         confirmText: 'Delete',
+        showDeleteOptions: true,
       } as ConfirmDialogData,
     });
 
-    dialogRef.afterClosed().subscribe(async (confirmed) => {
-      if (confirmed) {
-        await this.transactionService.softDelete(txn.id);
+    dialogRef.afterClosed().subscribe(async (result) => {
+      if (result?.confirmed) {
+        if (result.deleteType === 'hard') {
+          await this.transactionService.hardDelete(txn.id);
+        } else {
+          await this.transactionService.softDelete(txn.id);
+        }
         await this.loadData();
       }
     });
