@@ -74,7 +74,10 @@ import { MatButtonModule } from '@angular/material/button';
   styles: [`
     .page-header { margin-bottom: 1rem; }
     .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; }
-    .form-card { max-width: 500px; padding: 1.5rem; }
+    .form-card { width: 100%; max-width: 500px; padding: 1.5rem; }
+    @media (max-width: 480px) {
+      .form-card { padding: 1rem; }
+    }
     .full-width { width: 100%; }
     .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
     .error-message { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }

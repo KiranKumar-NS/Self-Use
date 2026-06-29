@@ -5,6 +5,8 @@ import { Transaction } from '../../core/models/transaction.model';
 import { TransactionService } from '../../core/services/transaction.service';
 import { ExportService } from '../../core/services/export.service';
 import { SummaryService } from '../../core/services/summary.service';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { WhatsappShareDialogComponent, WhatsappShareData } from './whatsapp-share-dialog.component';
 import { getMonthRange } from '../../core/utils/date.utils';
 import { CurrencyInrPipe } from '../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
@@ -24,7 +26,7 @@ import { getMonthString } from '../../core/utils/date.utils';
   imports: [
     FormsModule, DatePipe, UpperCasePipe, CurrencyInrPipe, LoadingSpinnerComponent,
     BaseChartDirective,
-    MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule, MatDialogModule,
   ],
   template: `
     <div class="page-header">
@@ -38,6 +40,9 @@ import { getMonthString } from '../../core/utils/date.utils';
         </button>
         <button mat-stroked-button (click)="exportCsv()">
           <mat-icon>download</mat-icon> Export CSV
+        </button>
+        <button mat-stroked-button class="wa-share-btn" (click)="shareWhatsApp()">
+          <mat-icon>share</mat-icon> WhatsApp
         </button>
       </div>
     </div>
@@ -201,9 +206,9 @@ import { getMonthString } from '../../core/utils/date.utils';
                 <th>Segment</th>
                 <th>Category</th>
                 <th>Amount</th>
-                <th>Paid By</th>
-                <th>Via</th>
-                <th>Description</th>
+                <th class="hide-mobile">Paid By</th>
+                <th class="hide-mobile">Via</th>
+                <th class="hide-mobile">Description</th>
               </tr>
             </thead>
             <tbody>
@@ -213,9 +218,9 @@ import { getMonthString } from '../../core/utils/date.utils';
                   <td>{{ txn.segmentName }}</td>
                   <td>{{ txn.categoryName }}</td>
                   <td class="amount-cell">{{ txn.amount | currencyInr }}</td>
-                  <td>{{ txn.paidByName }}</td>
-                  <td><span class="payment-badge" [class]="txn.paymentMethod || 'upi'">{{ (txn.paymentMethod || 'upi') | uppercase }}</span></td>
-                  <td class="desc-cell">{{ txn.description }}</td>
+                  <td class="hide-mobile">{{ txn.paidByName }}</td>
+                  <td class="hide-mobile"><span class="payment-badge" [class]="txn.paymentMethod || 'upi'">{{ (txn.paymentMethod || 'upi') | uppercase }}</span></td>
+                  <td class="desc-cell hide-mobile">{{ txn.description }}</td>
                 </tr>
               }
             </tbody>
@@ -235,7 +240,8 @@ import { getMonthString } from '../../core/utils/date.utils';
     .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
     .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; font-weight: 700; }
     .subtitle { margin: 4px 0 0; color: #64748b; font-size: 0.85rem; }
-    .export-buttons { display: flex; gap: 0.5rem; }
+    .export-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .wa-share-btn { color: #25D366 !important; border-color: #25D366 !important; }
 
     .filter-card { margin-bottom: 1.25rem; padding: 1rem 1.25rem; }
     .filter-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 600; color: #475569; }
@@ -287,7 +293,14 @@ import { getMonthString } from '../../core/utils/date.utils';
     .payment-badge.upi { background: #dbeafe; color: #2563eb; }
 
     @media (max-width: 768px) {
+      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .charts-grid { grid-template-columns: 1fr; }
+      .filter-field { min-width: 0; flex-basis: 100%; }
+      .filter-card { padding: 0.75rem; }
+      .person-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .hide-mobile { display: none; }
     }
   `],
 })
@@ -295,6 +308,7 @@ export class AnalyticsComponent implements OnInit {
   private transactionService = inject(TransactionService);
   private exportService = inject(ExportService);
   private summaryService = inject(SummaryService);
+  private dialog = inject(MatDialog);
 
   loading = signal(true);
   allTransactions = signal<Transaction[]>([]);
@@ -510,6 +524,24 @@ export class AnalyticsComponent implements OnInit {
 
   exportCsv(): void {
     this.exportService.exportTransactionsCsv(this.filtered(), `transactions-${this.rangeLabel}`);
+  }
+
+  shareWhatsApp(): void {
+    // Build category breakdown from filtered transactions
+    const catMap = new Map<string, number>();
+    this.filtered().forEach(t => catMap.set(t.categoryName, (catMap.get(t.categoryName) || 0) + t.amount));
+    const categoryBreakdown = Array.from(catMap.entries())
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total);
+
+    const data: WhatsappShareData = {
+      rangeLabel: this.rangeLabel,
+      totalExpense: this.totalExpense(),
+      investmentSummary: this.investmentSummary(),
+      segmentTotals: this.segmentTotals(),
+      categoryBreakdown,
+    };
+    this.dialog.open(WhatsappShareDialogComponent, { data, width: '90vw', maxWidth: '360px' });
   }
 
   private buildCharts(txns: Transaction[]): void {

@@ -62,7 +62,7 @@ import { MatIconModule } from '@angular/material/icon';
     </div>
   `,
   styles: [`
-    .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+    .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
     .summary-card {
       display: flex; align-items: center; gap: 1rem; padding: 1.25rem;
       border-left: 4px solid transparent;
@@ -92,6 +92,11 @@ import { MatIconModule } from '@angular/material/icon';
     .pending { border-color: #ea580c; }
     .pending .value { color: #ea580c; }
     .pending mat-icon { color: #ea580c; }
+    @media (max-width: 480px) {
+      .summary-card { padding: 1rem; gap: 0.75rem; }
+      .value { font-size: 1.2rem; }
+      .summary-card mat-icon { font-size: 1.5rem; width: 1.5rem; height: 1.5rem; }
+    }
   `],
 })
 export class SummaryCardsComponent {

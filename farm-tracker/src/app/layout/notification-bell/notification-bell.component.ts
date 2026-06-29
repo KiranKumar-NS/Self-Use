@@ -75,6 +75,9 @@ import { MatMenuModule } from '@angular/material/menu';
     .notif-message { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
     .dismiss-btn { opacity: 0.4; }
     .notif-item:hover .dismiss-btn { opacity: 1; }
+    @media (max-width: 480px) {
+      .notif-item { min-width: 0; }
+    }
   `],
 })
 export class NotificationBellComponent {

@@ -78,10 +78,10 @@ import { DatePipe } from '@angular/common';
               <th>Type</th>
               <th>Person</th>
               <th>Amount</th>
-              <th>Repaid</th>
+              <th class="hide-mobile">Repaid</th>
               <th>Balance</th>
               <th>Status</th>
-              <th>Segment</th>
+              <th class="hide-mobile">Segment</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -94,12 +94,12 @@ import { DatePipe } from '@angular/common';
                 </td>
                 <td>{{ loan.personName }}</td>
                 <td class="amount">{{ loan.amount | currencyInr }}</td>
-                <td>{{ loan.totalRepaid | currencyInr }}</td>
+                <td class="hide-mobile">{{ loan.totalRepaid | currencyInr }}</td>
                 <td class="balance">{{ loan.balanceRemaining | currencyInr }}</td>
                 <td>
                   <span class="status-badge" [class]="loan.repaymentStatus">{{ loan.repaymentStatus }}</span>
                 </td>
-                <td>
+                <td class="hide-mobile">
                   <span class="segment-tag" [class.personal]="loan.segment === 'personal' || !loan.segment">{{ loan.segmentName || 'Personal' }}</span>
                 </td>
                 <td>
@@ -153,6 +153,14 @@ import { DatePipe } from '@angular/common';
     .segment-tag { font-size: 0.8rem; }
     .segment-tag.personal { color: #7c3aed; font-style: italic; }
     .load-more { text-align: center; padding: 1rem; }
+    @media (max-width: 768px) {
+      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+      .filters mat-form-field { min-width: 0; flex-basis: 100%; }
+      .filter-card { padding: 0.75rem; }
+    }
+    @media (max-width: 640px) {
+      .hide-mobile { display: none; }
+    }
   `],
 })
 export class LoanListComponent implements OnInit {

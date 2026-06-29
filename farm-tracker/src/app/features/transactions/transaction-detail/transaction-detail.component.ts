@@ -182,7 +182,7 @@ import { DatePipe } from '@angular/common';
     .pay-status-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
     .pay-status-badge.pending { background: #fef2f2; color: #dc2626; }
     .pay-status-badge.received { background: #f0fdf4; color: #16a34a; }
-    .header-actions { display: flex; gap: 8px; align-items: center; }
+    .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: #1e293b; }
     .dist-header { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; }
     .dist-header .section-title { margin: 0; }
@@ -201,6 +201,17 @@ import { DatePipe } from '@angular/common';
     .audit-entry { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.875rem; }
     .audit-time { color: #94a3b8; margin-left: 8px; }
     .changes { margin: 4px 0 0 1rem; font-size: 0.8rem; color: #64748b; }
+    @media (max-width: 768px) {
+      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+      .header-actions { flex-wrap: wrap; }
+      .detail-grid { grid-template-columns: 1fr 1fr; gap: 1rem; }
+      .detail-card { padding: 1rem; }
+    }
+    @media (max-width: 480px) {
+      .detail-grid { grid-template-columns: 1fr; }
+      .dist-amount { min-width: 0; }
+      .dist-pct { min-width: 0; }
+    }
   `],
 })
 export class TransactionDetailComponent implements OnInit {
@@ -240,7 +251,8 @@ export class TransactionDetailComponent implements OnInit {
 
   openDistributionDialog(): void {
     const ref = this.dialog.open(DistributionDialogComponent, {
-      width: '500px',
+      width: '90vw',
+      maxWidth: '500px',
       data: { transaction: this.transaction() },
     });
 

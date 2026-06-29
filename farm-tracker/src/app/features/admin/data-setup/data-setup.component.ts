@@ -289,6 +289,13 @@ import {
     .budget-seg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 0.75rem; }
     .budget-fields { display: flex; gap: 1rem; flex-wrap: wrap; }
     .budget-fields mat-form-field { flex: 1; min-width: 200px; }
+    @media (max-width: 768px) {
+      .seed-banner { flex-direction: column; text-align: center; }
+      .seed-banner button { margin-left: 0; }
+      .add-form mat-form-field { min-width: 0; flex-basis: 100%; }
+      .budget-fields mat-form-field { min-width: 0; flex-basis: 100%; }
+      .section-header { flex-direction: column; gap: 0.5rem; align-items: flex-start; }
+    }
   `],
 })
 export class DataSetupComponent implements OnInit {

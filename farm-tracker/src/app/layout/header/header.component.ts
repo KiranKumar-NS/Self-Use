@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, output } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -13,6 +13,9 @@ import { NotificationBellComponent } from '../notification-bell/notification-bel
   imports: [MatToolbarModule, MatButtonModule, MatIconModule, MatMenuModule, NotificationBellComponent],
   template: `
     <mat-toolbar class="header">
+      <button mat-icon-button class="menu-btn" (click)="menuToggle.emit()">
+        <mat-icon>menu</mat-icon>
+      </button>
       <span class="spacer"></span>
 
       <div class="user-info">
@@ -42,6 +45,7 @@ import { NotificationBellComponent } from '../notification-bell/notification-bel
       border-bottom: 1px solid #e2e8f0;
       box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
+    .menu-btn { display: none; }
     .spacer { flex: 1; }
     .user-info {
       display: flex;
@@ -52,11 +56,16 @@ import { NotificationBellComponent } from '../notification-bell/notification-bel
       font-size: 0.875rem;
       font-weight: 500;
     }
+    @media (max-width: 768px) {
+      .menu-btn { display: inline-flex; }
+      .user-name { display: none; }
+    }
   `],
 })
 export class HeaderComponent {
   auth = inject(AuthService);
   private router = inject(Router);
+  menuToggle = output();
 
   async logout(): Promise<void> {
     await this.auth.logout();

@@ -76,7 +76,11 @@ import { MatChipsModule } from '@angular/material/chips';
   `,
   styles: [`
     .register-container { padding: 24px; }
-    .register-card { max-width: 500px; padding: 1.5rem; }
+    .register-card { width: 100%; max-width: 500px; padding: 1.5rem; }
+    @media (max-width: 480px) {
+      .register-card { padding: 1rem; }
+      .register-container { padding: 16px; }
+    }
     .full-width { width: 100%; }
     .error-message {
       background: #fef2f2; color: #dc2626;

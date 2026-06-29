@@ -75,8 +75,8 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
                 <th>Segment</th>
                 <th>Event</th>
                 <th>Count</th>
-                <th>Note</th>
-                <th>By</th>
+                <th class="hide-mobile">Note</th>
+                <th class="hide-mobile">By</th>
                 @if (!auth.isViewer()) {
                   <th class="actions-th">Actions</th>
                 }
@@ -91,8 +91,8 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
                   <td class="count-cell" [class.positive]="ev.count > 0" [class.negative]="ev.count < 0">
                     {{ ev.count > 0 ? '+' : '' }}{{ ev.count }}
                   </td>
-                  <td class="note-cell">{{ ev.note || '-' }}</td>
-                  <td>{{ ev.createdByName }}</td>
+                  <td class="note-cell hide-mobile">{{ ev.note || '-' }}</td>
+                  <td class="hide-mobile">{{ ev.createdByName }}</td>
                   @if (!auth.isViewer()) {
                     <td class="actions-cell">
                       <button mat-icon-button (click)="editEvent(ev)" title="Edit">
@@ -146,6 +146,13 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
     .actions-cell { white-space: nowrap; text-align: center; }
     .actions-cell button { opacity: 0.5; }
     tr:hover .actions-cell button { opacity: 1; }
+    @media (max-width: 768px) {
+      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+      .filter-field { min-width: 0; width: 100%; }
+    }
+    @media (max-width: 640px) {
+      .hide-mobile { display: none; }
+    }
   `],
 })
 export class InventoryPageComponent implements OnInit {
@@ -171,7 +178,8 @@ export class InventoryPageComponent implements OnInit {
 
   openEventDialog(): void {
     const ref = this.dialog.open(InventoryEventDialogComponent, {
-      width: '500px',
+      width: '90vw',
+      maxWidth: '500px',
       data: {},
     });
     ref.afterClosed().subscribe(async (result) => {
@@ -185,7 +193,8 @@ export class InventoryPageComponent implements OnInit {
 
   editEvent(ev: InventoryEvent): void {
     const ref = this.dialog.open(InventoryEventDialogComponent, {
-      width: '500px',
+      width: '90vw',
+      maxWidth: '500px',
       data: { event: ev },
     });
     ref.afterClosed().subscribe(async (result) => {

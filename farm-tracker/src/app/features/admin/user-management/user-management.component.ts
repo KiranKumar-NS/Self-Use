@@ -29,9 +29,9 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
           <thead>
             <tr>
               <th>Name</th>
-              <th>Email</th>
+              <th class="hide-mobile">Email</th>
               <th>Role</th>
-              <th>Segments</th>
+              <th class="hide-mobile">Segments</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -40,11 +40,11 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
             @for (user of users(); track user.uid) {
               <tr>
                 <td>{{ user.displayName }}</td>
-                <td>{{ user.email }}</td>
+                <td class="hide-mobile">{{ user.email }}</td>
                 <td>
                   <span class="role-badge" [class]="user.role">{{ user.role }}</span>
                 </td>
-                <td>
+                <td class="hide-mobile">
                   @for (seg of user.assignedSegments; track seg) {
                     <span class="segment-chip">{{ seg }}</span>
                   }
@@ -79,6 +79,12 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
     .role-badge.manager { background: #dbeafe; color: #2563eb; }
     .role-badge.viewer { background: #f1f5f9; color: #64748b; }
     .segment-chip { background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-right: 4px; }
+    @media (max-width: 768px) {
+      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+    }
+    @media (max-width: 640px) {
+      .hide-mobile { display: none; }
+    }
   `],
 })
 export class UserManagementComponent implements OnInit {

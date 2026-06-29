@@ -114,6 +114,12 @@ import { DatePipe } from '@angular/common';
     .assignee { font-size: 0.7rem; color: #94a3b8; margin-top: 6px; display: block; }
     .cdk-drag-preview { box-shadow: 0 8px 24px rgba(0,0,0,0.15); border-radius: 8px; }
     .cdk-drag-placeholder { opacity: 0.3; border: 2px dashed #94a3b8; border-radius: 8px; }
+    @media (max-width: 768px) {
+      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+      .header-actions { flex-wrap: wrap; gap: 8px; }
+      .kanban-container { padding-bottom: 0.5rem; }
+      .kanban-column { min-width: 80vw; max-width: none; }
+    }
   `],
 })
 export class KanbanBoardComponent implements OnInit {

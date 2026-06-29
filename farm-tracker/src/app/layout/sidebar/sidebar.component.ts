@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, input, output } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { MatListModule } from '@angular/material/list';
@@ -9,52 +9,55 @@ import { MatIconModule } from '@angular/material/icon';
   standalone: true,
   imports: [RouterLink, RouterLinkActive, MatListModule, MatIconModule],
   template: `
-    <div class="sidebar">
+    @if (open()) {
+      <div class="overlay" (click)="closed.emit()"></div>
+    }
+    <div class="sidebar" [class.open]="open()">
       <div class="logo">
         <h2>Farm Tracker</h2>
         <p class="text-sm text-gray-400">Financial Management</p>
       </div>
 
       <nav class="nav-links">
-        <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">
+        <a routerLink="/dashboard" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
           <mat-icon>dashboard</mat-icon>
           <span>Dashboard</span>
         </a>
 
         @if (!auth.isViewer()) {
-          <a routerLink="/transactions" routerLinkActive="active" class="nav-item">
+          <a routerLink="/transactions" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
             <mat-icon>receipt_long</mat-icon>
             <span>Transactions</span>
           </a>
 
-          <a routerLink="/loans" routerLinkActive="active" class="nav-item">
+          <a routerLink="/loans" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
             <mat-icon>account_balance</mat-icon>
             <span>Owe & Lent</span>
           </a>
 
-          <a routerLink="/inventory" routerLinkActive="active" class="nav-item">
+          <a routerLink="/inventory" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
             <mat-icon>inventory_2</mat-icon>
             <span>Inventory</span>
           </a>
         }
 
-        <a routerLink="/tasks" routerLinkActive="active" class="nav-item">
+        <a routerLink="/tasks" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
           <mat-icon>view_kanban</mat-icon>
           <span>Tasks</span>
         </a>
 
-        <a routerLink="/analytics" routerLinkActive="active" class="nav-item">
+        <a routerLink="/analytics" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
           <mat-icon>analytics</mat-icon>
           <span>Analytics</span>
         </a>
 
         @if (auth.isAdmin()) {
-          <a routerLink="/admin" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item">
+          <a routerLink="/admin" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item" (click)="closed.emit()">
             <mat-icon>admin_panel_settings</mat-icon>
             <span>Admin</span>
           </a>
 
-          <a routerLink="/admin/data-setup" routerLinkActive="active" class="nav-item">
+          <a routerLink="/admin/data-setup" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
             <mat-icon>dataset</mat-icon>
             <span>Data Setup</span>
           </a>
@@ -73,6 +76,10 @@ import { MatIconModule } from '@angular/material/icon';
       left: 0;
       top: 0;
       z-index: 50;
+      transition: transform 0.3s ease;
+    }
+    .overlay {
+      display: none;
     }
     .logo {
       padding: 1rem 1.5rem;
@@ -114,8 +121,26 @@ import { MatIconModule } from '@angular/material/icon';
       width: 20px;
       height: 20px;
     }
+    @media (max-width: 768px) {
+      .sidebar {
+        transform: translateX(-100%);
+        z-index: 100;
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      .overlay {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 99;
+      }
+    }
   `],
 })
 export class SidebarComponent {
   auth = inject(AuthService);
+  open = input(false);
+  closed = output();
 }

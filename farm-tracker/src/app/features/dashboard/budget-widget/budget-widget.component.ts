@@ -48,6 +48,10 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
     mat-progress-bar.safe { --mdc-linear-progress-active-indicator-color: #16a34a; }
     mat-progress-bar.warning { --mdc-linear-progress-active-indicator-color: #d97706; }
     mat-progress-bar.exceeded { --mdc-linear-progress-active-indicator-color: #dc2626; }
+    @media (max-width: 480px) {
+      .budget-info { flex-direction: column; gap: 2px; }
+      .budget-text { font-size: 0.75rem; }
+    }
   `],
 })
 export class BudgetWidgetComponent {

@@ -156,6 +156,10 @@ import { MatRadioModule } from '@angular/material/radio';
     .field-label {
       font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600;
     }
+    @media (max-width: 640px) {
+      .form-row { flex-direction: column; gap: 0; }
+      .form-card { padding: 1rem; }
+    }
   `],
 })
 export class TransactionFormComponent implements OnInit {

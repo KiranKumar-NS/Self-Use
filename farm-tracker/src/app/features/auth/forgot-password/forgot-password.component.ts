@@ -46,7 +46,10 @@ import { MatButtonModule } from '@angular/material/button';
       display: flex; align-items: center; justify-content: center;
       min-height: 100vh; background: #f1f5f9;
     }
-    .forgot-card { width: 400px; padding: 2rem; }
+    .forgot-card { width: 100%; max-width: 400px; padding: 2rem; margin: 0 1rem; }
+    @media (max-width: 480px) {
+      .forgot-card { padding: 1rem; }
+    }
     .full-width { width: 100%; }
     .error-message { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
     .success-message { background: #f0fdf4; color: #16a34a; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }

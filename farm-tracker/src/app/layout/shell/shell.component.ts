@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { SidebarComponent } from '../sidebar/sidebar.component';
 import { HeaderComponent } from '../header/header.component';
@@ -10,9 +10,9 @@ import { NotificationService } from '../../core/services/notification.service';
   imports: [RouterOutlet, SidebarComponent, HeaderComponent],
   template: `
     <div class="app-layout">
-      <app-sidebar />
+      <app-sidebar [open]="sidebarOpen()" (closed)="sidebarOpen.set(false)" />
       <div class="main-area">
-        <app-header />
+        <app-header (menuToggle)="sidebarOpen.set(!sidebarOpen())" />
         <main class="content">
           <router-outlet />
         </main>
@@ -35,10 +35,15 @@ import { NotificationService } from '../../core/services/notification.service';
       padding: 24px;
       background: #f8fafc;
     }
+    @media (max-width: 768px) {
+      .main-area { margin-left: 0; }
+      .content { padding: 16px; }
+    }
   `],
 })
 export class ShellComponent implements OnInit {
   private notificationService = inject(NotificationService);
+  sidebarOpen = signal(false);
 
   ngOnInit(): void {
     this.notificationService.refresh().catch(() => {});

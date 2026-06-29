@@ -17,7 +17,7 @@ import { DatePipe } from '@angular/common';
     @if (task()) {
       <div class="page-header">
         <h1>{{ task()!.title }}</h1>
-        <div>
+        <div class="header-actions">
           <button mat-stroked-button (click)="edit()"><mat-icon>edit</mat-icon> Edit</button>
           <button mat-button color="warn" (click)="deleteTask()"><mat-icon>delete</mat-icon></button>
           <button mat-button (click)="back()">Back</button>
@@ -80,7 +80,8 @@ import { DatePipe } from '@angular/common';
   `,
   styles: [`
     .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-    .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; }
+    .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; word-break: break-word; }
+    .header-actions { display: flex; gap: 4px; flex-wrap: wrap; }
     .detail-card { padding: 1.5rem; }
     .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1.5rem; }
     .detail-item label { display: block; font-size: 0.7rem; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
@@ -102,6 +103,14 @@ import { DatePipe } from '@angular/common';
     .subtask-item { padding: 6px 0; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; }
     .subtask-due { font-size: 0.7rem; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; }
     .done-text { text-decoration: line-through; color: #94a3b8; }
+    @media (max-width: 768px) {
+      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+      .detail-grid { grid-template-columns: 1fr 1fr; gap: 1rem; }
+      .detail-card { padding: 1rem; }
+    }
+    @media (max-width: 480px) {
+      .detail-grid { grid-template-columns: 1fr; }
+    }
   `],
 })
 export class TaskDetailComponent implements OnInit {

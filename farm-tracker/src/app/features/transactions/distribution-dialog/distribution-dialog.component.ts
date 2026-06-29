@@ -121,6 +121,12 @@ interface DistributionRow {
       background: #fef2f2; color: #dc2626; padding: 8px 16px;
       border-radius: 6px; margin-top: 12px;
     }
+    @media (max-width: 480px) {
+      .dist-row { flex-wrap: wrap; gap: 8px; }
+      .person-name { min-width: 0; }
+      .amount-field { width: 100%; }
+      .summary-bar { flex-direction: column; gap: 4px; }
+    }
   `],
 })
 export class DistributionDialogComponent implements OnInit {

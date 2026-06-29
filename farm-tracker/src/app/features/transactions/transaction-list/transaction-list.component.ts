@@ -122,9 +122,9 @@ import { getMonthString } from '../../../core/utils/date.utils';
                 <th>Segment</th>
                 <th>Category</th>
                 <th>Amount</th>
-                <th>Paid Via</th>
-                <th>By</th>
-                <th>Description</th>
+                <th class="hide-mobile">Paid Via</th>
+                <th class="hide-mobile">By</th>
+                <th class="hide-mobile">Description</th>
                 <th class="actions-th">Actions</th>
               </tr>
             </thead>
@@ -147,11 +147,11 @@ import { getMonthString } from '../../../core/utils/date.utils';
                   <td>{{ txn.segmentName }}</td>
                   <td>{{ txn.categoryName }}</td>
                   <td class="amount-cell" [class]="txn.type">{{ txn.amount | currencyInr }}</td>
-                  <td>
+                  <td class="hide-mobile">
                     <span class="payment-badge" [class]="txn.paymentMethod || 'cash'">{{ (txn.paymentMethod || 'cash') | uppercase }}</span>
                   </td>
-                  <td class="by-cell">{{ txn.paidByName || txn.createdByName }}</td>
-                  <td class="desc-cell">{{ txn.description || '-' }}</td>
+                  <td class="by-cell hide-mobile">{{ txn.paidByName || txn.createdByName }}</td>
+                  <td class="desc-cell hide-mobile">{{ txn.description || '-' }}</td>
                   <td class="actions-cell" (click)="$event.stopPropagation()">
                     <button mat-icon-button (click)="edit(txn.id)" title="Edit">
                       <mat-icon>edit</mat-icon>
@@ -270,6 +270,15 @@ import { getMonthString } from '../../../core/utils/date.utils';
 
     .load-more { text-align: center; padding: 1.5rem; }
     .load-more button { padding: 8px 24px; }
+    @media (max-width: 768px) {
+      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+      .filter-field { min-width: 0; flex-basis: 100%; }
+      .search-field { min-width: 0; }
+      .filter-card { padding: 0.75rem; }
+    }
+    @media (max-width: 640px) {
+      .hide-mobile { display: none; }
+    }
   `],
 })
 export class TransactionListComponent implements OnInit {

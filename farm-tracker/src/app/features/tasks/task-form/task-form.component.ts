@@ -141,11 +141,17 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
     .subtasks-section { margin: 1rem 0; }
     .subtasks-section h3 { font-size: 0.9rem; color: #475569; margin-bottom: 8px; }
     .subtask-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-    .subtask-input { flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; }
+    .subtask-input { flex: 1; min-width: 0; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; }
     .subtask-input:focus { outline: none; border-color: #4f46e5; }
     .subtask-date { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font-size: 0.8rem; color: #475569; width: 140px; }
     .subtask-date:focus { outline: none; border-color: #4f46e5; }
     .add-btn { color: #4f46e5; font-size: 0.85rem; }
+    @media (max-width: 640px) {
+      .form-row { flex-direction: column; gap: 0; }
+      .form-card { padding: 1rem; }
+      .subtask-row { flex-wrap: wrap; }
+      .subtask-date { width: 100%; }
+    }
   `],
 })
 export class TaskFormComponent implements OnInit {

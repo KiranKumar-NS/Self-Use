@@ -34,7 +34,7 @@ import { DatePipe } from '@angular/common';
     } @else if (loan()) {
       <div class="page-header">
         <h1>{{ loan()!.type === 'given' ? 'Lent' : 'Owed' }} Detail</h1>
-        <div>
+        <div class="header-actions">
           @if (loan()!.repaymentStatus === 'pending') {
             <button mat-stroked-button (click)="edit()">
               <mat-icon>edit</mat-icon> Edit
@@ -192,6 +192,7 @@ import { DatePipe } from '@angular/common';
   styles: [`
     .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     .page-header h1 { margin: 0; font-size: 1.5rem; }
+    .header-actions { display: flex; gap: 4px; flex-wrap: wrap; }
     .detail-card { padding: 1.5rem; }
     .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
     .detail-item label { display: block; font-size: 0.75rem; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
@@ -221,6 +222,15 @@ import { DatePipe } from '@angular/common';
     .disbursement { background: #fefce8; }
     .disbursement-amount { color: #d97706; }
     .repayment-amount { color: #16a34a; }
+    @media (max-width: 768px) {
+      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+      .detail-grid { grid-template-columns: 1fr 1fr; gap: 1rem; }
+      .detail-card { padding: 1rem; }
+      .repayment-form mat-form-field { min-width: 0; flex-basis: 100%; }
+    }
+    @media (max-width: 480px) {
+      .detail-grid { grid-template-columns: 1fr; }
+    }
   `],
 })
 export class LoanDetailComponent implements OnInit {

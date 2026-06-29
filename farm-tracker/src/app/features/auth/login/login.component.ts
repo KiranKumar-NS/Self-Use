@@ -56,8 +56,10 @@ import { MatIconModule } from '@angular/material/icon';
       background: #f1f5f9;
     }
     .login-card {
-      width: 400px;
+      width: 100%;
+      max-width: 400px;
       padding: 2rem;
+      margin: 0 1rem;
     }
     .full-width { width: 100%; }
     .error-message {

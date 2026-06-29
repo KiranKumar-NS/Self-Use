@@ -96,6 +96,11 @@ import { MatRadioModule } from '@angular/material/radio';
     .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
     .error-message { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
     mat-radio-group { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
+    @media (max-width: 640px) {
+      .form-row { flex-direction: column; gap: 0; }
+      .form-card { padding: 1rem; }
+      mat-radio-group { flex-direction: column; gap: 0.5rem; }
+    }
   `],
 })
 export class LoanFormComponent implements OnInit {

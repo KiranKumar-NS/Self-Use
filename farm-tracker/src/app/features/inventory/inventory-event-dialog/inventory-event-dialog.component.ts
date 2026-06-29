@@ -84,6 +84,9 @@ export interface InventoryEventDialogData {
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
     .full-width { grid-column: 1 / -1; }
     .error-msg { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
+    @media (max-width: 480px) {
+      .form-grid { grid-template-columns: 1fr; }
+    }
   `],
 })
 export class InventoryEventDialogComponent implements OnInit {

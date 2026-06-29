@@ -75,6 +75,8 @@ import { MatIconModule } from '@angular/material/icon';
     @media (max-width: 768px) {
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .charts-grid { grid-template-columns: 1fr; }
+      .widgets-grid { grid-template-columns: 1fr; }
+      .month-label { min-width: 100px; font-size: 0.9rem; }
     }
   `],
 })
