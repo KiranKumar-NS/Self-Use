@@ -5,6 +5,8 @@ import { Transaction } from '../../core/models/transaction.model';
 import { TransactionService } from '../../core/services/transaction.service';
 import { ExportService } from '../../core/services/export.service';
 import { SummaryService } from '../../core/services/summary.service';
+import { SegmentService } from '../../core/services/segment.service';
+import { Segment } from '../../core/models/segment.model';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { WhatsappShareDialogComponent, WhatsappShareData } from './whatsapp-share-dialog.component';
 import { getMonthRange } from '../../core/utils/date.utils';
@@ -339,6 +341,7 @@ export class AnalyticsComponent implements OnInit {
   private transactionService = inject(TransactionService);
   private exportService = inject(ExportService);
   private summaryService = inject(SummaryService);
+  private segmentService = inject(SegmentService);
   private dialog = inject(MatDialog);
 
   loading = signal(true);
@@ -370,6 +373,8 @@ export class AnalyticsComponent implements OnInit {
   personTotals = signal<{ name: string; total: number; segments: { name: string; total: number }[] }[]>([]);
   investmentSummary = signal<{ name: string; expensesPaid: number; incomeReceived: number; net: number }[]>([]);
   maxInvestment = signal(0);
+  incomeTransactions = signal<Transaction[]>([]);
+  segments = signal<Segment[]>([]);
 
   // Charts
   segmentChartData: ChartConfiguration<'doughnut'>['data'] = { labels: [], datasets: [] };
@@ -400,6 +405,7 @@ export class AnalyticsComponent implements OnInit {
       this.availableMonths.push({ value, label });
     }
 
+    this.segments.set(await this.segmentService.getAll());
     await this.loadTransactions();
     this.loading.set(false);
   }
@@ -452,6 +458,7 @@ export class AnalyticsComponent implements OnInit {
     // 2. Income distributions received per person
     try {
       const incomeResult = await this.transactionService.getAll({ type: 'income' }, 200);
+      this.incomeTransactions.set(incomeResult.transactions);
       for (const txn of incomeResult.transactions) {
         if (!txn.distributions?.length) continue;
         for (const d of txn.distributions) {
@@ -615,12 +622,29 @@ export class AnalyticsComponent implements OnInit {
       .map(([name, total]) => ({ name, total }))
       .sort((a, b) => b.total - a.total);
 
+    // Income details for the filtered range
+    let incomeForRange = this.incomeTransactions();
+    if (this.filterFromMonth) incomeForRange = incomeForRange.filter(t => t.month >= this.filterFromMonth);
+    if (this.filterToMonth) incomeForRange = incomeForRange.filter(t => t.month <= this.filterToMonth);
+    if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segmentName === this.filterSegment);
+
+    const incomeDetails = incomeForRange.map(t => ({ segmentName: t.segmentName, categoryName: t.categoryName, amount: t.amount }));
+    const totalIncome = incomeForRange.reduce((s, t) => s + t.amount, 0);
+
+    // Stock details
+    const stockDetails = this.segments()
+      .filter(s => s.isActive && (s.currentStock ?? 0) > 0)
+      .map(s => ({ name: s.name, icon: s.icon, count: s.currentStock || 0 }));
+
     const data: WhatsappShareData = {
       rangeLabel: this.rangeLabel,
       totalExpense: this.totalExpense(),
       investmentSummary: this.investmentSummary(),
       segmentTotals: this.segmentTotals(),
       categoryBreakdown,
+      incomeDetails,
+      totalIncome,
+      stockDetails,
     };
     this.dialog.open(WhatsappShareDialogComponent, { data, width: '90vw', maxWidth: '360px' });
   }

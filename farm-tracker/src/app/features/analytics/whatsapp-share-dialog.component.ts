@@ -12,6 +12,9 @@ export interface WhatsappShareData {
   investmentSummary: { name: string; expensesPaid: number; incomeReceived: number; net: number }[];
   segmentTotals: { name: string; total: number; count: number }[];
   categoryBreakdown: { name: string; total: number }[];
+  incomeDetails: { segmentName: string; categoryName: string; amount: number }[];
+  totalIncome: number;
+  stockDetails: { name: string; icon: string; count: number }[];
 }
 
 @Component({
@@ -27,6 +30,8 @@ export interface WhatsappShareData {
         <mat-checkbox [(ngModel)]="includeSegments">Segment Breakdown</mat-checkbox>
         <mat-checkbox [(ngModel)]="includeCategories">Category Breakdown</mat-checkbox>
         <mat-checkbox [(ngModel)]="includePersons">Person Investment Summary</mat-checkbox>
+        <mat-checkbox [(ngModel)]="includeIncome">Income Details</mat-checkbox>
+        <mat-checkbox [(ngModel)]="includeStock">Stock Details</mat-checkbox>
       </div>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
@@ -50,9 +55,11 @@ export class WhatsappShareDialogComponent {
   includeSegments = true;
   includeCategories = true;
   includePersons = true;
+  includeIncome = true;
+  includeStock = true;
 
   hasSelection(): boolean {
-    return this.includeOverall || this.includeSegments || this.includeCategories || this.includePersons;
+    return this.includeOverall || this.includeSegments || this.includeCategories || this.includePersons || this.includeIncome || this.includeStock;
   }
 
   share(): void {
@@ -98,6 +105,27 @@ export class WhatsappShareDialogComponent {
       lines.push('👤 *Person Investment*');
       for (const p of this.data.investmentSummary) {
         lines.push(`${p.name}: ${formatCurrency(p.net)} (Paid: ${formatCurrency(p.expensesPaid)} | Received: ${formatCurrency(p.incomeReceived)})`);
+      }
+    }
+
+    if (this.includeIncome && this.data.incomeDetails.length > 0) {
+      lines.push('');
+      lines.push('💵 *Income Details*');
+      lines.push(`Total Income: ${formatCurrency(this.data.totalIncome)}`);
+      const segMap = new Map<string, number>();
+      for (const inc of this.data.incomeDetails) {
+        segMap.set(inc.segmentName, (segMap.get(inc.segmentName) || 0) + inc.amount);
+      }
+      for (const [seg, total] of Array.from(segMap.entries()).sort((a, b) => b[1] - a[1])) {
+        lines.push(`${seg}: ${formatCurrency(total)}`);
+      }
+    }
+
+    if (this.includeStock && this.data.stockDetails.length > 0) {
+      lines.push('');
+      lines.push('🐄 *Current Stock*');
+      for (const s of this.data.stockDetails) {
+        lines.push(`${s.icon} ${s.name}: ${s.count}`);
       }
     }
 
