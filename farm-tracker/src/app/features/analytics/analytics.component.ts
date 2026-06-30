@@ -114,8 +114,17 @@ import { getMonthString } from '../../core/utils/date.utils';
       <div class="summary-grid">
         <mat-card class="stat-card total">
           <span class="stat-label">Total Expense</span>
-          <span class="stat-value">{{ totalExpense() | currencyInr }}</span>
+          <span class="stat-value expense-text">{{ totalExpense() | currencyInr }}</span>
           <span class="stat-count">{{ filtered().length }} transactions</span>
+        </mat-card>
+        <mat-card class="stat-card income-card">
+          <span class="stat-label">Total Income</span>
+          <span class="stat-value income-text">{{ totalIncomeAmount() | currencyInr }}</span>
+          <span class="stat-count">{{ filteredIncome().length }} transactions</span>
+        </mat-card>
+        <mat-card class="stat-card" [class.profit]="netProfit() >= 0" [class.loss]="netProfit() < 0">
+          <span class="stat-label">Net Profit/Loss</span>
+          <span class="stat-value" [class.income-text]="netProfit() >= 0" [class.expense-text]="netProfit() < 0">{{ netProfit() | currencyInr }}</span>
         </mat-card>
         @for (seg of segmentTotals(); track seg.name) {
           <mat-card class="stat-card">
@@ -274,6 +283,11 @@ import { getMonthString } from '../../core/utils/date.utils';
     .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
     .stat-card { padding: 1.25rem; display: flex; flex-direction: column; border-left: 4px solid #e2e8f0; }
     .stat-card.total { border-color: #4f46e5; background: #f5f3ff; }
+    .stat-card.income-card { border-color: #16a34a; background: #f0fdf4; }
+    .stat-card.profit { border-color: #16a34a; background: #f0fdf4; }
+    .stat-card.loss { border-color: #dc2626; background: #fef2f2; }
+    .expense-text { color: #dc2626; }
+    .income-text { color: #16a34a; }
     .stat-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
     .stat-value { font-size: 1.5rem; font-weight: 700; color: #1e293b; margin: 4px 0; }
     .stat-count { font-size: 0.75rem; color: #94a3b8; }
@@ -375,6 +389,9 @@ export class AnalyticsComponent implements OnInit {
   maxInvestment = signal(0);
   incomeTransactions = signal<Transaction[]>([]);
   segments = signal<Segment[]>([]);
+  totalIncomeAmount = signal(0);
+  netProfit = signal(0);
+  filteredIncome = signal<Transaction[]>([]);
 
   // Charts
   segmentChartData: ChartConfiguration<'doughnut'>['data'] = { labels: [], datasets: [] };
@@ -459,6 +476,16 @@ export class AnalyticsComponent implements OnInit {
     try {
       const incomeResult = await this.transactionService.getAll({ type: 'income' }, 200);
       this.incomeTransactions.set(incomeResult.transactions);
+
+      // Filter income for the selected month range
+      let incomeForRange = incomeResult.transactions;
+      if (this.filterFromMonth) incomeForRange = incomeForRange.filter(t => t.month >= this.filterFromMonth);
+      if (this.filterToMonth) incomeForRange = incomeForRange.filter(t => t.month <= this.filterToMonth);
+      this.filteredIncome.set(incomeForRange);
+      const incomeTotal = incomeForRange.reduce((s, t) => s + t.amount, 0);
+      this.totalIncomeAmount.set(incomeTotal);
+      this.netProfit.set(incomeTotal - this.totalExpense());
+
       for (const txn of incomeResult.transactions) {
         if (!txn.distributions?.length) continue;
         for (const d of txn.distributions) {
