@@ -6,6 +6,16 @@ import { MatIconModule } from '@angular/material/icon';
 import { FormsModule } from '@angular/forms';
 import { formatCurrency } from '../../core/utils/firestore.utils';
 
+export interface ShareTransaction {
+  date: string; // formatted date
+  type: 'expense' | 'income';
+  segmentName: string;
+  categoryName: string;
+  amount: number;
+  paymentMethod: string;
+  paidByName: string;
+}
+
 export interface WhatsappShareData {
   rangeLabel: string;
   totalExpense: number;
@@ -15,6 +25,7 @@ export interface WhatsappShareData {
   incomeDetails: { segmentName: string; categoryName: string; amount: number }[];
   totalIncome: number;
   stockDetails: { name: string; icon: string; count: number }[];
+  transactions: ShareTransaction[];
 }
 
 @Component({
@@ -32,6 +43,7 @@ export interface WhatsappShareData {
         <mat-checkbox [(ngModel)]="includePersons">Person Investment Summary</mat-checkbox>
         <mat-checkbox [(ngModel)]="includeIncome">Income Details</mat-checkbox>
         <mat-checkbox [(ngModel)]="includeStock">Stock Details</mat-checkbox>
+        <mat-checkbox [(ngModel)]="includeTransactions">Transaction List</mat-checkbox>
       </div>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
@@ -57,9 +69,10 @@ export class WhatsappShareDialogComponent {
   includePersons = true;
   includeIncome = true;
   includeStock = true;
+  includeTransactions = true;
 
   hasSelection(): boolean {
-    return this.includeOverall || this.includeSegments || this.includeCategories || this.includePersons || this.includeIncome || this.includeStock;
+    return this.includeOverall || this.includeSegments || this.includeCategories || this.includePersons || this.includeIncome || this.includeStock || this.includeTransactions;
   }
 
   share(): void {
@@ -127,6 +140,35 @@ export class WhatsappShareDialogComponent {
       for (const s of this.data.stockDetails) {
         lines.push(`${s.icon} ${s.name}: ${s.count}`);
       }
+    }
+
+    if (this.includeTransactions && this.data.transactions.length > 0) {
+      lines.push('');
+      lines.push('📋 *Transactions*');
+
+      // Group by date
+      const grouped = new Map<string, typeof this.data.transactions>();
+      for (const txn of this.data.transactions) {
+        const list = grouped.get(txn.date) || [];
+        list.push(txn);
+        grouped.set(txn.date, list);
+      }
+
+      for (const [date, txns] of grouped) {
+        lines.push('');
+        lines.push(`📅 *${date}*`);
+        for (const t of txns) {
+          const icon = t.type === 'expense' ? '🔴' : '🟢';
+          const method = t.paymentMethod?.toUpperCase() || 'CASH';
+          lines.push(`${icon} ${t.segmentName} | ${t.categoryName} | ${formatCurrency(t.amount)} (${method}) - ${t.paidByName}`);
+        }
+      }
+
+      const totalExp = this.data.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+      const totalInc = this.data.transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+      lines.push('');
+      lines.push(`─────────────────`);
+      lines.push(`Total Expense: ${formatCurrency(totalExp)} | Total Income: ${formatCurrency(totalInc)}`);
     }
 
     return lines.join('\n');

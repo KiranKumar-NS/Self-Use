@@ -8,7 +8,7 @@ import { SummaryService } from '../../core/services/summary.service';
 import { SegmentService } from '../../core/services/segment.service';
 import { Segment } from '../../core/models/segment.model';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { WhatsappShareDialogComponent, WhatsappShareData } from './whatsapp-share-dialog.component';
+import { WhatsappShareDialogComponent, WhatsappShareData, ShareTransaction } from './whatsapp-share-dialog.component';
 import { getMonthRange } from '../../core/utils/date.utils';
 import { CurrencyInrPipe } from '../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
@@ -636,6 +636,33 @@ export class AnalyticsComponent implements OnInit {
       .filter(s => s.isActive && (s.currentStock ?? 0) > 0)
       .map(s => ({ name: s.name, icon: s.icon, count: s.currentStock || 0 }));
 
+    // All transactions (expense + income) for the range, sorted by date desc
+    const formatDate = (d: Date) => {
+      const day = d.getDate().toString().padStart(2, '0');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${day}-${months[d.getMonth()]}-${d.getFullYear()}`;
+    };
+    const allTxns: ShareTransaction[] = [
+      ...this.filtered().map(t => ({
+        date: formatDate(t.date.toDate()),
+        type: t.type as 'expense' | 'income',
+        segmentName: t.segmentName,
+        categoryName: t.categoryName,
+        amount: t.amount,
+        paymentMethod: t.paymentMethod || 'cash',
+        paidByName: t.paidByName || t.createdByName || 'Unknown',
+      })),
+      ...incomeForRange.map(t => ({
+        date: formatDate(t.date.toDate()),
+        type: 'income' as const,
+        segmentName: t.segmentName,
+        categoryName: t.categoryName,
+        amount: t.amount,
+        paymentMethod: t.paymentMethod || 'cash',
+        paidByName: t.paidByName || t.createdByName || 'Unknown',
+      })),
+    ];
+
     const data: WhatsappShareData = {
       rangeLabel: this.rangeLabel,
       totalExpense: this.totalExpense(),
@@ -645,6 +672,7 @@ export class AnalyticsComponent implements OnInit {
       incomeDetails,
       totalIncome,
       stockDetails,
+      transactions: allTxns,
     };
     this.dialog.open(WhatsappShareDialogComponent, { data, width: '90vw', maxWidth: '360px' });
   }
