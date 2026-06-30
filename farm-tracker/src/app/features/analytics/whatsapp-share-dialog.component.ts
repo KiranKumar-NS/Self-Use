@@ -88,12 +88,11 @@ export class WhatsappShareDialogComponent {
     lines.push(`📊 Farm Summary (${label})`);
 
     if (this.includeOverall) {
-      const totalIncome = this.data.investmentSummary.reduce((s, p) => s + p.incomeReceived, 0);
-      const netProfit = totalIncome - this.data.totalExpense;
+      const netProfit = this.data.totalIncome - this.data.totalExpense;
       lines.push('');
       lines.push('💰 *Overall*');
       lines.push(`Total Expense: ${formatCurrency(this.data.totalExpense)}`);
-      lines.push(`Total Income: ${formatCurrency(totalIncome)}`);
+      lines.push(`Total Income: ${formatCurrency(this.data.totalIncome)}`);
       lines.push(`Net Profit: ${formatCurrency(netProfit)}`);
     }
 
