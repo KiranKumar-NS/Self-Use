@@ -14,7 +14,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatDatepickerModule } from '@angular/material/datepicker';
-import { MatNativeDateModule } from '@angular/material/core';
+
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
@@ -26,7 +26,7 @@ import { DatePipe } from '@angular/common';
   imports: [
     FormsModule, DatePipe, CurrencyInrPipe, LoadingSpinnerComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
-    MatDatepickerModule, MatNativeDateModule, MatProgressBarModule, MatSelectModule,
+    MatDatepickerModule, MatProgressBarModule, MatSelectModule,
   ],
   template: `
     @if (loading()) {

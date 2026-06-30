@@ -6,7 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
-import { MatNativeDateModule } from '@angular/material/core';
+
 import { InventoryService } from '../../../core/services/inventory.service';
 import { SegmentService } from '../../../core/services/segment.service';
 import { Segment } from '../../../core/models/segment.model';
@@ -22,7 +22,7 @@ export interface InventoryEventDialogData {
   standalone: true,
   imports: [
     FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule,
-    MatInputModule, MatSelectModule, MatDatepickerModule, MatNativeDateModule,
+    MatInputModule, MatSelectModule, MatDatepickerModule,
   ],
   template: `
     <h2 mat-dialog-title>{{ isEdit ? 'Edit' : 'Record' }} Inventory Event</h2>

@@ -6,7 +6,7 @@ import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideAuth, getAuth } from '@angular/fire/auth';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
-import { DateAdapter } from '@angular/material/core';
+import { DateAdapter, provideNativeDateAdapter } from '@angular/material/core';
 import { CustomDateAdapter } from './core/utils/custom-date-adapter';
 import { routes } from './app.routes';
 import { environment } from './environments/environment';
@@ -24,6 +24,7 @@ export const appConfig: ApplicationConfig = {
     provideAuth(() => getAuth()),
     provideFirestore(() => getFirestore()),
     provideCharts(withDefaultRegisterables()),
+    provideNativeDateAdapter(),
     { provide: DateAdapter, useClass: CustomDateAdapter },
   ],
 };
