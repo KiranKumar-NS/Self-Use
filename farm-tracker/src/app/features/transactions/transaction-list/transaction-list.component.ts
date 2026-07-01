@@ -11,6 +11,7 @@ import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
+import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/components/date-range-filter/date-range-filter.component';
 import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -27,7 +28,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
   standalone: true,
   imports: [
     FormsModule, DatePipe, UpperCasePipe, CurrencyInrPipe,
-    LoadingSpinnerComponent, EmptyStateComponent,
+    LoadingSpinnerComponent, EmptyStateComponent, DateRangeFilterComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule, MatSnackBarModule,
   ],
   template: `
@@ -42,6 +43,9 @@ import { getMonthString } from '../../../core/utils/date.utils';
       </button>
     </div>
 
+    <!-- Date Range Filter -->
+    <app-date-range-filter (rangeChange)="onRangeChange($event)" />
+
     <!-- Filters -->
     <mat-card class="filter-card">
       <div class="filter-header" (click)="filtersOpen = !filtersOpen">
@@ -50,7 +54,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
         @if (activeFilterCount() > 0) {
           <span class="filter-count">{{ activeFilterCount() }} active</span>
         }
-        @if (filterType || filterSegment || filterMonth || filterPaymentStatus || searchTerm) {
+        @if (filterType || filterSegment || filterPaymentStatus || searchTerm) {
           <button mat-button class="clear-btn" (click)="clearFilters(); $event.stopPropagation()">Clear All</button>
         }
         <mat-icon class="toggle-icon" [class.expanded]="filtersOpen">expand_more</mat-icon>
@@ -75,15 +79,6 @@ import { getMonthString } from '../../../core/utils/date.utils';
           </mat-select>
         </mat-form-field>
 
-        <mat-form-field appearance="outline" class="filter-field">
-          <mat-label>Month</mat-label>
-          <mat-select [(ngModel)]="filterMonth" (selectionChange)="loadData()">
-            <mat-option value="">All Months</mat-option>
-            @for (m of availableMonths; track m.value) {
-              <mat-option [value]="m.value">{{ m.label }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
         <mat-form-field appearance="outline" class="filter-field">
           <mat-label>Payment</mat-label>
           <mat-select [(ngModel)]="filterPaymentStatus">
@@ -294,15 +289,16 @@ export class TransactionListComponent implements OnInit {
   filtersOpen = window.innerWidth > 768;
   filterType = '';
   filterSegment = '';
-  filterMonth = getMonthString(new Date());
   filterPaymentStatus = '';
   searchTerm = '';
+
+  // Date range state
+  private currentSelection: DateRangeSelection = { mode: 'monthly', month: getMonthString(new Date()) };
 
   activeFilterCount = computed(() => {
     let count = 0;
     if (this.filterType) count++;
     if (this.filterSegment) count++;
-    if (this.filterMonth) count++;
     if (this.filterPaymentStatus) count++;
     if (this.searchTerm) count++;
     return count;
@@ -313,11 +309,15 @@ export class TransactionListComponent implements OnInit {
   pageSize = 20;
   currentPage = 1;
 
-  // Generate last 12 months for month filter
-  availableMonths = this.generateMonths(12);
-
   displayedTransactions(): Transaction[] {
     let filtered = this.transactions();
+
+    // Client-side month range filter for custom/alltime modes
+    if (this.currentSelection.mode === 'custom') {
+      filtered = filtered.filter(txn =>
+        txn.month >= this.currentSelection.fromMonth! && txn.month <= this.currentSelection.toMonth!
+      );
+    }
 
     if (this.filterPaymentStatus) {
       filtered = filtered.filter(txn => {
@@ -343,6 +343,10 @@ export class TransactionListComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.segments.set(await this.segmentService.getAll());
+  }
+
+  async onRangeChange(selection: DateRangeSelection): Promise<void> {
+    this.currentSelection = selection;
     await this.loadData();
   }
 
@@ -353,12 +357,17 @@ export class TransactionListComponent implements OnInit {
     const filters: any = {};
     if (this.filterType) filters.type = this.filterType;
     if (this.filterSegment) filters.segment = this.filterSegment;
-    if (this.filterMonth) filters.month = this.filterMonth;
 
-    const result = await this.transactionService.getAll(filters, 20);
+    // Use server-side month filter only for single month mode
+    if (this.currentSelection.mode === 'monthly') {
+      filters.month = this.currentSelection.month;
+    }
+
+    const limit = this.currentSelection.mode === 'monthly' ? 20 : 200;
+    const result = await this.transactionService.getAll(filters, limit);
     this.transactions.set(result.transactions);
     this.lastDoc = result.lastDoc;
-    this.hasMore.set(result.transactions.length === 20);
+    this.hasMore.set(result.transactions.length === limit);
     this.loading.set(false);
   }
 
@@ -366,12 +375,15 @@ export class TransactionListComponent implements OnInit {
     const filters: any = {};
     if (this.filterType) filters.type = this.filterType;
     if (this.filterSegment) filters.segment = this.filterSegment;
-    if (this.filterMonth) filters.month = this.filterMonth;
+    if (this.currentSelection.mode === 'monthly') {
+      filters.month = this.currentSelection.month;
+    }
 
-    const result = await this.transactionService.getAll(filters, 20, this.lastDoc);
+    const limit = this.currentSelection.mode === 'monthly' ? 20 : 200;
+    const result = await this.transactionService.getAll(filters, limit, this.lastDoc);
     this.transactions.update((prev) => [...prev, ...result.transactions]);
     this.lastDoc = result.lastDoc;
-    this.hasMore.set(result.transactions.length === 20);
+    this.hasMore.set(result.transactions.length === limit);
   }
 
   paginatedTransactions(): Transaction[] {
@@ -404,7 +416,6 @@ export class TransactionListComponent implements OnInit {
   clearFilters(): void {
     this.filterType = '';
     this.filterSegment = '';
-    this.filterMonth = '';
     this.filterPaymentStatus = '';
     this.searchTerm = '';
     this.loadData();
@@ -456,17 +467,5 @@ export class TransactionListComponent implements OnInit {
     if (status === 'full') return 'Distributed';
     if (status === 'partial') return 'Partial';
     return 'Undistributed';
-  }
-
-  private generateMonths(count: number): { value: string; label: string }[] {
-    const months: { value: string; label: string }[] = [];
-    const now = new Date();
-    for (let i = 0; i < count; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const value = getMonthString(d);
-      const label = d.toLocaleDateString('en-IN', { year: 'numeric', month: 'long' });
-      months.push({ value, label });
-    }
-    return months;
   }
 }

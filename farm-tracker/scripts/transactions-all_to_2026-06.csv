@@ -1,0 +1,84 @@
+Date,Type,Segment,Category,Amount,Paid By,Payment Method,Description,Quantity,Unit,Rate Per Unit,Payment Status,Distribution
+26-06-26,expense,Dragon,Medicine,1100,Sathish,,"Bilotox -620, rogor 250ml - 480",,,,,
+,,,,,,,,,,,,
+12-06-26,expense,Chickens,Feed,2800,Sathish,,Makka Cholam,200,kg,28,,
+12-06-26,expense,Chickens,Feed,2800,Kiran,,Makka Cholam,200,kg,28,,
+12-06-26,expense,Chickens,Feed,600,Sathish,,Rice,100,kg,12,,
+12-06-26,expense,Chickens,Feed,600,Kiran,,Rice,100,kg,12,,
+,,,,,,,,,,,,
+08-06-26,expense,Chickens,Animal Stock,4250,Sathish,,100 chicks,100,head,85,,
+08-06-26,expense,Chickens,Animal Stock,4250,Kiran,,100 chicks,100,head,85,,
+08-06-26,expense,Chickens,Transport,250,Sathish,,Delivery,,,,,
+08-06-26,expense,Chickens,Transport,250,Kiran,,Delivery,,,,,
+,,,,,,,,,,,,
+05-06-26,expense,Goats,Loan Repayment,10000,Sathish,,,,,,,
+05-06-26,expense,Goats,Loan Repayment,19170,Kiran,,,,,,,
+,,,,,,,,,,,,
+02-06-26,expense,Chickens,Animal Stock,4980,Sathish,,120 chicks,120,head,83,,
+02-06-26,expense,Chickens,Animal Stock,4980,Kiran,,120 chicks,120,head,83,,
+02-06-26,expense,Chickens,Transport,600,Sathish,,Petrol,,,,,
+02-06-26,expense,Chickens,Transport,600,Kiran,,Petrol,,,,,
+02-06-26,expense,Chickens,Feed,1375,Sathish,,Makka Cholam,100,kg,27.50,,
+02-06-26,expense,Chickens,Feed,1375,Kiran,,Makka Cholam,100,kg,27.50,,
+02-06-26,expense,Chickens,Feed,600,Sathish,,Rice,100,kg,12,,
+02-06-26,expense,Chickens,Feed,600,Kiran,,Rice,100,kg,12,,
+,,,,,,,,,,,,
+18-05-26,expense,Dragon,Farm Equipment,493,Sathish,,kairu,,,,,
+18-05-26,expense,Dragon,Labor,4400,Sathish,,"11*400=4,400   for plant tie",,,,,
+05-05-26,expense,Goats,Loan Repayment,10000,Sathish,,,,,,,
+05-05-26,expense,Goats,Loan Repayment,19170,Kiran,,,,,,,
+,,,,,,,,,,,,
+02-05-26,expense,Chickens,Animal Stock,2800,Sathish,,70 chicks,70,head,80,,
+02-05-26,expense,Chickens,Animal Stock,2800,Kiran,,70 chicks,70,head,80,,
+02-05-26,expense,Chickens,Feed,2150,Sathish,,Feed,2,bag,2150,,
+02-05-26,expense,Chickens,Feed,2150,Kiran,,Feed,2,bag,2150,,
+,,,,,,,,,,,,
+02-05-26,expense,Dragon,Maintenance,7500,Sathish,,"3 load earuvu 3*1500=4,500 
+
+Old 2 load earuvu 2*1500=3,000 
+
+Total ₹=7500",,,,,
+,,,,,,,,,,,,
+27-04-26,expense,Dragon,Labor,1550,Sathish,,"sparyer ku 1000 rs 
+
+petrol 200 rs 
+
+gun 350 rs 
+
+total =1550rs  for clay spray",,,,,
+09-04-26,expense,Dragon,Maintenance,1382,Sathish,,NOVOFILL 90 and proter charge 1102 + 280,,,,,
+05-04-26,expense,Goats,Loan Repayment,10000,Sathish,,,,,,,
+05-04-26,expense,Goats,Loan Repayment,19170,Kiran,,,,,,,
+12-03-26,expense,Dragon,Farm Equipment,660,Gold Loan,,kairu,,,,,
+12-03-26,expense,Dragon,Labor,2000,Gold Loan,,"4*500=2,000",,,,,
+05-03-26,expense,Goats,Loan Repayment,10000,Sathish,,,,,,,
+05-03-26,expense,Goats,Loan Repayment,19170,Kiran,,,,,,,
+02-03-26,expense,Dragon,Labor,5100,Gold Loan,,"6*850=5,100 labour saturday",,,,,
+23-02-26,expense,Dragon,Labor,1950,Gold Loan,,"650 *3=1,950 magic driver",,,,,
+22-02-26,expense,Dragon,Medicine,7300,Gold Loan,,"Dap (2*50kg)=100kg
+9.24.24(1*50)=50 kg
+Poly sulphate (1*50kg)=50kg
+
+humic acid and funguside 
+
+total 7300",,,,,
+22-02-26,expense,Goats,Feed,1890,Sathish,,feed one bag 1240 + kalla pottu 1 bag 650,,,,,
+21-02-26,expense,Dragon,Labor,14750,Gold Loan,,"labour
+ day 21/2/2026= 15
+ day 22/2/2026=11
+ day 23/2/2026=9
+
+total   35*400=14000
+
+food one day 50*15=750",,,,,
+13-02-26,expense,Goats,Feed,1990,Sathish,,750 +1240 update panniko kalla potu andsakka potuu,,,,,
+09-02-26,expense,Dragon,Labor,900,Sathish,,2*450=900  people tie ,,,,,
+08-02-26,expense,Goats,Feed,2500,Sathish,,1250*2=2500,,,,,
+05-02-26,expense,Goats,Loan Repayment,19170,Kiran,,,,,,,
+05-02-26,expense,Goats,Loan Repayment,10000,Sathish,,,,,,,
+16-01-26,expense,Dragon,Fertilizer,2400,Sathish,,"600*4=2,400 dap liquid",,,,,
+14-01-26,expense,Goats,Feed,5000,Sathish,,"4*1250=5,000",,,,,
+05-01-26,expense,Goats,Loan Repayment,12170,Kiran,,,,,,,
+05-01-26,expense,Goats,Loan Repayment,17000,ICICI Loan,,,,,,,
+02-01-26,expense,Goats,Feed,2500,Sathish,,"2*1250=2,500",,,,,
+,,,,,,,,,,,,

@@ -11,7 +11,7 @@ import { getMonthName } from '../../../core/utils/date.utils';
   imports: [BaseChartDirective, MatCardModule],
   template: `
     <mat-card class="chart-card">
-      <h3>Monthly Trend (Last 6 Months)</h3>
+      <h3>{{ chartTitle }}</h3>
       <canvas baseChart
         [datasets]="chartData.datasets"
         [labels]="chartData.labels"
@@ -26,6 +26,7 @@ import { getMonthName } from '../../../core/utils/date.utils';
 })
 export class MonthlyTrendChartComponent implements OnChanges {
   @Input() trendData: { month: string; income: number; expense: number }[] = [];
+  @Input() chartTitle = 'Monthly Trend (Last 6 Months)';
 
   chartData: ChartConfiguration<'line'>['data'] = { labels: [], datasets: [] };
   chartOptions: ChartConfiguration<'line'>['options'] = {

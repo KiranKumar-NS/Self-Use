@@ -11,6 +11,7 @@ import { WhatsappShareDialogComponent, WhatsappShareData, ShareTransaction } fro
 import { getMonthRange, getMonthString } from '../../core/utils/date.utils';
 import { CurrencyInrPipe } from '../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
+import { DateRangeFilterComponent, DateRangeSelection } from '../../shared/components/date-range-filter/date-range-filter.component';
 import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../core/utils/table.utils';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
@@ -25,7 +26,7 @@ import { MatInputModule } from '@angular/material/input';
   selector: 'app-analytics',
   standalone: true,
   imports: [
-    FormsModule, DatePipe, UpperCasePipe, CurrencyInrPipe, LoadingSpinnerComponent,
+    FormsModule, DatePipe, UpperCasePipe, CurrencyInrPipe, LoadingSpinnerComponent, DateRangeFilterComponent,
     BaseChartDirective,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule, MatDialogModule,
   ],
@@ -48,6 +49,9 @@ import { MatInputModule } from '@angular/material/input';
       </div>
     </div>
 
+    <!-- Date Range Filter -->
+    <app-date-range-filter (rangeChange)="onRangeChange($event)" />
+
     <!-- Filters -->
     <mat-card class="filter-card">
       <div class="filter-header" (click)="filtersOpen = !filtersOpen">
@@ -59,24 +63,6 @@ import { MatInputModule } from '@angular/material/input';
         <mat-icon class="toggle-icon" [class.expanded]="filtersOpen">expand_more</mat-icon>
       </div>
       <div class="filters" [class.collapsed]="!filtersOpen">
-        <mat-form-field appearance="outline" class="filter-field">
-          <mat-label>From Month</mat-label>
-          <mat-select [(ngModel)]="filterFromMonth" (selectionChange)="loadTransactions()">
-            <mat-option value="">All Time</mat-option>
-            @for (m of availableMonths; track m.value) {
-              <mat-option [value]="m.value">{{ m.label }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field appearance="outline" class="filter-field">
-          <mat-label>To Month</mat-label>
-          <mat-select [(ngModel)]="filterToMonth" (selectionChange)="loadTransactions()">
-            <mat-option value="">All Time</mat-option>
-            @for (m of availableMonths; track m.value) {
-              <mat-option [value]="m.value">{{ m.label }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
         <mat-form-field appearance="outline" class="filter-field">
           <mat-label>Segment</mat-label>
           <mat-select [(ngModel)]="filterSegment" (selectionChange)="applyFilters()">
@@ -345,9 +331,10 @@ export class AnalyticsComponent implements OnInit {
   filtered = signal<Transaction[]>([]);
   filtersOpen = window.innerWidth > 768;
 
-  // Filters — default to current month
-  filterFromMonth = getMonthString(new Date());
-  filterToMonth = getMonthString(new Date());
+  // Date range state
+  private currentSelection: DateRangeSelection = { mode: 'monthly', month: getMonthString(new Date()) };
+
+  // Filters
   filterSegment = '';
   filterPaidBy = '';
   filterCategory = '';
@@ -362,7 +349,6 @@ export class AnalyticsComponent implements OnInit {
   allSegments = signal<string[]>([]);
   allPaidBy = signal<string[]>([]);
   allCategories = signal<string[]>([]);
-  availableMonths: { value: string; label: string }[] = [];
 
   // Computed stats
   totalExpense = signal(0);
@@ -395,42 +381,33 @@ export class AnalyticsComponent implements OnInit {
     },
   };
 
-  // Colors
   private colors = ['#4f46e5', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#be123c', '#65a30d'];
 
   async ngOnInit(): Promise<void> {
-    // Generate last 12 months for filter dropdowns
-    const now = new Date();
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const value = getMonthString(d);
-      const label = d.toLocaleDateString('en-IN', { year: 'numeric', month: 'long' });
-      this.availableMonths.push({ value, label });
-    }
-
     this.segments.set(await this.segmentService.getAll());
+  }
+
+  async onRangeChange(selection: DateRangeSelection): Promise<void> {
+    this.currentSelection = selection;
     await this.loadTransactions();
     this.loading.set(false);
   }
 
   async loadTransactions(): Promise<void> {
-    // Fetch only expense transactions for the selected month range
+    this.loading.set(true);
     const filters: any = { type: 'expense' as const };
-    // If both months are same, use single month filter (1 query)
-    if (this.filterFromMonth && this.filterFromMonth === this.filterToMonth) {
-      filters.month = this.filterFromMonth;
+
+    // Use server-side month filter for single month
+    if (this.currentSelection.mode === 'monthly') {
+      filters.month = this.currentSelection.month;
     }
 
     const result = await this.transactionService.getAll(filters, 200);
     let txns = result.transactions;
 
-    // Client-side month range filter if from != to
-    if (this.filterFromMonth && this.filterToMonth && this.filterFromMonth !== this.filterToMonth) {
-      txns = txns.filter(t => t.month >= this.filterFromMonth && t.month <= this.filterToMonth);
-    } else if (this.filterFromMonth && !this.filterToMonth) {
-      txns = txns.filter(t => t.month >= this.filterFromMonth);
-    } else if (!this.filterFromMonth && this.filterToMonth) {
-      txns = txns.filter(t => t.month <= this.filterToMonth);
+    // Client-side month range filter for custom mode
+    if (this.currentSelection.mode === 'custom') {
+      txns = txns.filter(t => t.month >= this.currentSelection.fromMonth! && t.month <= this.currentSelection.toMonth!);
     }
 
     this.allTransactions.set(txns);
@@ -451,22 +428,22 @@ export class AnalyticsComponent implements OnInit {
       if (!personMap[name]) personMap[name] = { expensesPaid: 0, incomeReceived: 0 };
     };
 
-    // 1. Expenses paid per person
     for (const txn of expenseTxns) {
       const name = txn.paidByName || txn.createdByName || 'Unknown';
       ensurePerson(name);
       personMap[name].expensesPaid += txn.amount;
     }
 
-    // 2. Income distributions received per person
     try {
       const incomeResult = await this.transactionService.getAll({ type: 'income' }, 200);
       this.incomeTransactions.set(incomeResult.transactions);
 
-      // Filter income for the selected month range and segment
       let incomeForRange = incomeResult.transactions;
-      if (this.filterFromMonth) incomeForRange = incomeForRange.filter(t => t.month >= this.filterFromMonth);
-      if (this.filterToMonth) incomeForRange = incomeForRange.filter(t => t.month <= this.filterToMonth);
+      if (this.currentSelection.mode === 'monthly') {
+        incomeForRange = incomeForRange.filter(t => t.month === this.currentSelection.month);
+      } else if (this.currentSelection.mode === 'custom') {
+        incomeForRange = incomeForRange.filter(t => t.month >= this.currentSelection.fromMonth! && t.month <= this.currentSelection.toMonth!);
+      }
       if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segment === this.filterSegment);
       this.filteredIncome.set(incomeForRange);
       const incomeTotal = incomeForRange.reduce((s, t) => s + t.amount, 0);
@@ -483,7 +460,6 @@ export class AnalyticsComponent implements OnInit {
       }
     } catch {}
 
-    // Build summary
     const summary = Object.entries(personMap)
       .map(([name, data]) => ({
         name,
@@ -497,28 +473,20 @@ export class AnalyticsComponent implements OnInit {
   }
 
   hasFilters(): boolean {
-    return !!(this.filterFromMonth || this.filterToMonth || this.filterSegment || this.filterPaidBy || this.filterCategory);
+    return !!(this.filterSegment || this.filterPaidBy || this.filterCategory);
   }
 
   clearFilters(): void {
-    this.filterFromMonth = getMonthString(new Date());
-    this.filterToMonth = getMonthString(new Date());
     this.filterSegment = '';
     this.filterPaidBy = '';
     this.filterCategory = '';
-    this.loadTransactions();
+    this.applyFilters();
   }
 
   applyFilters(): void {
     this.currentPage = 1;
     let txns = [...this.allTransactions()];
 
-    if (this.filterFromMonth) {
-      txns = txns.filter((t) => t.month >= this.filterFromMonth);
-    }
-    if (this.filterToMonth) {
-      txns = txns.filter((t) => t.month <= this.filterToMonth);
-    }
     if (this.filterSegment) {
       txns = txns.filter((t) => t.segmentName === this.filterSegment);
     }
@@ -564,8 +532,11 @@ export class AnalyticsComponent implements OnInit {
 
     // Re-filter income and rebuild investment summary with all active filters
     let incomeForRange = this.incomeTransactions();
-    if (this.filterFromMonth) incomeForRange = incomeForRange.filter(t => t.month >= this.filterFromMonth);
-    if (this.filterToMonth) incomeForRange = incomeForRange.filter(t => t.month <= this.filterToMonth);
+    if (this.currentSelection.mode === 'monthly') {
+      incomeForRange = incomeForRange.filter(t => t.month === this.currentSelection.month);
+    } else if (this.currentSelection.mode === 'custom') {
+      incomeForRange = incomeForRange.filter(t => t.month >= this.currentSelection.fromMonth! && t.month <= this.currentSelection.toMonth!);
+    }
     if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segmentName === this.filterSegment);
     if (this.filterCategory) incomeForRange = incomeForRange.filter(t => t.categoryName === this.filterCategory);
     if (this.filterPaidBy) incomeForRange = incomeForRange.filter(t => (t.paidByName || 'Unknown') === this.filterPaidBy);
@@ -623,9 +594,9 @@ export class AnalyticsComponent implements OnInit {
   }
 
   private get rangeLabel(): string {
-    const from = this.filterFromMonth || 'all';
-    const to = this.filterToMonth || 'all';
-    return from === to ? from : `${from}_to_${to}`;
+    if (this.currentSelection.mode === 'monthly') return this.currentSelection.month || 'all';
+    if (this.currentSelection.mode === 'custom') return `${this.currentSelection.fromMonth}_to_${this.currentSelection.toMonth}`;
+    return 'all-time';
   }
 
   private async getExportService() {
@@ -634,9 +605,13 @@ export class AnalyticsComponent implements OnInit {
   }
 
   async exportPdf(): Promise<void> {
-    const months = (this.filterFromMonth && this.filterToMonth)
-      ? getMonthRange(this.filterFromMonth, this.filterToMonth)
-      : [];
+    let months: string[] = [];
+    if (this.currentSelection.mode === 'monthly' && this.currentSelection.month) {
+      months = [this.currentSelection.month];
+    } else if (this.currentSelection.mode === 'custom') {
+      months = getMonthRange(this.currentSelection.fromMonth!, this.currentSelection.toMonth!);
+    }
+
     const summaryChunks = [];
     for (let i = 0; i < months.length; i += 30) {
       summaryChunks.push(this.summaryService.getForMonths(months.slice(i, i + 30)));
@@ -654,32 +629,31 @@ export class AnalyticsComponent implements OnInit {
   }
 
   shareWhatsApp(): void {
-    // Build category breakdown from filtered transactions
     const catMap = new Map<string, number>();
     this.filtered().forEach(t => catMap.set(t.categoryName, (catMap.get(t.categoryName) || 0) + t.amount));
     const categoryBreakdown = Array.from(catMap.entries())
       .map(([name, total]) => ({ name, total }))
       .sort((a, b) => b.total - a.total);
 
-    // Income details for the filtered range
     let incomeForRange = this.incomeTransactions();
-    if (this.filterFromMonth) incomeForRange = incomeForRange.filter(t => t.month >= this.filterFromMonth);
-    if (this.filterToMonth) incomeForRange = incomeForRange.filter(t => t.month <= this.filterToMonth);
+    if (this.currentSelection.mode === 'monthly') {
+      incomeForRange = incomeForRange.filter(t => t.month === this.currentSelection.month);
+    } else if (this.currentSelection.mode === 'custom') {
+      incomeForRange = incomeForRange.filter(t => t.month >= this.currentSelection.fromMonth! && t.month <= this.currentSelection.toMonth!);
+    }
     if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segmentName === this.filterSegment);
 
     const incomeDetails = incomeForRange.map(t => ({ segmentName: t.segmentName, categoryName: t.categoryName, amount: t.amount }));
     const totalIncome = incomeForRange.reduce((s, t) => s + t.amount, 0);
 
-    // Stock details
     const stockDetails = this.segments()
       .filter(s => s.isActive && (s.currentStock ?? 0) > 0)
       .map(s => ({ name: s.name, icon: s.icon, count: s.currentStock || 0 }));
 
-    // All transactions (expense + income) for the range, sorted by date desc
     const formatDate = (d: Date) => {
       const day = d.getDate().toString().padStart(2, '0');
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return `${day}-${months[d.getMonth()]}-${d.getFullYear()}`;
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${day}-${monthNames[d.getMonth()]}-${d.getFullYear()}`;
     };
     const allTxns: ShareTransaction[] = [
       ...this.filtered().map(t => ({

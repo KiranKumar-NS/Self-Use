@@ -39,6 +39,22 @@ export class SummaryService {
     return snapshot.docs.map((d) => d.data() as MonthlySummary);
   }
 
+  async getForMonthsBatched(months: string[]): Promise<MonthlySummary[]> {
+    if (months.length === 0) return [];
+    if (months.length <= 30) return this.getForMonths(months);
+    const batches: string[][] = [];
+    for (let i = 0; i < months.length; i += 30) {
+      batches.push(months.slice(i, i + 30));
+    }
+    const results = await Promise.all(batches.map(b => this.getForMonths(b)));
+    return results.flat();
+  }
+
+  async getAll(): Promise<MonthlySummary[]> {
+    const snapshot = await getDocs(collection(this.firestore, 'monthlySummaries'));
+    return snapshot.docs.map((d) => d.data() as MonthlySummary);
+  }
+
   aggregateSummaries(summaries: MonthlySummary[]): {
     totalIncome: number;
     totalExpense: number;

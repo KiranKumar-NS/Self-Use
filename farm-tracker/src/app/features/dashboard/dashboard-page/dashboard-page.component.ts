@@ -3,7 +3,7 @@ import { SummaryService } from '../../../core/services/summary.service';
 import { UserService } from '../../../core/services/user.service';
 import { LoanService } from '../../../core/services/loan.service';
 import { MonthlySummary } from '../../../core/models/monthly-summary.model';
-import { getMonthString, getMonthName, getLast6MonthsFrom, shiftMonth } from '../../../core/utils/date.utils';
+import { getMonthString, getMonthName, getLast6MonthsFrom, getMonthRange } from '../../../core/utils/date.utils';
 import { SummaryCardsComponent } from '../summary-cards/summary-cards.component';
 import { SegmentBreakdownChartComponent } from '../segment-breakdown-chart/segment-breakdown-chart.component';
 import { MonthlyTrendChartComponent } from '../monthly-trend-chart/monthly-trend-chart.component';
@@ -13,71 +13,66 @@ import { StockWidgetComponent } from '../stock-widget/stock-widget.component';
 import { SegmentService } from '../../../core/services/segment.service';
 import { Segment } from '../../../core/models/segment.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
+import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/components/date-range-filter/date-range-filter.component';
 
 @Component({
   selector: 'app-dashboard-page',
   standalone: true,
   imports: [
     SummaryCardsComponent, SegmentBreakdownChartComponent, MonthlyTrendChartComponent,
-    LoanSummaryWidgetComponent, BudgetWidgetComponent, StockWidgetComponent, LoadingSpinnerComponent, MatButtonModule, MatIconModule,
+    LoanSummaryWidgetComponent, BudgetWidgetComponent, StockWidgetComponent,
+    LoadingSpinnerComponent, DateRangeFilterComponent,
   ],
   template: `
-    @if (loading()) {
+    @if (initialLoading()) {
       <app-loading-spinner />
     } @else {
       <div class="page-header">
         <h1 class="page-title">Dashboard</h1>
-        <div class="month-picker">
-          <button mat-icon-button (click)="prevMonth()" aria-label="Previous month"><mat-icon>chevron_left</mat-icon></button>
-          <span class="month-label">{{ monthLabel() }}</span>
-          <button mat-icon-button (click)="nextMonth()" [disabled]="isCurrentMonth()" aria-label="Next month"><mat-icon>chevron_right</mat-icon></button>
-          @if (!isCurrentMonth()) {
-            <button mat-button class="today-btn" (click)="goToCurrentMonth()">Today</button>
-          }
+      </div>
+
+      <app-date-range-filter (rangeChange)="onRangeChange($event)" />
+
+      @if (loading()) {
+        <app-loading-spinner />
+      } @else {
+        <app-summary-cards
+          [totalIncome]="totals().totalIncome"
+          [totalExpense]="totals().totalExpense"
+          [netProfit]="totals().netProfit"
+          [totalDistributed]="totalDistributed()"
+          [pendingIncome]="totals().pendingIncome"
+        />
+
+        <div class="charts-grid">
+          <app-segment-breakdown-chart [summaries]="currentMonthSummaries()" [personBreakdown]="personBreakdown()" />
+          <app-monthly-trend-chart [trendData]="trendData()" [chartTitle]="trendTitle()" />
         </div>
-      </div>
 
-      <app-summary-cards
-        [totalIncome]="totals().totalIncome"
-        [totalExpense]="totals().totalExpense"
-        [netProfit]="totals().netProfit"
-        [totalDistributed]="totalDistributed()"
-        [pendingIncome]="totals().pendingIncome"
-      />
+        <div class="widgets-grid">
+          @if (currentMode === 'monthly') {
+            <app-budget-widget [segments]="segments()" [summaries]="currentMonthSummaries()" />
+          }
+          <app-stock-widget [segments]="segments()" />
+        </div>
 
-      <div class="charts-grid">
-        <app-segment-breakdown-chart [summaries]="currentMonthSummaries()" [personBreakdown]="personBreakdown()" />
-        <app-monthly-trend-chart [trendData]="trendData()" />
-      </div>
-
-      <div class="widgets-grid">
-        <app-budget-widget [segments]="segments()" [summaries]="currentMonthSummaries()" />
-        <app-stock-widget [segments]="segments()" />
-      </div>
-
-      <app-loan-summary-widget
-          [totalGiven]="loanSummary().totalGiven"
-          [totalReceived]="loanSummary().totalReceived"
-          [pendingGiven]="loanSummary().pendingGiven"
-          [pendingReceived]="loanSummary().pendingReceived" />
+        <app-loan-summary-widget
+            [totalGiven]="loanSummary().totalGiven"
+            [totalReceived]="loanSummary().totalReceived"
+            [pendingGiven]="loanSummary().pendingGiven"
+            [pendingReceived]="loanSummary().pendingReceived" />
+      }
     }
   `,
   styles: [`
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     .page-title { margin: 0; font-size: var(--font-2xl); color: var(--color-text); }
-    .month-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .month-label { font-size: var(--font-lg); font-weight: 600; color: var(--color-text); min-width: 140px; text-align: center; }
-    .today-btn { font-size: 0.8rem; color: var(--color-primary); }
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
     .widgets-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
     @media (max-width: 768px) {
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .charts-grid { grid-template-columns: 1fr; }
       .widgets-grid { grid-template-columns: 1fr; }
-      .month-label { min-width: 100px; font-size: 0.9rem; }
-      .today-btn { width: auto; font-size: 0.75rem; padding: 0 8px; }
     }
   `],
 })
@@ -87,9 +82,10 @@ export class DashboardPageComponent implements OnInit {
   private userService = inject(UserService);
   private loanService = inject(LoanService);
 
-  selectedMonth = signal(getMonthString(new Date()));
-  monthLabel = signal('');
-  loading = signal(true);
+  initialLoading = signal(true);
+  loading = signal(false);
+  currentMode: 'monthly' | 'custom' | 'alltime' = 'monthly';
+  trendTitle = signal('Monthly Trend (Last 6 Months)');
   currentMonthSummaries = signal<MonthlySummary[]>([]);
   totals = signal({ totalIncome: 0, totalExpense: 0, netProfit: 0, pendingIncome: 0 });
   personBreakdown = signal<Record<string, Record<string, { income: number; expense: number }>>>({});
@@ -99,9 +95,9 @@ export class DashboardPageComponent implements OnInit {
   trendData = signal<{ month: string; income: number; expense: number }[]>([]);
 
   private nameMap: Record<string, string> = {};
+  private initialized = false;
 
   async ngOnInit(): Promise<void> {
-    // Load users + segments (cached) and loans (month-agnostic)
     const [users, loans, segs] = await Promise.all([
       this.userService.getAll(),
       this.loanService.getSummary(),
@@ -110,57 +106,58 @@ export class DashboardPageComponent implements OnInit {
     this.segments.set(segs);
     for (const u of users) this.nameMap[u.uid] = u.displayName;
     this.loanSummary.set(loans);
-
-    await this.loadMonth();
+    this.initialized = true;
+    this.initialLoading.set(false);
   }
 
-  async loadMonth(): Promise<void> {
+  async onRangeChange(selection: DateRangeSelection): Promise<void> {
+    if (!this.initialized) return;
     this.loading.set(true);
-    const month = this.selectedMonth();
-    this.monthLabel.set(getMonthName(month));
+    this.currentMode = selection.mode;
 
-    const last6 = getLast6MonthsFrom(month);
-    const [summaries, trendSummaries] = await Promise.all([
-      this.summaryService.getForMonth(month),
-      this.summaryService.getForMonths(last6),
-    ]);
+    let summaries: MonthlySummary[];
+
+    if (selection.mode === 'monthly') {
+      const month = selection.month!;
+      this.trendTitle.set('Monthly Trend (Last 6 Months)');
+      const last6 = getLast6MonthsFrom(month);
+      const [monthSummaries, trendSummaries] = await Promise.all([
+        this.summaryService.getForMonth(month),
+        this.summaryService.getForMonths(last6),
+      ]);
+      summaries = monthSummaries;
+      this.buildTrend(last6, trendSummaries);
+
+    } else if (selection.mode === 'custom') {
+      const months = getMonthRange(selection.fromMonth!, selection.toMonth!);
+      this.trendTitle.set(`Trend (${getMonthName(selection.fromMonth!)} - ${getMonthName(selection.toMonth!)})`);
+      summaries = await this.summaryService.getForMonthsBatched(months);
+      this.buildTrend(months, summaries);
+
+    } else {
+      this.trendTitle.set('All-Time Trend');
+      summaries = await this.summaryService.getAll();
+      const allMonths = [...new Set(summaries.map(s => s.month))].sort();
+      this.buildTrend(allMonths, summaries);
+    }
 
     this.currentMonthSummaries.set(summaries);
     this.totals.set(this.summaryService.aggregateSummaries(summaries));
     this.personBreakdown.set(this.buildPersonBreakdownFromSummaries(summaries));
     this.totalDistributed.set(summaries.reduce((s, sum) => s + (sum.totalDistributed || 0), 0));
+    this.loading.set(false);
+  }
 
-    // Build trend data
+  private buildTrend(months: string[], summaries: MonthlySummary[]): void {
     const trendMap = new Map<string, { income: number; expense: number }>();
-    for (const m of last6) trendMap.set(m, { income: 0, expense: 0 });
-    for (const s of trendSummaries) {
+    for (const m of months) trendMap.set(m, { income: 0, expense: 0 });
+    for (const s of summaries) {
       const existing = trendMap.get(s.month) || { income: 0, expense: 0 };
       existing.income += s.totalIncome || 0;
       existing.expense += s.totalExpense || 0;
       trendMap.set(s.month, existing);
     }
-    this.trendData.set(last6.map((m) => ({ month: m, ...trendMap.get(m)! })));
-
-    this.loading.set(false);
-  }
-
-  async prevMonth(): Promise<void> {
-    this.selectedMonth.set(shiftMonth(this.selectedMonth(), -1));
-    await this.loadMonth();
-  }
-
-  async nextMonth(): Promise<void> {
-    this.selectedMonth.set(shiftMonth(this.selectedMonth(), 1));
-    await this.loadMonth();
-  }
-
-  async goToCurrentMonth(): Promise<void> {
-    this.selectedMonth.set(getMonthString(new Date()));
-    await this.loadMonth();
-  }
-
-  isCurrentMonth(): boolean {
-    return this.selectedMonth() === getMonthString(new Date());
+    this.trendData.set(months.map(m => ({ month: m, ...trendMap.get(m)! })));
   }
 
   private buildPersonBreakdownFromSummaries(
