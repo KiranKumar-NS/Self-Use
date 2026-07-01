@@ -73,10 +73,10 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
             <thead>
               <tr>
                 <th class="sortable" (click)="toggleSort('date')">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
-                <th class="sortable" (click)="toggleSort('segmentName')">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
+                <th class="sortable hide-mobile" (click)="toggleSort('segmentName')">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
                 <th class="sortable" (click)="toggleSort('eventType')">Event <span class="sort-icon">{{ getSortIcon('eventType') }}</span></th>
                 <th class="sortable" (click)="toggleSort('count')">Count <span class="sort-icon">{{ getSortIcon('count') }}</span></th>
-                <th class="sortable" (click)="toggleSort('breed')">Breed <span class="sort-icon">{{ getSortIcon('breed') }}</span></th>
+                <th class="sortable hide-mobile" (click)="toggleSort('breed')">Breed <span class="sort-icon">{{ getSortIcon('breed') }}</span></th>
                 <th class="hide-mobile">Note</th>
                 <th class="sortable hide-mobile" (click)="toggleSort('createdByName')">By <span class="sort-icon">{{ getSortIcon('createdByName') }}</span></th>
                 @if (!auth.isViewer()) {
@@ -87,13 +87,13 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
             <tbody>
               @for (ev of paginatedEvents(); track ev.id) {
                 <tr>
-                  <td class="date-cell">{{ ev.date.toDate() | date:'dd MMM yyyy' }}</td>
-                  <td>{{ ev.segmentName }}</td>
+                  <td class="date-cell">{{ ev.date.toDate() | date:'dd MMM' }}</td>
+                  <td class="hide-mobile">{{ ev.segmentName }}</td>
                   <td><span class="event-badge" [class]="ev.eventType">{{ ev.eventType }}</span></td>
                   <td class="count-cell" [class.positive]="ev.count > 0" [class.negative]="ev.count < 0">
                     {{ ev.count > 0 ? '+' : '' }}{{ ev.count }}
                   </td>
-                  <td class="breed-cell">{{ ev.breed || '-' }}</td>
+                  <td class="breed-cell hide-mobile">{{ ev.breed || '-' }}</td>
                   <td class="note-cell hide-mobile">{{ ev.note || '-' }}</td>
                   <td class="hide-mobile">{{ ev.createdByName }}</td>
                   @if (!auth.isViewer()) {
@@ -137,13 +137,13 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
     }
   `,
   styles: [`
-    .stock-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-    .stock-card { display: flex; align-items: center; gap: 0.75rem; padding: 1.25rem; border-left: 4px solid var(--color-primary); min-width: 0; overflow: hidden; }
-    .stock-icon { font-size: 1.75rem; flex-shrink: 0; }
+    .stock-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+    .stock-card { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; border-left: 4px solid var(--color-primary); min-width: 0; overflow: hidden; }
+    .stock-icon { font-size: 1.5rem; flex-shrink: 0; }
     .stock-info { min-width: 0; flex: 1; }
-    .stock-name { display: block; font-size: var(--font-sm); color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .stock-count { display: block; font-size: 1.75rem; font-weight: 700; color: var(--color-text); line-height: 1.2; }
-    .stock-count small { font-size: 0.7rem; font-weight: 500; color: var(--color-text-secondary); }
+    .stock-name { display: block; font-size: 0.65rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stock-count { display: block; font-size: 1.4rem; font-weight: 700; color: var(--color-text); line-height: 1.2; }
+    .stock-count small { font-size: 0.6rem; font-weight: 500; color: var(--color-text-secondary); }
     .event-badge { padding: 2px 8px; border-radius: var(--radius-sm); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
     .event-badge.birth { background: var(--color-income-bg); color: var(--color-income); }
     .event-badge.purchase { background: var(--color-info-light); color: var(--color-info); }
@@ -161,14 +161,12 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
     .empty-cell { text-align: center; color: var(--color-text-muted); padding: 2rem !important; }
     @media (max-width: 768px) {
       .filter-field { min-width: 0; width: 100%; }
+      .stock-grid { grid-template-columns: 1fr 1fr; }
     }
-    @media (max-width: 480px) {
-      .stock-grid { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-      .stock-card { padding: 0.75rem; gap: 0.5rem; flex-direction: column; align-items: flex-start; }
+    @media (max-width: 360px) {
+      .stock-card { padding: 0.5rem 0.75rem; }
+      .stock-count { font-size: 1.2rem; }
       .stock-icon { font-size: 1.25rem; }
-      .stock-count { font-size: 1.3rem; }
-      .stock-count small { font-size: 0.6rem; }
-      .stock-icon { font-size: 1.5rem; }
     }
   `],
 })

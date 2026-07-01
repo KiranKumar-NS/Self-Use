@@ -114,9 +114,12 @@ $theme: mat.m2-define-light-theme((
 .table-card {
   padding: 0;
   overflow: hidden;
+  max-width: 100%;
 }
 .table-container {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
 }
 .data-table {
   width: 100%;
@@ -302,4 +305,19 @@ tr:hover .actions-cell button { opacity: 1; }
 // ── Mobile column hiding ───────────────────────────────────
 @media (max-width: 640px) {
   .hide-mobile { display: none !important; }
+
+  .data-table {
+    th { padding: 8px 6px; font-size: 0.6rem; letter-spacing: 0; }
+    td { padding: 8px 6px; font-size: 0.75rem; }
+  }
+  .date-cell { font-size: 0.7rem; }
+  .sort-icon { display: none; }
+  .actions-cell button {
+    width: 28px !important;
+    height: 28px !important;
+    padding: 0 !important;
+    mat-icon { font-size: 18px; width: 18px; height: 18px; }
+  }
+  .pagination { font-size: 0.7rem; padding: 6px 8px; }
+  .page-buttons button { width: 28px; height: 28px; }
 }
