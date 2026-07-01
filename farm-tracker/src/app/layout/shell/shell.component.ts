@@ -2,12 +2,13 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { SidebarComponent } from '../sidebar/sidebar.component';
 import { HeaderComponent } from '../header/header.component';
+import { BottomNavComponent } from '../bottom-nav/bottom-nav.component';
 import { NotificationService } from '../../core/services/notification.service';
 
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [RouterOutlet, SidebarComponent, HeaderComponent],
+  imports: [RouterOutlet, SidebarComponent, HeaderComponent, BottomNavComponent],
   template: `
     <div class="app-layout">
       <app-sidebar [open]="sidebarOpen()" (closed)="sidebarOpen.set(false)" />
@@ -17,6 +18,7 @@ import { NotificationService } from '../../core/services/notification.service';
           <router-outlet />
         </main>
       </div>
+      <app-bottom-nav (moreClick)="sidebarOpen.set(!sidebarOpen())" />
     </div>
   `,
   styles: [`
@@ -37,7 +39,7 @@ import { NotificationService } from '../../core/services/notification.service';
     }
     @media (max-width: 768px) {
       .main-area { margin-left: 0; }
-      .content { padding: 16px; }
+      .content { padding: 16px 16px 72px; }
     }
   `],
 })

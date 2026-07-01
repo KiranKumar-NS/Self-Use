@@ -4,9 +4,28 @@ import { Component } from '@angular/core';
   selector: 'app-loading-spinner',
   standalone: true,
   template: `
-    <div class="flex items-center justify-center p-8">
-      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+    <div class="spinner-container">
+      <div class="spinner"></div>
     </div>
   `,
+  styles: [`
+    .spinner-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 3px solid var(--color-border);
+      border-top-color: var(--color-primary);
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  `],
 })
 export class LoadingSpinnerComponent {}

@@ -15,10 +15,13 @@ import { MatIconModule } from '@angular/material/icon';
   template: `
     <div class="login-container">
       <mat-card class="login-card">
-        <mat-card-header>
-          <mat-card-title>Farm Tracker Login</mat-card-title>
-          <mat-card-subtitle>Sign in to manage your farm finances</mat-card-subtitle>
-        </mat-card-header>
+        <div class="branding">
+          <div class="brand-icon">
+            <mat-icon>agriculture</mat-icon>
+          </div>
+          <h1 class="brand-title">Farm Tracker</h1>
+          <p class="brand-subtitle">Sign in to manage your farm finances</p>
+        </div>
         <mat-card-content>
           @if (error()) {
             <div class="error-message">{{ error() }}</div>
@@ -53,7 +56,7 @@ import { MatIconModule } from '@angular/material/icon';
       align-items: center;
       justify-content: center;
       min-height: 100vh;
-      background: #f1f5f9;
+      background: linear-gradient(135deg, #f0fdf4 0%, #f1f5f9 50%, #ede9fe 100%);
     }
     .login-card {
       width: 100%;
@@ -61,10 +64,41 @@ import { MatIconModule } from '@angular/material/icon';
       padding: 2rem;
       margin: 0 1rem;
     }
+    .branding {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .brand-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: var(--color-income);
+      color: white;
+      margin-bottom: 0.75rem;
+    }
+    .brand-icon mat-icon {
+      font-size: 32px;
+      width: 32px;
+      height: 32px;
+    }
+    .brand-title {
+      margin: 0;
+      font-size: var(--font-2xl);
+      font-weight: 700;
+      color: var(--color-text);
+    }
+    .brand-subtitle {
+      margin: 4px 0 0;
+      font-size: var(--font-base);
+      color: var(--color-text-secondary);
+    }
     .full-width { width: 100%; }
     .error-message {
-      background: #fef2f2;
-      color: #dc2626;
+      background: var(--color-expense-bg);
+      color: var(--color-expense);
       padding: 8px 16px;
       border-radius: 6px;
       margin-bottom: 1rem;
@@ -75,7 +109,7 @@ import { MatIconModule } from '@angular/material/icon';
       margin-top: 1rem;
     }
     .forgot-link a {
-      color: #4f46e5;
+      color: var(--color-primary);
       text-decoration: none;
       font-size: 0.875rem;
     }

@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { UpperCasePipe, DatePipe } from '@angular/common';
@@ -11,6 +11,7 @@ import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
+import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -18,6 +19,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatInputModule } from '@angular/material/input';
 import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { getMonthString } from '../../../core/utils/date.utils';
 
 @Component({
@@ -26,7 +28,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
   imports: [
     FormsModule, DatePipe, UpperCasePipe, CurrencyInrPipe,
     LoadingSpinnerComponent, EmptyStateComponent,
-    MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule, MatSnackBarModule,
   ],
   template: `
     <!-- Header -->
@@ -42,14 +44,18 @@ import { getMonthString } from '../../../core/utils/date.utils';
 
     <!-- Filters -->
     <mat-card class="filter-card">
-      <div class="filter-header">
+      <div class="filter-header" (click)="filtersOpen = !filtersOpen">
         <mat-icon>filter_list</mat-icon>
         <span>Filters</span>
-        @if (filterType || filterSegment || filterMonth || filterPaymentStatus || searchTerm) {
-          <button mat-button class="clear-btn" (click)="clearFilters()">Clear All</button>
+        @if (activeFilterCount() > 0) {
+          <span class="filter-count">{{ activeFilterCount() }} active</span>
         }
+        @if (filterType || filterSegment || filterMonth || filterPaymentStatus || searchTerm) {
+          <button mat-button class="clear-btn" (click)="clearFilters(); $event.stopPropagation()">Clear All</button>
+        }
+        <mat-icon class="toggle-icon" [class.expanded]="filtersOpen">expand_more</mat-icon>
       </div>
-      <div class="filters">
+      <div class="filters" [class.collapsed]="!filtersOpen">
         <mat-form-field appearance="outline" class="filter-field">
           <mat-label>Type</mat-label>
           <mat-select [(ngModel)]="filterType" (selectionChange)="loadData()">
@@ -101,7 +107,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
     @if (loading()) {
       <app-loading-spinner />
     } @else if (displayedTransactions().length === 0) {
-      <app-empty-state icon="📋" title="No transactions" message="No transactions found. Try changing the filters or add a new transaction." />
+      <app-empty-state icon="📋" title="No transactions" message="No transactions found. Try changing the filters or add a new transaction." actionLabel="Add Transaction" (actionClick)="addNew()" />
     } @else {
       <!-- Summary Bar -->
       <div class="summary-bar">
@@ -130,7 +136,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
             </thead>
             <tbody>
               @for (txn of paginatedTransactions(); track txn.id) {
-                <tr (click)="viewDetail(txn.id)" class="clickable-row">
+                <tr (click)="viewDetail(txn.id)" class="clickable-row" [class.income-row]="txn.type === 'income'" [class.expense-row]="txn.type === 'expense'">
                   <td class="date-cell">{{ txn.date.toDate() | date:'dd MMM yyyy' }}</td>
                   <td>
                     <span class="type-badge" [class]="txn.type">
@@ -210,123 +216,64 @@ import { getMonthString } from '../../../core/utils/date.utils';
     }
   `,
   styles: [`
-    .page-header {
-      display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;
-    }
-    .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; font-weight: 700; }
-    .subtitle { margin: 4px 0 0; color: #64748b; font-size: 0.85rem; }
-
-    .filter-card { margin-bottom: 1.25rem; padding: 1rem 1.25rem; }
-    .filter-header {
-      display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
-      font-size: 0.85rem; font-weight: 600; color: #475569;
-    }
-    .filter-header mat-icon { font-size: 18px; width: 18px; height: 18px; color: #94a3b8; }
-    .clear-btn { margin-left: auto; font-size: 0.8rem; color: #4f46e5; }
-    .filters { display: flex; gap: 1rem; flex-wrap: wrap; }
-    .filter-field { flex: 1; min-width: 180px; }
     .search-field { min-width: 250px; }
-
-    .summary-bar {
-      display: flex; gap: 1rem; margin-bottom: 0.75rem; padding: 0 4px;
+    .filter-header { cursor: pointer; }
+    .filter-count {
+      font-size: 0.7rem; background: var(--color-primary); color: white;
+      padding: 1px 8px; border-radius: 10px; font-weight: 600;
     }
+    .toggle-icon {
+      margin-left: auto; transition: transform 0.2s; color: var(--color-text-muted);
+      font-size: 20px; width: 20px; height: 20px;
+    }
+    .toggle-icon.expanded { transform: rotate(180deg); }
+    .filters.collapsed { display: none; }
+
+    .summary-bar { display: flex; gap: 1rem; margin-bottom: 0.75rem; padding: 0 4px; }
     .summary-item { display: flex; gap: 6px; align-items: center; }
-    .summary-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; }
-    .summary-value { font-size: 0.85rem; color: #1e293b; font-weight: 600; }
-
-    .table-card { padding: 0; overflow: hidden; }
-    .table-container { overflow-x: auto; }
-    .data-table { width: 100%; border-collapse: collapse; }
-    .data-table th {
-      background: #f8fafc; padding: 12px 14px; text-align: left;
-      font-size: 0.7rem; text-transform: uppercase; color: #64748b;
-      font-weight: 700; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0;
-      white-space: nowrap;
-    }
-    .data-table td {
-      padding: 14px 14px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem;
-      color: #334155; vertical-align: middle;
-    }
-    .clickable-row { cursor: pointer; transition: background 0.15s; }
-    .clickable-row:hover { background: #f8fafc; }
-
-    .date-cell { white-space: nowrap; color: #64748b; font-size: 0.8rem; }
+    .summary-label { font-size: var(--font-sm); color: var(--color-text-muted); text-transform: uppercase; }
+    .summary-value { font-size: var(--font-base); color: var(--color-text); font-weight: 600; }
 
     .type-badge {
       display: inline-flex; align-items: center; gap: 4px;
-      padding: 3px 10px; border-radius: 20px; font-size: 0.7rem;
+      padding: 3px 10px; border-radius: var(--radius-full); font-size: 0.7rem;
       font-weight: 700; text-transform: uppercase;
     }
     .type-badge .type-icon { font-size: 14px; width: 14px; height: 14px; }
-    .type-badge.expense { background: #fef2f2; color: #dc2626; }
-    .type-badge.income { background: #f0fdf4; color: #16a34a; }
+    .type-badge.expense { background: var(--color-expense-bg); color: var(--color-expense); }
+    .type-badge.income { background: var(--color-income-bg); color: var(--color-income); }
 
-    .amount-cell { font-weight: 700; white-space: nowrap; font-size: 0.9rem; }
-    .amount-cell.expense { color: #dc2626; }
-    .amount-cell.income { color: #16a34a; }
-    .qty-info { display: block; font-size: 0.65rem; font-weight: 500; color: #94a3b8; }
+    .amount-cell.expense { color: var(--color-expense); }
+    .amount-cell.income { color: var(--color-income); }
+    .qty-info { display: block; font-size: var(--font-xs); font-weight: 500; color: var(--color-text-muted); }
 
-    .payment-badge {
-      padding: 3px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700;
-      letter-spacing: 0.05em;
-    }
-    .payment-badge.cash { background: #fef3c7; color: #d97706; }
-    .payment-badge.upi { background: #dbeafe; color: #2563eb; }
+    .by-cell { font-size: 0.8rem; color: var(--color-text-subtle); white-space: nowrap; }
+    .desc-cell { max-width: 180px; }
 
-    .by-cell { font-size: 0.8rem; color: #475569; white-space: nowrap; }
-    .desc-cell {
-      max-width: 180px; overflow: hidden; text-overflow: ellipsis;
-      white-space: nowrap; color: #94a3b8; font-size: 0.8rem;
-    }
-
-    .actions-th { text-align: center; }
-    .actions-cell { white-space: nowrap; text-align: center; }
-    .actions-cell button { opacity: 0.6; }
     .clickable-row:hover .actions-cell button { opacity: 1; }
+    .income-row td:first-child { border-left: 3px solid var(--color-income); }
+    .expense-row td:first-child { border-left: 3px solid var(--color-expense); }
 
     .dist-chip {
       display: inline-block; margin-left: 6px; padding: 2px 6px;
-      border-radius: 4px; font-size: 0.6rem; font-weight: 700;
+      border-radius: var(--radius-sm); font-size: 0.6rem; font-weight: 700;
       text-transform: uppercase; vertical-align: middle;
     }
-    .dist-chip.full { background: #f0fdf4; color: #16a34a; }
-    .dist-chip.partial { background: #fef3c7; color: #d97706; }
-    .dist-chip.none { background: #f1f5f9; color: #94a3b8; }
+    .dist-chip.full { background: var(--color-income-bg); color: var(--color-income); }
+    .dist-chip.partial { background: var(--color-warning-light); color: var(--color-warning); }
+    .dist-chip.none { background: var(--color-bg-alt); color: var(--color-text-muted); }
 
     .pay-status-chip {
       display: inline-block; margin-left: 6px; padding: 2px 6px;
-      border-radius: 4px; font-size: 0.6rem; font-weight: 700;
+      border-radius: var(--radius-sm); font-size: 0.6rem; font-weight: 700;
       text-transform: uppercase; vertical-align: middle;
     }
-    .pay-status-chip.pending { background: #fef2f2; color: #dc2626; }
-
-    .sortable { cursor: pointer; user-select: none; }
-    .sortable:hover { color: #1e293b; }
-    .sort-icon { font-size: 0.7rem; color: #94a3b8; }
-
-    .pagination {
-      display: flex; align-items: center; justify-content: flex-end; gap: 1rem;
-      padding: 8px 16px; border-top: 1px solid #e2e8f0; font-size: 0.8rem; color: #64748b;
-    }
-    .page-size { display: flex; align-items: center; gap: 6px; }
-    .page-size select {
-      border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px;
-      font-size: 0.8rem; background: white; color: #334155;
-    }
-    .page-info { font-size: 0.8rem; }
-    .page-buttons { display: flex; align-items: center; }
-    .page-buttons button { width: 32px; height: 32px; }
+    .pay-status-chip.pending { background: var(--color-expense-bg); color: var(--color-expense); }
 
     .load-more { text-align: center; padding: 1.5rem; }
     .load-more button { padding: 8px 24px; }
     @media (max-width: 768px) {
-      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
-      .filter-field { min-width: 0; flex-basis: 100%; }
       .search-field { min-width: 0; }
-      .filter-card { padding: 0.75rem; }
-    }
-    @media (max-width: 640px) {
-      .hide-mobile { display: none; }
     }
   `],
 })
@@ -335,6 +282,7 @@ export class TransactionListComponent implements OnInit {
   private segmentService = inject(SegmentService);
   private router = inject(Router);
   private dialog = inject(MatDialog);
+  private snackBar = inject(MatSnackBar);
   auth = inject(AuthService);
 
   transactions = signal<Transaction[]>([]);
@@ -343,22 +291,64 @@ export class TransactionListComponent implements OnInit {
   hasMore = signal(false);
   private lastDoc: any = null;
 
+  filtersOpen = window.innerWidth > 768;
   filterType = '';
   filterSegment = '';
   filterMonth = getMonthString(new Date());
   filterPaymentStatus = '';
   searchTerm = '';
 
-  // Sorting
-  sortColumn = '';
-  sortDirection: 'asc' | 'desc' = 'asc';
+  activeFilterCount = computed(() => {
+    let count = 0;
+    if (this.filterType) count++;
+    if (this.filterSegment) count++;
+    if (this.filterMonth) count++;
+    if (this.filterPaymentStatus) count++;
+    if (this.searchTerm) count++;
+    return count;
+  });
 
-  // Pagination
+  sortColumn = '';
+  sortDirection: SortDirection = 'asc';
   pageSize = 20;
   currentPage = 1;
 
   // Generate last 12 months for month filter
   availableMonths = this.generateMonths(12);
+
+  // Client-side filter/search state signals for memoization
+  private filterPaymentStatusSignal = signal('');
+  private searchTermSignal = signal('');
+  private sortColumnSignal = signal('');
+  private sortDirectionSignal = signal<SortDirection>('asc');
+
+  displayedTransactions = computed(() => {
+    let filtered = this.transactions();
+    const paymentStatus = this.filterPaymentStatusSignal();
+    const term = this.searchTermSignal().toLowerCase().trim();
+    const col = this.sortColumnSignal();
+    const dir = this.sortDirectionSignal();
+
+    if (paymentStatus) {
+      filtered = filtered.filter(txn => {
+        if (paymentStatus === 'pending') return txn.paymentStatus === 'pending';
+        return txn.type === 'expense' || txn.paymentStatus !== 'pending';
+      });
+    }
+
+    if (term) {
+      filtered = filtered.filter(txn =>
+        txn.description?.toLowerCase().includes(term) ||
+        txn.paidByName?.toLowerCase().includes(term) ||
+        txn.createdByName?.toLowerCase().includes(term) ||
+        txn.categoryName?.toLowerCase().includes(term) ||
+        txn.segmentName?.toLowerCase().includes(term) ||
+        txn.amount.toString().includes(term)
+      );
+    }
+
+    return sortData(filtered, col, dir);
+  });
 
   async ngOnInit(): Promise<void> {
     this.segments.set(await this.segmentService.getAll());
@@ -393,76 +383,40 @@ export class TransactionListComponent implements OnInit {
     this.hasMore.set(result.transactions.length === 20);
   }
 
-  displayedTransactions(): Transaction[] {
-    let filtered = this.transactions();
-
-    if (this.filterPaymentStatus) {
-      filtered = filtered.filter(txn => {
-        if (this.filterPaymentStatus === 'pending') return txn.paymentStatus === 'pending';
-        return txn.type === 'expense' || txn.paymentStatus !== 'pending';
-      });
-    }
-
-    const term = this.searchTerm.toLowerCase().trim();
-    if (term) {
-      filtered = filtered.filter(txn =>
-        txn.description?.toLowerCase().includes(term) ||
-        txn.paidByName?.toLowerCase().includes(term) ||
-        txn.createdByName?.toLowerCase().includes(term) ||
-        txn.categoryName?.toLowerCase().includes(term) ||
-        txn.segmentName?.toLowerCase().includes(term) ||
-        txn.amount.toString().includes(term)
-      );
-    }
-
-    if (this.sortColumn) {
-      filtered = [...filtered].sort((a, b) => {
-        let valA: any, valB: any;
-        if (this.sortColumn === 'date') {
-          valA = a.date.toMillis(); valB = b.date.toMillis();
-        } else {
-          valA = (a as any)[this.sortColumn]; valB = (b as any)[this.sortColumn];
-        }
-        if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = (valB || '').toLowerCase(); }
-        const cmp = valA < valB ? -1 : valA > valB ? 1 : 0;
-        return this.sortDirection === 'asc' ? cmp : -cmp;
-      });
-    }
-
-    return filtered;
+  /** Sync plain filter fields into signals so computed() picks them up. */
+  private syncFilterSignals(): void {
+    this.filterPaymentStatusSignal.set(this.filterPaymentStatus);
+    this.searchTermSignal.set(this.searchTerm);
+    this.sortColumnSignal.set(this.sortColumn);
+    this.sortDirectionSignal.set(this.sortDirection);
   }
 
   paginatedTransactions(): Transaction[] {
-    const all = this.displayedTransactions();
-    const start = (this.currentPage - 1) * this.pageSize;
-    return all.slice(start, start + this.pageSize);
+    this.syncFilterSignals();
+    return paginate(this.displayedTransactions(), this.currentPage, this.pageSize);
   }
 
   totalPages(): number {
-    return Math.max(1, Math.ceil(this.displayedTransactions().length / this.pageSize));
+    return totalPages(this.displayedTransactions().length, this.pageSize);
   }
 
   pageStart(): number {
-    return this.displayedTransactions().length === 0 ? 0 : (this.currentPage - 1) * this.pageSize + 1;
+    return pageStart(this.displayedTransactions().length, this.currentPage, this.pageSize);
   }
 
   pageEnd(): number {
-    return Math.min(this.currentPage * this.pageSize, this.displayedTransactions().length);
+    return pageEnd(this.displayedTransactions().length, this.currentPage, this.pageSize);
   }
 
   toggleSort(column: string): void {
-    if (this.sortColumn === column) {
-      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-      this.sortColumn = column;
-      this.sortDirection = 'asc';
-    }
+    const state = toggleSortState({ column: this.sortColumn, direction: this.sortDirection }, column);
+    this.sortColumn = state.column;
+    this.sortDirection = state.direction;
     this.currentPage = 1;
   }
 
   getSortIcon(column: string): string {
-    if (this.sortColumn !== column) return '↕';
-    return this.sortDirection === 'asc' ? '↑' : '↓';
+    return getSortIndicator(this.sortColumn, this.sortDirection, column);
   }
 
   clearFilters(): void {
@@ -503,6 +457,7 @@ export class TransactionListComponent implements OnInit {
         } else {
           await this.transactionService.softDelete(txn.id);
         }
+        this.snackBar.open('Transaction deleted', '', { duration: 2500 });
         await this.loadData();
       }
     });

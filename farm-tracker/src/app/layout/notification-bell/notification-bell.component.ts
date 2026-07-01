@@ -51,28 +51,28 @@ import { MatMenuModule } from '@angular/material/menu';
   styles: [`
     .menu-header {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 8px 16px; border-bottom: 1px solid #e2e8f0;
-      font-weight: 600; font-size: 0.9rem; color: #1e293b;
+      padding: 8px 16px; border-bottom: 1px solid var(--color-border);
+      font-weight: 600; font-size: var(--font-md); color: var(--color-text);
     }
-    .clear-all { font-size: 0.75rem; color: #4f46e5; }
+    .clear-all { font-size: var(--font-sm); color: var(--color-primary); }
     .empty {
       display: flex; align-items: center; gap: 8px; padding: 24px 16px;
-      color: #94a3b8; justify-content: center;
+      color: var(--color-text-muted); justify-content: center;
     }
     .notif-item {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 16px; border-bottom: 1px solid #f1f5f9; cursor: pointer;
+      padding: 10px 16px; border-bottom: 1px solid var(--color-border-light); cursor: pointer;
       min-width: 300px;
     }
-    .notif-item:hover { background: #f8fafc; }
-    .notif-item.warning { border-left: 3px solid #d97706; }
-    .notif-item.error { border-left: 3px solid #dc2626; }
+    .notif-item:hover { background: var(--color-bg); }
+    .notif-item.warning { border-left: 3px solid var(--color-warning); }
+    .notif-item.error { border-left: 3px solid var(--color-expense); }
     .notif-content { display: flex; align-items: flex-start; gap: 10px; flex: 1; }
     .notif-icon { font-size: 20px; width: 20px; height: 20px; margin-top: 2px; }
-    .warning .notif-icon { color: #d97706; }
-    .error .notif-icon { color: #dc2626; }
-    .notif-title { font-size: 0.85rem; font-weight: 600; color: #1e293b; }
-    .notif-message { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
+    .warning .notif-icon { color: var(--color-warning); }
+    .error .notif-icon { color: var(--color-expense); }
+    .notif-title { font-size: var(--font-base); font-weight: 600; color: var(--color-text); }
+    .notif-message { font-size: var(--font-sm); color: var(--color-text-secondary); margin-top: 2px; }
     .dismiss-btn { opacity: 0.4; }
     .notif-item:hover .dismiss-btn { opacity: 1; }
     @media (max-width: 480px) {

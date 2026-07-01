@@ -184,7 +184,7 @@ import { MatRadioModule } from '@angular/material/radio';
       font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600;
     }
     @media (max-width: 640px) {
-      .form-row { flex-direction: column; gap: 0; }
+      .form-row { flex-direction: column; gap: 0.5rem; }
       .form-card { padding: 1rem; }
     }
   `],

@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { UserService } from '../../../core/services/user.service';
 import { AppUser } from '../../../core/models/user.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
+import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -88,35 +89,12 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
     }
   `,
   styles: [`
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-    .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; }
-    .table-container { background: white; border-radius: 8px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .data-table { width: 100%; border-collapse: collapse; }
-    .data-table th { background: #f8fafc; padding: 12px 16px; text-align: left; font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600; }
-    .data-table td { padding: 12px 16px; border-top: 1px solid #f1f5f9; font-size: 0.875rem; }
-    .role-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: capitalize; }
-    .role-badge.admin { background: #fef3c7; color: #d97706; }
-    .role-badge.manager { background: #dbeafe; color: #2563eb; }
-    .role-badge.viewer { background: #f1f5f9; color: #64748b; }
-    .segment-chip { background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-right: 4px; }
-    .sortable { cursor: pointer; user-select: none; }
-    .sortable:hover { color: #1e293b; }
-    .sort-icon { font-size: 0.7rem; color: #94a3b8; }
-    .pagination {
-      display: flex; align-items: center; justify-content: flex-end; gap: 1rem;
-      padding: 8px 16px; border-top: 1px solid #e2e8f0; font-size: 0.8rem; color: #64748b;
-    }
-    .page-size { display: flex; align-items: center; gap: 6px; }
-    .page-size select { border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; font-size: 0.8rem; background: white; color: #334155; }
-    .page-info { font-size: 0.8rem; }
-    .page-buttons { display: flex; align-items: center; }
-    .page-buttons button { width: 32px; height: 32px; }
-    @media (max-width: 768px) {
-      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
-    }
-    @media (max-width: 640px) {
-      .hide-mobile { display: none; }
-    }
+    .table-container { background: white; border-radius: var(--radius-md); overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .role-badge { padding: 2px 8px; border-radius: var(--radius-sm); font-size: var(--font-sm); font-weight: 600; text-transform: capitalize; }
+    .role-badge.admin { background: var(--color-warning-light); color: var(--color-warning); }
+    .role-badge.manager { background: var(--color-info-light); color: var(--color-info); }
+    .role-badge.viewer { background: var(--color-bg-alt); color: var(--color-text-secondary); }
+    .segment-chip { background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: var(--radius-sm); font-size: 0.7rem; margin-right: 4px; }
   `],
 })
 export class UserManagementComponent implements OnInit {
@@ -127,7 +105,7 @@ export class UserManagementComponent implements OnInit {
   loading = signal(true);
 
   sortColumn = '';
-  sortDirection: 'asc' | 'desc' = 'asc';
+  sortDirection: SortDirection = 'asc';
   pageSize = 20;
   currentPage = 1;
 
@@ -137,42 +115,26 @@ export class UserManagementComponent implements OnInit {
   }
 
   sortedUsers(): AppUser[] {
-    let data = this.users();
-    if (this.sortColumn) {
-      data = [...data].sort((a, b) => {
-        let valA: any = (a as any)[this.sortColumn];
-        let valB: any = (b as any)[this.sortColumn];
-        if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = (valB || '').toLowerCase(); }
-        const cmp = valA < valB ? -1 : valA > valB ? 1 : 0;
-        return this.sortDirection === 'asc' ? cmp : -cmp;
-      });
-    }
-    return data;
+    return sortData(this.users(), this.sortColumn, this.sortDirection);
   }
 
   paginatedUsers(): AppUser[] {
-    const all = this.sortedUsers();
-    const start = (this.currentPage - 1) * this.pageSize;
-    return all.slice(start, start + this.pageSize);
+    return paginate(this.sortedUsers(), this.currentPage, this.pageSize);
   }
 
-  totalPages(): number { return Math.max(1, Math.ceil(this.sortedUsers().length / this.pageSize)); }
-  pageStart(): number { return this.sortedUsers().length === 0 ? 0 : (this.currentPage - 1) * this.pageSize + 1; }
-  pageEnd(): number { return Math.min(this.currentPage * this.pageSize, this.sortedUsers().length); }
+  totalPages(): number { return totalPages(this.sortedUsers().length, this.pageSize); }
+  pageStart(): number { return pageStart(this.sortedUsers().length, this.currentPage, this.pageSize); }
+  pageEnd(): number { return pageEnd(this.sortedUsers().length, this.currentPage, this.pageSize); }
 
   toggleSort(column: string): void {
-    if (this.sortColumn === column) {
-      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-      this.sortColumn = column;
-      this.sortDirection = 'asc';
-    }
+    const state = toggleSortState({ column: this.sortColumn, direction: this.sortDirection }, column);
+    this.sortColumn = state.column;
+    this.sortDirection = state.direction;
     this.currentPage = 1;
   }
 
   getSortIcon(column: string): string {
-    if (this.sortColumn !== column) return '↕';
-    return this.sortDirection === 'asc' ? '↑' : '↓';
+    return getSortIndicator(this.sortColumn, this.sortDirection, column);
   }
 
   addUser(): void {

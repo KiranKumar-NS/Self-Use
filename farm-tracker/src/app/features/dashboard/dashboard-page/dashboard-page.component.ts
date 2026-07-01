@@ -66,10 +66,10 @@ import { MatIconModule } from '@angular/material/icon';
   `,
   styles: [`
     .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-    .page-title { margin: 0; font-size: 1.5rem; color: #1e293b; }
-    .month-picker { display: flex; align-items: center; gap: 4px; }
-    .month-label { font-size: 1rem; font-weight: 600; color: #1e293b; min-width: 140px; text-align: center; }
-    .today-btn { font-size: 0.8rem; color: #4f46e5; margin-left: 4px; }
+    .page-title { margin: 0; font-size: var(--font-2xl); color: var(--color-text); }
+    .month-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .month-label { font-size: var(--font-lg); font-weight: 600; color: var(--color-text); min-width: 140px; text-align: center; }
+    .today-btn { font-size: 0.8rem; color: var(--color-primary); }
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
     .widgets-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
     @media (max-width: 768px) {
@@ -77,6 +77,7 @@ import { MatIconModule } from '@angular/material/icon';
       .charts-grid { grid-template-columns: 1fr; }
       .widgets-grid { grid-template-columns: 1fr; }
       .month-label { min-width: 100px; font-size: 0.9rem; }
+      .today-btn { width: 100%; }
     }
   `],
 })

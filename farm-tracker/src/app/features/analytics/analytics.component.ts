@@ -3,15 +3,15 @@ import { FormsModule } from '@angular/forms';
 import { DatePipe, UpperCasePipe } from '@angular/common';
 import { Transaction } from '../../core/models/transaction.model';
 import { TransactionService } from '../../core/services/transaction.service';
-import { ExportService } from '../../core/services/export.service';
 import { SummaryService } from '../../core/services/summary.service';
 import { SegmentService } from '../../core/services/segment.service';
 import { Segment } from '../../core/models/segment.model';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { WhatsappShareDialogComponent, WhatsappShareData, ShareTransaction } from './whatsapp-share-dialog.component';
-import { getMonthRange } from '../../core/utils/date.utils';
+import { getMonthRange, getMonthString } from '../../core/utils/date.utils';
 import { CurrencyInrPipe } from '../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
+import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../core/utils/table.utils';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
 import { MatCardModule } from '@angular/material/card';
@@ -20,7 +20,6 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatInputModule } from '@angular/material/input';
-import { getMonthString } from '../../core/utils/date.utils';
 
 @Component({
   selector: 'app-analytics',
@@ -51,14 +50,15 @@ import { getMonthString } from '../../core/utils/date.utils';
 
     <!-- Filters -->
     <mat-card class="filter-card">
-      <div class="filter-header">
+      <div class="filter-header" (click)="filtersOpen = !filtersOpen">
         <mat-icon>filter_list</mat-icon>
         <span>Filters</span>
         @if (hasFilters()) {
-          <button mat-button class="clear-btn" (click)="clearFilters()">Clear All</button>
+          <button mat-button class="clear-btn" (click)="clearFilters(); $event.stopPropagation()">Clear All</button>
         }
+        <mat-icon class="toggle-icon" [class.expanded]="filtersOpen">expand_more</mat-icon>
       </div>
-      <div class="filters">
+      <div class="filters" [class.collapsed]="!filtersOpen">
         <mat-form-field appearance="outline" class="filter-field">
           <mat-label>From Month</mat-label>
           <mat-select [(ngModel)]="filterFromMonth" (selectionChange)="loadTransactions()">
@@ -267,93 +267,58 @@ import { getMonthString } from '../../core/utils/date.utils';
     }
   `,
   styles: [`
-    .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
-    .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; font-weight: 700; }
-    .subtitle { margin: 4px 0 0; color: #64748b; font-size: 0.85rem; }
     .export-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; }
     .wa-share-btn { color: #25D366 !important; border-color: #25D366 !important; }
-
-    .filter-card { margin-bottom: 1.25rem; padding: 1rem 1.25rem; }
-    .filter-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 600; color: #475569; }
-    .filter-header mat-icon { font-size: 18px; width: 18px; height: 18px; color: #94a3b8; }
-    .clear-btn { margin-left: auto; font-size: 0.8rem; color: #4f46e5; }
-    .filters { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-    .filter-field { flex: 1; min-width: 150px; }
+    .filter-header { cursor: pointer; }
+    .toggle-icon {
+      margin-left: auto; transition: transform 0.2s; color: var(--color-text-muted);
+      font-size: 20px; width: 20px; height: 20px;
+    }
+    .toggle-icon.expanded { transform: rotate(180deg); }
+    .filters.collapsed { display: none; }
 
     .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
-    .stat-card { padding: 1.25rem; display: flex; flex-direction: column; border-left: 4px solid #e2e8f0; }
-    .stat-card.total { border-color: #4f46e5; background: #f5f3ff; }
-    .stat-card.income-card { border-color: #16a34a; background: #f0fdf4; }
-    .stat-card.profit { border-color: #16a34a; background: #f0fdf4; }
-    .stat-card.loss { border-color: #dc2626; background: #fef2f2; }
-    .expense-text { color: #dc2626; }
-    .income-text { color: #16a34a; }
-    .stat-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
-    .stat-value { font-size: 1.5rem; font-weight: 700; color: #1e293b; margin: 4px 0; }
-    .stat-count { font-size: 0.75rem; color: #94a3b8; }
+    .stat-card { padding: 1.25rem; display: flex; flex-direction: column; border-left: 4px solid var(--color-border); }
+    .stat-card.total { border-color: var(--color-primary); background: #f5f3ff; }
+    .stat-card.income-card { border-color: var(--color-income); background: var(--color-income-bg); }
+    .stat-card.profit { border-color: var(--color-income); background: var(--color-income-bg); }
+    .stat-card.loss { border-color: var(--color-expense); background: var(--color-expense-bg); }
+    .expense-text { color: var(--color-expense); }
+    .income-text { color: var(--color-income); }
+    .stat-label { font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
+    .stat-value { font-size: var(--font-2xl); font-weight: 700; color: var(--color-text); margin: 4px 0; }
+    .stat-count { font-size: var(--font-sm); color: var(--color-text-muted); }
 
-    .section-title { margin: 1.5rem 0 0.75rem; font-size: 1.1rem; color: #1e293b; }
+    .section-title { margin: 1.5rem 0 0.75rem; font-size: 1.1rem; color: var(--color-text); }
 
     .person-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
     .person-card { padding: 1.25rem; }
-    .person-name { font-size: 1rem; font-weight: 700; color: #1e293b; }
-    .person-amount { font-size: 1.25rem; font-weight: 700; color: #dc2626; margin: 4px 0 8px; }
-    .person-bar { height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden; margin-bottom: 10px; }
-    .person-fill { height: 100%; background: #4f46e5; border-radius: 3px; transition: width 0.3s; }
-    .person-details { display: flex; flex-wrap: wrap; gap: 6px; }
-    .person-seg { font-size: 0.7rem; background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; }
+    .person-name { font-size: var(--font-lg); font-weight: 700; color: var(--color-text); }
+    .person-amount { font-size: var(--font-xl); font-weight: 700; color: var(--color-expense); margin: 4px 0 8px; }
+    .person-bar { height: 6px; background: var(--color-bg-alt); border-radius: 3px; overflow: hidden; margin-bottom: 10px; }
+    .person-fill { height: 100%; background: var(--color-primary); border-radius: 3px; transition: width 0.3s; }
     .invest-details { display: flex; flex-direction: column; gap: 6px; }
     .invest-row { display: flex; justify-content: space-between; font-size: 0.8rem; }
-    .invest-label { color: #64748b; }
+    .invest-label { color: var(--color-text-secondary); }
     .invest-value { font-weight: 600; }
-    .invest-value.expense { color: #dc2626; }
-    .invest-value.income { color: #16a34a; }
+    .invest-value.expense { color: var(--color-expense); }
+    .invest-value.income { color: var(--color-income); }
 
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
     .chart-card { padding: 1.25rem; }
-    .chart-card h3 { margin: 0 0 1rem; font-size: 0.9rem; color: #1e293b; }
+    .chart-card h3 { margin: 0 0 1rem; font-size: var(--font-md); color: var(--color-text); }
 
-    .table-card { padding: 0; overflow: hidden; }
-    .table-container { overflow-x: auto; }
-    .data-table { width: 100%; border-collapse: collapse; }
-    .data-table th { background: #f8fafc; padding: 10px 14px; text-align: left; font-size: 0.7rem; text-transform: uppercase; color: #64748b; font-weight: 700; border-bottom: 2px solid #e2e8f0; }
-    .data-table td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; color: #334155; }
-    .data-table tfoot td { background: #f8fafc; border-top: 2px solid #e2e8f0; }
-    .data-table tr:hover td { background: #f8fafc; }
-    .date-cell { white-space: nowrap; color: #64748b; font-size: 0.8rem; }
-    .amount-cell { font-weight: 700; color: #dc2626; white-space: nowrap; }
-    .desc-cell { max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #94a3b8; font-size: 0.8rem; }
-    .payment-badge { padding: 2px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 700; }
-    .payment-badge.cash { background: #fef3c7; color: #d97706; }
-    .payment-badge.upi { background: #dbeafe; color: #2563eb; }
-    .sortable { cursor: pointer; user-select: none; }
-    .sortable:hover { color: #1e293b; }
-    .sort-icon { font-size: 0.7rem; color: #94a3b8; }
-    .pagination {
-      display: flex; align-items: center; justify-content: flex-end; gap: 1rem;
-      padding: 8px 16px; border-top: 1px solid #e2e8f0; font-size: 0.8rem; color: #64748b;
-    }
-    .page-size { display: flex; align-items: center; gap: 6px; }
-    .page-size select { border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; font-size: 0.8rem; background: white; color: #334155; }
-    .page-info { font-size: 0.8rem; }
-    .page-buttons { display: flex; align-items: center; }
-    .page-buttons button { width: 32px; height: 32px; }
+    .amount-cell { color: var(--color-expense); }
+    .desc-cell { max-width: 250px; }
 
     @media (max-width: 768px) {
-      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .charts-grid { grid-template-columns: 1fr; }
-      .filter-field { min-width: 0; flex-basis: 100%; }
-      .filter-card { padding: 0.75rem; }
       .person-grid { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 640px) {
-      .hide-mobile { display: none; }
     }
   `],
 })
 export class AnalyticsComponent implements OnInit {
   private transactionService = inject(TransactionService);
-  private exportService = inject(ExportService);
   private summaryService = inject(SummaryService);
   private segmentService = inject(SegmentService);
   private dialog = inject(MatDialog);
@@ -361,6 +326,7 @@ export class AnalyticsComponent implements OnInit {
   loading = signal(true);
   allTransactions = signal<Transaction[]>([]);
   filtered = signal<Transaction[]>([]);
+  filtersOpen = window.innerWidth > 768;
 
   // Filters — default to current month
   filterFromMonth = getMonthString(new Date());
@@ -371,7 +337,7 @@ export class AnalyticsComponent implements OnInit {
 
   // Sorting & pagination
   sortColumn = '';
-  sortDirection: 'asc' | 'desc' = 'asc';
+  sortDirection: SortDirection = 'asc';
   pageSize = 20;
   currentPage = 1;
 
@@ -406,7 +372,10 @@ export class AnalyticsComponent implements OnInit {
   barOptions: ChartConfiguration<'bar'>['options'] = {
     responsive: true,
     plugins: { legend: { display: false } },
-    scales: { y: { beginAtZero: true } },
+    scales: {
+      y: { beginAtZero: true },
+      x: { ticks: { maxRotation: 45, autoSkip: true } },
+    },
   };
 
   // Colors
@@ -614,52 +583,37 @@ export class AnalyticsComponent implements OnInit {
   }
 
   sortedFiltered(): Transaction[] {
-    let data = this.filtered();
-    if (this.sortColumn) {
-      data = [...data].sort((a, b) => {
-        let valA: any, valB: any;
-        if (this.sortColumn === 'date') {
-          valA = a.date.toMillis(); valB = b.date.toMillis();
-        } else {
-          valA = (a as any)[this.sortColumn]; valB = (b as any)[this.sortColumn];
-        }
-        if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = (valB || '').toLowerCase(); }
-        const cmp = valA < valB ? -1 : valA > valB ? 1 : 0;
-        return this.sortDirection === 'asc' ? cmp : -cmp;
-      });
-    }
-    return data;
+    return sortData(this.filtered(), this.sortColumn, this.sortDirection);
   }
 
   paginatedFiltered(): Transaction[] {
-    const all = this.sortedFiltered();
-    const start = (this.currentPage - 1) * this.pageSize;
-    return all.slice(start, start + this.pageSize);
+    return paginate(this.sortedFiltered(), this.currentPage, this.pageSize);
   }
 
-  analyticsTotalPages(): number { return Math.max(1, Math.ceil(this.sortedFiltered().length / this.pageSize)); }
-  analyticsPageStart(): number { return this.sortedFiltered().length === 0 ? 0 : (this.currentPage - 1) * this.pageSize + 1; }
-  analyticsPageEnd(): number { return Math.min(this.currentPage * this.pageSize, this.sortedFiltered().length); }
+  analyticsTotalPages(): number { return totalPages(this.sortedFiltered().length, this.pageSize); }
+  analyticsPageStart(): number { return pageStart(this.sortedFiltered().length, this.currentPage, this.pageSize); }
+  analyticsPageEnd(): number { return pageEnd(this.sortedFiltered().length, this.currentPage, this.pageSize); }
 
   toggleSort(column: string): void {
-    if (this.sortColumn === column) {
-      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-      this.sortColumn = column;
-      this.sortDirection = 'asc';
-    }
+    const state = toggleSortState({ column: this.sortColumn, direction: this.sortDirection }, column);
+    this.sortColumn = state.column;
+    this.sortDirection = state.direction;
     this.currentPage = 1;
   }
 
   getSortIcon(column: string): string {
-    if (this.sortColumn !== column) return '↕';
-    return this.sortDirection === 'asc' ? '↑' : '↓';
+    return getSortIndicator(this.sortColumn, this.sortDirection, column);
   }
 
   private get rangeLabel(): string {
     const from = this.filterFromMonth || 'all';
     const to = this.filterToMonth || 'all';
     return from === to ? from : `${from}_to_${to}`;
+  }
+
+  private async getExportService() {
+    const { ExportService } = await import('../../core/services/export.service');
+    return new ExportService();
   }
 
   async exportPdf(): Promise<void> {
@@ -670,12 +624,16 @@ export class AnalyticsComponent implements OnInit {
     for (let i = 0; i < months.length; i += 30) {
       summaryChunks.push(this.summaryService.getForMonths(months.slice(i, i + 30)));
     }
-    const summaries = (await Promise.all(summaryChunks)).flat();
-    this.exportService.exportTransactionsPdf(this.filtered(), summaries, this.rangeLabel);
+    const [summaries, exportService] = await Promise.all([
+      Promise.all(summaryChunks).then(chunks => chunks.flat()),
+      this.getExportService(),
+    ]);
+    exportService.exportTransactionsPdf(this.filtered(), summaries, this.rangeLabel);
   }
 
-  exportCsv(): void {
-    this.exportService.exportTransactionsCsv(this.filtered(), `transactions-${this.rangeLabel}`);
+  async exportCsv(): Promise<void> {
+    const exportService = await this.getExportService();
+    exportService.exportTransactionsCsv(this.filtered(), `transactions-${this.rangeLabel}`);
   }
 
   shareWhatsApp(): void {

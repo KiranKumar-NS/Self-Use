@@ -8,6 +8,7 @@ import { InventoryEvent } from '../../../core/models/inventory.model';
 import { Segment } from '../../../core/models/segment.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { InventoryEventDialogComponent } from '../inventory-event-dialog/inventory-event-dialog.component';
+import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -136,56 +137,25 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
     }
   `,
   styles: [`
-    .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
-    .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; }
-    .subtitle { margin: 4px 0 0; color: #64748b; font-size: 0.85rem; }
     .stock-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-    .stock-card { display: flex; align-items: center; gap: 1rem; padding: 1.25rem; border-left: 4px solid #4f46e5; }
+    .stock-card { display: flex; align-items: center; gap: 1rem; padding: 1.25rem; border-left: 4px solid var(--color-primary); }
     .stock-icon { font-size: 2rem; }
-    .stock-name { display: block; font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600; }
-    .stock-count { display: block; font-size: 2rem; font-weight: 700; color: #1e293b; }
-    .filter-card { margin-bottom: 1rem; padding: 1rem; }
-    .filter-field { min-width: 200px; }
-    .table-card { padding: 0; overflow: hidden; }
-    .table-container { overflow-x: auto; }
-    .data-table { width: 100%; border-collapse: collapse; }
-    .data-table th { background: #f8fafc; padding: 10px 14px; text-align: left; font-size: 0.7rem; text-transform: uppercase; color: #64748b; font-weight: 700; border-bottom: 2px solid #e2e8f0; }
-    .data-table td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; color: #334155; }
-    .date-cell { white-space: nowrap; color: #64748b; font-size: 0.8rem; }
-    .event-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
-    .event-badge.birth { background: #f0fdf4; color: #16a34a; }
-    .event-badge.purchase { background: #dbeafe; color: #2563eb; }
-    .event-badge.sale { background: #fef3c7; color: #d97706; }
-    .event-badge.death { background: #fef2f2; color: #dc2626; }
-    .event-badge.adjustment { background: #f1f5f9; color: #475569; }
+    .stock-name { display: block; font-size: var(--font-sm); color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600; }
+    .stock-count { display: block; font-size: 2rem; font-weight: 700; color: var(--color-text); }
+    .event-badge { padding: 2px 8px; border-radius: var(--radius-sm); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
+    .event-badge.birth { background: var(--color-income-bg); color: var(--color-income); }
+    .event-badge.purchase { background: var(--color-info-light); color: var(--color-info); }
+    .event-badge.sale { background: var(--color-warning-light); color: var(--color-warning); }
+    .event-badge.death { background: var(--color-expense-bg); color: var(--color-expense); }
+    .event-badge.adjustment { background: var(--color-bg-alt); color: var(--color-text-subtle); }
     .count-cell { font-weight: 700; }
-    .count-cell.positive { color: #16a34a; }
-    .count-cell.negative { color: #dc2626; }
-    .breed-cell { font-size: 0.8rem; color: #7c3aed; font-weight: 500; }
-    .note-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #94a3b8; }
-    .empty-cell { text-align: center; color: #94a3b8; padding: 2rem !important; }
-    .actions-th { text-align: center; }
-    .actions-cell { white-space: nowrap; text-align: center; }
-    .actions-cell button { opacity: 0.5; }
-    tr:hover .actions-cell button { opacity: 1; }
-    .sortable { cursor: pointer; user-select: none; }
-    .sortable:hover { color: #1e293b; }
-    .sort-icon { font-size: 0.7rem; color: #94a3b8; }
-    .pagination {
-      display: flex; align-items: center; justify-content: flex-end; gap: 1rem;
-      padding: 8px 16px; border-top: 1px solid #e2e8f0; font-size: 0.8rem; color: #64748b;
-    }
-    .page-size { display: flex; align-items: center; gap: 6px; }
-    .page-size select { border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; font-size: 0.8rem; background: white; color: #334155; }
-    .page-info { font-size: 0.8rem; }
-    .page-buttons { display: flex; align-items: center; }
-    .page-buttons button { width: 32px; height: 32px; }
+    .count-cell.positive { color: var(--color-income); }
+    .count-cell.negative { color: var(--color-expense); }
+    .breed-cell { font-size: 0.8rem; color: var(--color-purple); font-weight: 500; }
+    .note-cell { max-width: 200px; }
+    .empty-cell { text-align: center; color: var(--color-text-muted); padding: 2rem !important; }
     @media (max-width: 768px) {
-      .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .filter-field { min-width: 0; width: 100%; }
-    }
-    @media (max-width: 640px) {
-      .hide-mobile { display: none; }
     }
   `],
 })
@@ -201,7 +171,7 @@ export class InventoryPageComponent implements OnInit {
   filterSegment = '';
 
   sortColumn = '';
-  sortDirection: 'asc' | 'desc' = 'asc';
+  sortDirection: SortDirection = 'asc';
   pageSize = 20;
   currentPage = 1;
 
@@ -223,46 +193,26 @@ export class InventoryPageComponent implements OnInit {
   }
 
   sortedEvents(): InventoryEvent[] {
-    let data = this.events();
-    if (this.sortColumn) {
-      data = [...data].sort((a, b) => {
-        let valA: any, valB: any;
-        if (this.sortColumn === 'date') {
-          valA = a.date.toMillis(); valB = b.date.toMillis();
-        } else {
-          valA = (a as any)[this.sortColumn]; valB = (b as any)[this.sortColumn];
-        }
-        if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = (valB || '').toLowerCase(); }
-        const cmp = valA < valB ? -1 : valA > valB ? 1 : 0;
-        return this.sortDirection === 'asc' ? cmp : -cmp;
-      });
-    }
-    return data;
+    return sortData(this.events(), this.sortColumn, this.sortDirection);
   }
 
   paginatedEvents(): InventoryEvent[] {
-    const all = this.sortedEvents();
-    const start = (this.currentPage - 1) * this.pageSize;
-    return all.slice(start, start + this.pageSize);
+    return paginate(this.sortedEvents(), this.currentPage, this.pageSize);
   }
 
-  totalPages(): number { return Math.max(1, Math.ceil(this.sortedEvents().length / this.pageSize)); }
-  pageStart(): number { return this.sortedEvents().length === 0 ? 0 : (this.currentPage - 1) * this.pageSize + 1; }
-  pageEnd(): number { return Math.min(this.currentPage * this.pageSize, this.sortedEvents().length); }
+  totalPages(): number { return totalPages(this.sortedEvents().length, this.pageSize); }
+  pageStart(): number { return pageStart(this.sortedEvents().length, this.currentPage, this.pageSize); }
+  pageEnd(): number { return pageEnd(this.sortedEvents().length, this.currentPage, this.pageSize); }
 
   toggleSort(column: string): void {
-    if (this.sortColumn === column) {
-      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-      this.sortColumn = column;
-      this.sortDirection = 'asc';
-    }
+    const state = toggleSortState({ column: this.sortColumn, direction: this.sortDirection }, column);
+    this.sortColumn = state.column;
+    this.sortDirection = state.direction;
     this.currentPage = 1;
   }
 
   getSortIcon(column: string): string {
-    if (this.sortColumn !== column) return '↕';
-    return this.sortDirection === 'asc' ? '↑' : '↓';
+    return getSortIndicator(this.sortColumn, this.sortDirection, column);
   }
 
   openEventDialog(): void {

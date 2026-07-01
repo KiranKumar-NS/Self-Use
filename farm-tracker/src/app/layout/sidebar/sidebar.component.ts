@@ -52,9 +52,12 @@ import { MatIconModule } from '@angular/material/icon';
         </a>
 
         @if (auth.isAdmin()) {
+          <div class="nav-section">
+            <span class="nav-section-label">Admin</span>
+          </div>
           <a routerLink="/admin" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item" (click)="closed.emit()">
             <mat-icon>admin_panel_settings</mat-icon>
-            <span>Admin</span>
+            <span>Users</span>
           </a>
 
           <a routerLink="/admin/data-setup" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
@@ -120,6 +123,16 @@ import { MatIconModule } from '@angular/material/icon';
       font-size: 20px;
       width: 20px;
       height: 20px;
+    }
+    .nav-section {
+      padding: 16px 16px 4px;
+    }
+    .nav-section-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      color: #64748b;
+      font-weight: 700;
+      letter-spacing: 0.08em;
     }
     @media (max-width: 768px) {
       .sidebar {

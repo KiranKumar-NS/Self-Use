@@ -67,32 +67,36 @@ import { MatIconModule } from '@angular/material/icon';
       display: flex; align-items: center; gap: 1rem; padding: 1.25rem;
       border-left: 4px solid transparent;
     }
-    .summary-card mat-icon { font-size: 2rem; width: 2rem; height: 2rem; opacity: 0.8; }
-    .card-content { display: flex; flex-direction: column; }
-    .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600; }
-    .value { font-size: 1.5rem; font-weight: 700; }
-    .income { border-color: #16a34a; }
-    .income .value { color: #16a34a; }
-    .income mat-icon { color: #16a34a; }
-    .expense { border-color: #dc2626; }
-    .expense .value { color: #dc2626; }
-    .expense mat-icon { color: #dc2626; }
-    .profit { border-color: #16a34a; }
-    .profit .value { color: #16a34a; }
-    .profit mat-icon { color: #16a34a; }
-    .loss { border-color: #dc2626; }
-    .loss .value { color: #dc2626; }
-    .loss mat-icon { color: #dc2626; }
-    .distributed { border-color: #7c3aed; }
-    .distributed .value { color: #7c3aed; }
-    .distributed mat-icon { color: #7c3aed; }
-    .reinvestment { border-color: #0891b2; }
-    .reinvestment .value { color: #0891b2; }
-    .reinvestment mat-icon { color: #0891b2; }
-    .pending { border-color: #ea580c; }
-    .pending .value { color: #ea580c; }
-    .pending mat-icon { color: #ea580c; }
+    .summary-card mat-icon { font-size: 2rem; width: 2rem; height: 2rem; opacity: 0.8; flex-shrink: 0; }
+    .card-content { display: flex; flex-direction: column; min-width: 0; }
+    .label { font-size: var(--font-sm); color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600; }
+    .value {
+      font-size: var(--font-2xl); font-weight: 700;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .income { border-color: var(--color-income); }
+    .income .value { color: var(--color-income); }
+    .income mat-icon { color: var(--color-income); }
+    .expense { border-color: var(--color-expense); }
+    .expense .value { color: var(--color-expense); }
+    .expense mat-icon { color: var(--color-expense); }
+    .profit { border-color: var(--color-income); }
+    .profit .value { color: var(--color-income); }
+    .profit mat-icon { color: var(--color-income); }
+    .loss { border-color: var(--color-expense); }
+    .loss .value { color: var(--color-expense); }
+    .loss mat-icon { color: var(--color-expense); }
+    .distributed { border-color: var(--color-purple); }
+    .distributed .value { color: var(--color-purple); }
+    .distributed mat-icon { color: var(--color-purple); }
+    .reinvestment { border-color: var(--color-cyan); }
+    .reinvestment .value { color: var(--color-cyan); }
+    .reinvestment mat-icon { color: var(--color-cyan); }
+    .pending { border-color: var(--color-warning); }
+    .pending .value { color: var(--color-warning); }
+    .pending mat-icon { color: var(--color-warning); }
     @media (max-width: 480px) {
+      .cards-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
       .summary-card { padding: 1rem; gap: 0.75rem; }
       .value { font-size: 1.2rem; }
       .summary-card mat-icon { font-size: 1.5rem; width: 1.5rem; height: 1.5rem; }

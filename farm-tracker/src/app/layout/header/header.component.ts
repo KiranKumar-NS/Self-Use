@@ -40,9 +40,9 @@ import { NotificationBellComponent } from '../notification-bell/notification-bel
   `,
   styles: [`
     .header {
-      background: white;
-      color: #1e293b;
-      border-bottom: 1px solid #e2e8f0;
+      background: var(--color-surface);
+      color: var(--color-text);
+      border-bottom: 1px solid var(--color-border);
       box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .menu-btn { display: none; }
