@@ -477,16 +477,17 @@ export class AnalyticsComponent implements OnInit {
       const incomeResult = await this.transactionService.getAll({ type: 'income' }, 200);
       this.incomeTransactions.set(incomeResult.transactions);
 
-      // Filter income for the selected month range
+      // Filter income for the selected month range and segment
       let incomeForRange = incomeResult.transactions;
       if (this.filterFromMonth) incomeForRange = incomeForRange.filter(t => t.month >= this.filterFromMonth);
       if (this.filterToMonth) incomeForRange = incomeForRange.filter(t => t.month <= this.filterToMonth);
+      if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segment === this.filterSegment);
       this.filteredIncome.set(incomeForRange);
       const incomeTotal = incomeForRange.reduce((s, t) => s + t.amount, 0);
       this.totalIncomeAmount.set(incomeTotal);
       this.netProfit.set(incomeTotal - this.totalExpense());
 
-      for (const txn of incomeResult.transactions) {
+      for (const txn of incomeForRange) {
         if (!txn.distributions?.length) continue;
         for (const d of txn.distributions) {
           if (d.uid === 'reinvestment') continue;
@@ -574,6 +575,42 @@ export class AnalyticsComponent implements OnInit {
     );
 
     this.buildCharts(txns);
+
+    // Re-filter income and rebuild investment summary with all active filters
+    let incomeForRange = this.incomeTransactions();
+    if (this.filterFromMonth) incomeForRange = incomeForRange.filter(t => t.month >= this.filterFromMonth);
+    if (this.filterToMonth) incomeForRange = incomeForRange.filter(t => t.month <= this.filterToMonth);
+    if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segmentName === this.filterSegment);
+    if (this.filterCategory) incomeForRange = incomeForRange.filter(t => t.categoryName === this.filterCategory);
+    if (this.filterPaidBy) incomeForRange = incomeForRange.filter(t => (t.paidByName || 'Unknown') === this.filterPaidBy);
+    this.filteredIncome.set(incomeForRange);
+    const incomeTotal = incomeForRange.reduce((s, t) => s + t.amount, 0);
+    this.totalIncomeAmount.set(incomeTotal);
+    this.netProfit.set(incomeTotal - this.totalExpense());
+
+    // Rebuild person investment from filtered data
+    const investMap: Record<string, { expensesPaid: number; incomeReceived: number }> = {};
+    const ensurePerson = (name: string) => {
+      if (!investMap[name]) investMap[name] = { expensesPaid: 0, incomeReceived: 0 };
+    };
+    for (const t of txns) {
+      const name = t.paidByName || t.createdByName || 'Unknown';
+      ensurePerson(name);
+      investMap[name].expensesPaid += t.amount;
+    }
+    for (const t of incomeForRange) {
+      if (!t.distributions?.length) continue;
+      for (const d of t.distributions) {
+        if (d.uid === 'reinvestment') continue;
+        ensurePerson(d.name);
+        investMap[d.name].incomeReceived += d.amount;
+      }
+    }
+    const summary = Object.entries(investMap)
+      .map(([name, data]) => ({ name, ...data, net: data.expensesPaid - data.incomeReceived }))
+      .sort((a, b) => b.net - a.net);
+    this.investmentSummary.set(summary);
+    this.maxInvestment.set(summary.length > 0 ? Math.max(...summary.map(s => s.net)) : 0);
   }
 
   sortedFiltered(): Transaction[] {
