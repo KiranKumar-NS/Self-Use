@@ -43,4 +43,32 @@ export class SegmentService {
     }
     this.clearCache();
   }
+
+  /** Migrate: set segmentType, unit, and fix icons on existing segments */
+  async migrateSegmentTypes(): Promise<number> {
+    const segments = await this.getAll();
+    let updated = 0;
+    for (const seg of segments) {
+      const defaultSeg = DEFAULT_SEGMENTS.find(d => d.id === seg.id);
+      const updates: any = {};
+      if (!seg.segmentType) {
+        updates.segmentType = defaultSeg?.segmentType || 'animal';
+      }
+      if (!seg.unit && (seg.segmentType || updates.segmentType) === 'animal') {
+        updates.unit = defaultSeg?.unit || 'head';
+      }
+      // Fix dragon emoji
+      if (seg.id === 'dragon' && seg.icon === '🐉') {
+        updates.icon = '🌵';
+        updates.name = 'Dragon Fruit';
+        updates.description = 'Dragon fruit farming';
+      }
+      if (Object.keys(updates).length > 0) {
+        await updateDoc(doc(this.firestore, 'segments', seg.id), updates);
+        updated++;
+      }
+    }
+    if (updated > 0) this.clearCache();
+    return updated;
+  }
 }

@@ -85,6 +85,7 @@ import {
                       <div>
                         <strong>{{ seg.name }}</strong>
                         <span class="item-id">{{ seg.id }}</span>
+                        <span class="seg-type-chip" [class]="seg.segmentType || 'animal'">{{ (seg.segmentType || 'animal') === 'animal' ? '🐄 Animal' : '🌱 Crop' }}</span>
                       </div>
                       <mat-slide-toggle
                         [checked]="seg.isActive"
@@ -119,6 +120,13 @@ import {
                 <mat-form-field appearance="outline">
                   <mat-label>Icon (emoji)</mat-label>
                   <input matInput [(ngModel)]="newSegment.icon" />
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Type</mat-label>
+                  <mat-select [(ngModel)]="newSegment.segmentType">
+                    <mat-option value="animal">🐄 Animal</mat-option>
+                    <mat-option value="crop">🌱 Crop</mat-option>
+                  </mat-select>
                 </mat-form-field>
                 <button mat-flat-button color="primary" (click)="addSegment()" [disabled]="!newSegment.id || !newSegment.name">
                   <mat-icon>add</mat-icon> Add
@@ -271,6 +279,9 @@ import {
     .item-header { display: flex; align-items: center; gap: 10px; }
     .item-icon { font-size: 1.5rem; }
     .item-id { display: block; font-size: 0.7rem; color: #94a3b8; font-family: monospace; }
+    .seg-type-chip { display: inline-block; margin-top: 2px; padding: 1px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 700; }
+    .seg-type-chip.animal { background: #fef3c7; color: #d97706; }
+    .seg-type-chip.crop { background: #f0fdf4; color: #16a34a; }
     .item-desc { margin: 8px 0 0; font-size: 0.8rem; color: #64748b; }
     .delete-btn { position: absolute; top: 4px; right: 4px; }
     .expense-card { border-left: 3px solid #dc2626; }
@@ -313,7 +324,7 @@ export class DataSetupComponent implements OnInit {
   expenseCategories = signal<Category[]>([]);
   incomeCategories = signal<Category[]>([]);
 
-  newSegment = { id: '', name: '', description: '', icon: '' };
+  newSegment = { id: '', name: '', description: '', icon: '', segmentType: 'animal' as 'animal' | 'crop' };
   newCategory = { id: '', name: '', type: 'expense' as 'expense' | 'income' };
 
   async ngOnInit(): Promise<void> {
@@ -385,11 +396,12 @@ export class DataSetupComponent implements OnInit {
         name: this.newSegment.name,
         description: this.newSegment.description,
         icon: this.newSegment.icon || '📦',
+        segmentType: this.newSegment.segmentType,
         isActive: true,
         createdAt: serverTimestamp(),
       });
       this.successMsg.set(`Segment "${this.newSegment.name}" added!`);
-      this.newSegment = { id: '', name: '', description: '', icon: '' };
+      this.newSegment = { id: '', name: '', description: '', icon: '', segmentType: 'animal' };
       await this.loadData();
     } catch (err: any) {
       this.errorMsg.set(err.message);

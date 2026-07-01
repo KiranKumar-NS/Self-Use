@@ -6,11 +6,13 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 
 import { InventoryService } from '../../../core/services/inventory.service';
 import { SegmentService } from '../../../core/services/segment.service';
 import { Segment } from '../../../core/models/segment.model';
 import { InventoryEvent, InventoryEventType } from '../../../core/models/inventory.model';
+import { ANIMAL_EVENT_TYPES } from '../../../core/models/segment.model';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
 
 export interface InventoryEventDialogData {
@@ -22,7 +24,7 @@ export interface InventoryEventDialogData {
   standalone: true,
   imports: [
     FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule,
-    MatInputModule, MatSelectModule, MatDatepickerModule,
+    MatInputModule, MatSelectModule, MatDatepickerModule, MatAutocompleteModule,
   ],
   template: `
     <h2 mat-dialog-title>{{ isEdit ? 'Edit' : 'Record' }} Inventory Event</h2>
@@ -30,8 +32,8 @@ export interface InventoryEventDialogData {
       <div class="form-grid">
         <mat-form-field appearance="outline">
           <mat-label>Segment</mat-label>
-          <mat-select [(ngModel)]="segment" required>
-            @for (seg of segments(); track seg.id) {
+          <mat-select [(ngModel)]="segment" (selectionChange)="onSegmentChange()" required>
+            @for (seg of animalSegments(); track seg.id) {
               <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
             }
           </mat-select>
@@ -40,17 +42,26 @@ export interface InventoryEventDialogData {
         <mat-form-field appearance="outline">
           <mat-label>Event Type</mat-label>
           <mat-select [(ngModel)]="eventType" required>
-            <mat-option value="birth">Birth / Hatched</mat-option>
-            <mat-option value="purchase">Purchase</mat-option>
-            <mat-option value="sale">Sale</mat-option>
-            <mat-option value="death">Death</mat-option>
-            <mat-option value="adjustment">Adjustment</mat-option>
+            @for (et of eventTypeOptions; track et.value) {
+              <mat-option [value]="et.value">{{ et.label }}</mat-option>
+            }
           </mat-select>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>Count</mat-label>
           <input matInput type="number" [(ngModel)]="count" [min]="eventType === 'adjustment' ? null : 1" step="1" required />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Breed (optional)</mat-label>
+          <input matInput [(ngModel)]="breed" [matAutocomplete]="breedAuto"
+            placeholder="e.g. Jamunapari, Boer" />
+          <mat-autocomplete #breedAuto="matAutocomplete">
+            @for (b of filteredBreeds(); track b) {
+              <mat-option [value]="b">{{ b }}</mat-option>
+            }
+          </mat-autocomplete>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -103,8 +114,11 @@ export class InventoryEventDialogComponent implements OnInit {
   segment = '';
   eventType: InventoryEventType = 'birth';
   count = 1;
+  breed = '';
   date = new Date();
   note = '';
+  eventTypeOptions = ANIMAL_EVENT_TYPES;
+  private allBreeds: string[] = [];
 
   async ngOnInit(): Promise<void> {
     this.segments.set(await this.segmentService.getAll());
@@ -116,9 +130,31 @@ export class InventoryEventDialogComponent implements OnInit {
       this.segment = ev.segment;
       this.eventType = ev.eventType;
       this.count = ev.eventType === 'adjustment' ? ev.count : Math.abs(ev.count);
+      this.breed = ev.breed || '';
       this.date = ev.date.toDate();
       this.note = ev.note;
+      this.loadBreeds(ev.segment);
     }
+  }
+
+  animalSegments(): Segment[] {
+    return this.segments().filter(s => s.segmentType !== 'crop');
+  }
+
+  onSegmentChange(): void {
+    this.breed = '';
+    if (this.segment) this.loadBreeds(this.segment);
+  }
+
+  private loadBreeds(segmentId: string): void {
+    const seg = this.segments().find(s => s.id === segmentId);
+    this.allBreeds = seg?.breeds || [];
+  }
+
+  filteredBreeds(): string[] {
+    if (!this.breed) return this.allBreeds;
+    const term = this.breed.toLowerCase();
+    return this.allBreeds.filter(b => b.toLowerCase().includes(term));
   }
 
   async save(): Promise<void> {
@@ -131,6 +167,7 @@ export class InventoryEventDialogComponent implements OnInit {
         segmentName: seg?.name || this.segment,
         eventType: this.eventType,
         count: this.count,
+        breed: this.breed.trim() || undefined,
         note: this.note,
         date: this.date,
         month: getMonthString(this.date),

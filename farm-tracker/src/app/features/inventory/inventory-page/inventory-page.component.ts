@@ -39,14 +39,14 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
     @if (loading()) {
       <app-loading-spinner />
     } @else {
-      <!-- Stock Cards -->
+      <!-- Stock Cards (animals only) -->
       <div class="stock-grid">
-        @for (seg of segments(); track seg.id) {
+        @for (seg of animalSegments(); track seg.id) {
           <mat-card class="stock-card">
             <span class="stock-icon">{{ seg.icon }}</span>
             <div class="stock-info">
               <span class="stock-name">{{ seg.name }}</span>
-              <span class="stock-count">{{ seg.currentStock || 0 }}</span>
+              <span class="stock-count">{{ seg.currentStock || 0 }} <small>{{ seg.unit || 'head' }}</small></span>
             </div>
           </mat-card>
         }
@@ -58,7 +58,7 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
           <mat-label>Filter by Segment</mat-label>
           <mat-select [(ngModel)]="filterSegment" (selectionChange)="loadEvents()">
             <mat-option value="">All Segments</mat-option>
-            @for (seg of segments(); track seg.id) {
+            @for (seg of animalSegments(); track seg.id) {
               <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
             }
           </mat-select>
@@ -75,6 +75,7 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
                 <th class="sortable" (click)="toggleSort('segmentName')">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
                 <th class="sortable" (click)="toggleSort('eventType')">Event <span class="sort-icon">{{ getSortIcon('eventType') }}</span></th>
                 <th class="sortable" (click)="toggleSort('count')">Count <span class="sort-icon">{{ getSortIcon('count') }}</span></th>
+                <th class="sortable" (click)="toggleSort('breed')">Breed <span class="sort-icon">{{ getSortIcon('breed') }}</span></th>
                 <th class="hide-mobile">Note</th>
                 <th class="sortable hide-mobile" (click)="toggleSort('createdByName')">By <span class="sort-icon">{{ getSortIcon('createdByName') }}</span></th>
                 @if (!auth.isViewer()) {
@@ -91,6 +92,7 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
                   <td class="count-cell" [class.positive]="ev.count > 0" [class.negative]="ev.count < 0">
                     {{ ev.count > 0 ? '+' : '' }}{{ ev.count }}
                   </td>
+                  <td class="breed-cell">{{ ev.breed || '-' }}</td>
                   <td class="note-cell hide-mobile">{{ ev.note || '-' }}</td>
                   <td class="hide-mobile">{{ ev.createdByName }}</td>
                   @if (!auth.isViewer()) {
@@ -106,7 +108,7 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
                 </tr>
               }
               @if (events().length === 0) {
-                <tr><td [attr.colspan]="auth.isViewer() ? 6 : 7" class="empty-cell">No inventory events recorded yet.</td></tr>
+                <tr><td [attr.colspan]="auth.isViewer() ? 7 : 8" class="empty-cell">No inventory events recorded yet.</td></tr>
               }
             </tbody>
           </table>
@@ -159,6 +161,7 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
     .count-cell { font-weight: 700; }
     .count-cell.positive { color: #16a34a; }
     .count-cell.negative { color: #dc2626; }
+    .breed-cell { font-size: 0.8rem; color: #7c3aed; font-weight: 500; }
     .note-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #94a3b8; }
     .empty-cell { text-align: center; color: #94a3b8; padding: 2rem !important; }
     .actions-th { text-align: center; }
@@ -203,9 +206,15 @@ export class InventoryPageComponent implements OnInit {
   currentPage = 1;
 
   async ngOnInit(): Promise<void> {
+    // Auto-migrate: set segmentType, unit, fix icons on existing segments
+    await this.segmentService.migrateSegmentTypes();
     this.segments.set(await this.segmentService.getAll());
     await this.loadEvents();
     this.loading.set(false);
+  }
+
+  animalSegments(): Segment[] {
+    return this.segments().filter(s => s.segmentType !== 'crop');
   }
 
   async loadEvents(): Promise<void> {

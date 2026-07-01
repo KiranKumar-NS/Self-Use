@@ -11,6 +11,7 @@ import {
   writeBatch,
   serverTimestamp,
   increment,
+  arrayUnion,
   Timestamp,
 } from '@angular/fire/firestore';
 import { InventoryEvent, InventoryEventFormData } from '../models/inventory.model';
@@ -43,6 +44,7 @@ export class InventoryService {
       segmentName: data.segmentName,
       eventType: data.eventType,
       count: countDelta,
+      breed: data.breed || '',
       note: data.note,
       date: Timestamp.fromDate(data.date),
       createdBy: user.uid,
@@ -52,11 +54,11 @@ export class InventoryService {
       year: data.year,
     });
 
-    // Update segment's currentStock
+    // Update segment's currentStock + add breed if new
     const segRef = doc(this.firestore, 'segments', data.segment);
-    batch.update(segRef, {
-      currentStock: increment(countDelta),
-    });
+    const segUpdate: any = { currentStock: increment(countDelta) };
+    if (data.breed) segUpdate.breeds = arrayUnion(data.breed);
+    batch.update(segRef, segUpdate);
 
     await batch.commit();
     this.segmentService.clearCache();
@@ -113,6 +115,7 @@ export class InventoryService {
       segmentName: data.segmentName,
       eventType: data.eventType,
       count: newCountDelta,
+      breed: data.breed || '',
       note: data.note,
       date: Timestamp.fromDate(data.date),
       month: data.month,

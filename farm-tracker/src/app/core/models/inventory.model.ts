@@ -8,6 +8,7 @@ export interface InventoryEvent {
   segmentName: string;
   eventType: InventoryEventType;
   count: number; // positive = add, negative = remove
+  breed?: string;
   note: string;
   date: Timestamp;
   createdBy: string;
@@ -23,6 +24,7 @@ export interface InventoryEventFormData {
   segmentName: string;
   eventType: InventoryEventType;
   count: number;
+  breed?: string;
   note: string;
   date: Date;
   month: string;
