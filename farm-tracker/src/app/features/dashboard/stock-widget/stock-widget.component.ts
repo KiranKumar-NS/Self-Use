@@ -11,7 +11,7 @@ import { MatIconModule } from '@angular/material/icon';
     <mat-card class="stock-card">
       <h3><mat-icon class="title-icon">inventory_2</mat-icon> Current Stock</h3>
       <div class="stock-items">
-        @for (seg of segments; track seg.id) {
+        @for (seg of animalSegments(); track seg.id) {
           @if (seg.currentStock != null) {
             <div class="stock-item">
               <span class="seg-icon">{{ seg.icon }}</span>
@@ -41,7 +41,11 @@ import { MatIconModule } from '@angular/material/icon';
 export class StockWidgetComponent {
   @Input() segments: Segment[] = [];
 
+  animalSegments(): Segment[] {
+    return this.segments.filter(s => s.segmentType !== 'crop');
+  }
+
   hasStock(): boolean {
-    return this.segments.some(s => s.currentStock != null);
+    return this.animalSegments().some(s => s.currentStock != null);
   }
 }
