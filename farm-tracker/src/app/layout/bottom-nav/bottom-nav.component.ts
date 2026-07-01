@@ -25,7 +25,7 @@ import { MatIconModule } from '@angular/material/icon';
         <span>Stock</span>
       </a>
       <button class="nav-item" (click)="moreClick.emit()">
-        <mat-icon>menu</mat-icon>
+        <mat-icon>more_horiz</mat-icon>
         <span>More</span>
       </button>
     </nav>

@@ -33,7 +33,7 @@ import { MatInputModule } from '@angular/material/input';
     <div class="page-header">
       <div>
         <h1>Analytics</h1>
-        <p class="subtitle">Deep dive into expenses — who spent what, where, and when</p>
+        <p class="subtitle">Deep dive into your farm finances</p>
       </div>
       <div class="export-buttons">
         <button mat-stroked-button (click)="exportPdf()">
@@ -239,7 +239,7 @@ import { MatInputModule } from '@angular/material/input';
               <tr>
                 <td colspan="3"><strong>Total</strong></td>
                 <td class="amount-cell"><strong>{{ totalExpense() | currencyInr }}</strong></td>
-                <td colspan="3"></td>
+                <td class="hide-mobile" colspan="3"></td>
               </tr>
             </tfoot>
           </table>
@@ -278,7 +278,7 @@ import { MatInputModule } from '@angular/material/input';
     .filters.collapsed { display: none; }
 
     .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
-    .stat-card { padding: 1.25rem; display: flex; flex-direction: column; border-left: 4px solid var(--color-border); }
+    .stat-card { padding: 1.25rem; display: flex; flex-direction: column; border-left: 4px solid var(--color-border); min-width: 0; overflow: hidden; }
     .stat-card.total { border-color: var(--color-primary); background: #f5f3ff; }
     .stat-card.income-card { border-color: var(--color-income); background: var(--color-income-bg); }
     .stat-card.profit { border-color: var(--color-income); background: var(--color-income-bg); }
@@ -286,7 +286,10 @@ import { MatInputModule } from '@angular/material/input';
     .expense-text { color: var(--color-expense); }
     .income-text { color: var(--color-income); }
     .stat-label { font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
-    .stat-value { font-size: var(--font-2xl); font-weight: 700; color: var(--color-text); margin: 4px 0; }
+    .stat-value {
+      font-size: var(--font-2xl); font-weight: 700; color: var(--color-text); margin: 4px 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
     .stat-count { font-size: var(--font-sm); color: var(--color-text-muted); }
 
     .section-title { margin: 1.5rem 0 0.75rem; font-size: 1.1rem; color: var(--color-text); }
@@ -314,6 +317,20 @@ import { MatInputModule } from '@angular/material/input';
     @media (max-width: 768px) {
       .charts-grid { grid-template-columns: 1fr; }
       .person-grid { grid-template-columns: 1fr; }
+      .export-buttons { width: 100%; }
+      .export-buttons button { flex: 1; font-size: 0.75rem; padding: 0 8px; }
+      .export-buttons button mat-icon { font-size: 18px; width: 18px; height: 18px; margin-right: 2px; }
+    }
+    @media (max-width: 480px) {
+      .summary-grid { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+      .stat-card { padding: 0.75rem 1rem; }
+      .stat-label { font-size: 0.6rem; }
+      .stat-value { font-size: 1.1rem; }
+      .stat-count { font-size: 0.65rem; }
+      .section-title { font-size: 1rem; }
+      .person-card { padding: 1rem; }
+      .person-amount { font-size: 1rem; }
+      .invest-row { font-size: 0.75rem; }
     }
   `],
 })

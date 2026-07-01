@@ -57,7 +57,6 @@ import { NotificationBellComponent } from '../notification-bell/notification-bel
       font-weight: 500;
     }
     @media (max-width: 768px) {
-      .menu-btn { display: inline-flex; }
       .user-name { display: none; }
     }
   `],

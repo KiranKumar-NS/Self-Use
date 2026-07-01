@@ -138,10 +138,12 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
   `,
   styles: [`
     .stock-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-    .stock-card { display: flex; align-items: center; gap: 1rem; padding: 1.25rem; border-left: 4px solid var(--color-primary); }
-    .stock-icon { font-size: 2rem; }
-    .stock-name { display: block; font-size: var(--font-sm); color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600; }
-    .stock-count { display: block; font-size: 2rem; font-weight: 700; color: var(--color-text); }
+    .stock-card { display: flex; align-items: center; gap: 0.75rem; padding: 1.25rem; border-left: 4px solid var(--color-primary); min-width: 0; overflow: hidden; }
+    .stock-icon { font-size: 1.75rem; flex-shrink: 0; }
+    .stock-info { min-width: 0; flex: 1; }
+    .stock-name { display: block; font-size: var(--font-sm); color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stock-count { display: block; font-size: 1.75rem; font-weight: 700; color: var(--color-text); line-height: 1.2; }
+    .stock-count small { font-size: 0.7rem; font-weight: 500; color: var(--color-text-secondary); }
     .event-badge { padding: 2px 8px; border-radius: var(--radius-sm); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
     .event-badge.birth { background: var(--color-income-bg); color: var(--color-income); }
     .event-badge.purchase { background: var(--color-info-light); color: var(--color-info); }
@@ -152,10 +154,21 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
     .count-cell.positive { color: var(--color-income); }
     .count-cell.negative { color: var(--color-expense); }
     .breed-cell { font-size: 0.8rem; color: var(--color-purple); font-weight: 500; }
-    .note-cell { max-width: 200px; }
+    .note-cell {
+      max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; color: var(--color-text-muted); font-size: 0.8rem;
+    }
     .empty-cell { text-align: center; color: var(--color-text-muted); padding: 2rem !important; }
     @media (max-width: 768px) {
       .filter-field { min-width: 0; width: 100%; }
+    }
+    @media (max-width: 480px) {
+      .stock-grid { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+      .stock-card { padding: 0.75rem; gap: 0.5rem; flex-direction: column; align-items: flex-start; }
+      .stock-icon { font-size: 1.25rem; }
+      .stock-count { font-size: 1.3rem; }
+      .stock-count small { font-size: 0.6rem; }
+      .stock-icon { font-size: 1.5rem; }
     }
   `],
 })
