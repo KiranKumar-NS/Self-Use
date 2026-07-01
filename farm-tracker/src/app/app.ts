@@ -13,15 +13,16 @@ export class App implements OnInit {
 
   ngOnInit(): void {
     if (this.swUpdate.isEnabled) {
-      // Check for updates every 30 seconds
-      setInterval(() => this.swUpdate.checkForUpdate(), 30_000);
-
-      // When a new version is ready, activate it and reload
+      // When a new version is ready, activate it and reload immediately
       this.swUpdate.versionUpdates.subscribe(event => {
         if (event.type === 'VERSION_READY') {
           this.swUpdate.activateUpdate().then(() => document.location.reload());
         }
       });
+
+      // Check immediately on app start, then every 30 seconds
+      this.swUpdate.checkForUpdate();
+      setInterval(() => this.swUpdate.checkForUpdate(), 30_000);
     }
   }
 }
