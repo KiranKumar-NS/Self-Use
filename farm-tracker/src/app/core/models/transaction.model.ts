@@ -12,11 +12,16 @@ export interface TimelineEntry {
   changes?: string; // e.g. "amount: 5000→4500, category: Feed→Medicine"
 }
 
+export type SaleUnit = 'kg' | 'head' | 'dozen' | 'litre' | 'pieces' | 'bag' | 'bundle';
+
 export interface Transaction {
   id: string;
   type: TransactionType;
   date: Timestamp;
   amount: number;
+  quantity?: number;
+  unit?: SaleUnit;
+  ratePerUnit?: number;
   category: string;
   categoryName: string;
   segment: string;
@@ -58,6 +63,9 @@ export interface TransactionFormData {
   type: TransactionType;
   date: Date;
   amount: number;
+  quantity?: number;
+  unit?: SaleUnit;
+  ratePerUnit?: number;
   category: string;
   categoryName: string;
   segment: string;

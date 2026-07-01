@@ -146,7 +146,12 @@ import { getMonthString } from '../../../core/utils/date.utils';
                   </td>
                   <td>{{ txn.segmentName }}</td>
                   <td>{{ txn.categoryName }}</td>
-                  <td class="amount-cell" [class]="txn.type">{{ txn.amount | currencyInr }}</td>
+                  <td class="amount-cell" [class]="txn.type">
+                    {{ txn.amount | currencyInr }}
+                    @if (txn.quantity) {
+                      <span class="qty-info">{{ txn.quantity }} {{ txn.unit || '' }} × {{ txn.ratePerUnit | currencyInr }}/{{ txn.unit || 'unit' }}</span>
+                    }
+                  </td>
                   <td class="hide-mobile">
                     <span class="payment-badge" [class]="txn.paymentMethod || 'cash'">{{ (txn.paymentMethod || 'cash') | uppercase }}</span>
                   </td>
@@ -259,6 +264,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
     .amount-cell { font-weight: 700; white-space: nowrap; font-size: 0.9rem; }
     .amount-cell.expense { color: #dc2626; }
     .amount-cell.income { color: #16a34a; }
+    .qty-info { display: block; font-size: 0.65rem; font-weight: 500; color: #94a3b8; }
 
     .payment-badge {
       padding: 3px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700;

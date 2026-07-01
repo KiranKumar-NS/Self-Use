@@ -9,7 +9,7 @@ import { UserService } from '../../../core/services/user.service';
 import { Category } from '../../../core/models/category.model';
 import { Segment } from '../../../core/models/segment.model';
 import { AppUser } from '../../../core/models/user.model';
-import { TransactionFormData, PaymentMethod, IncomePaymentStatus } from '../../../core/models/transaction.model';
+import { TransactionFormData, PaymentMethod, IncomePaymentStatus, SaleUnit } from '../../../core/models/transaction.model';
 
 import { MatIconModule } from '@angular/material/icon';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
@@ -59,6 +59,33 @@ import { MatRadioModule } from '@angular/material/radio';
           <mat-form-field appearance="outline">
             <mat-label>Amount (INR)</mat-label>
             <input matInput type="number" [(ngModel)]="amount" name="amount" required min="1" />
+          </mat-form-field>
+        </div>
+
+        <!-- Quantity / Unit / Rate -->
+        <div class="form-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Quantity (optional)</mat-label>
+            <input matInput type="number" [(ngModel)]="quantity" name="quantity" min="0" step="0.1" (ngModelChange)="onQtyRateChange()" />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Unit</mat-label>
+            <mat-select [(ngModel)]="unit" name="unit">
+              <mat-option value="">-</mat-option>
+              <mat-option value="kg">Kg</mat-option>
+              <mat-option value="head">Head</mat-option>
+              <mat-option value="dozen">Dozen</mat-option>
+              <mat-option value="litre">Litre</mat-option>
+              <mat-option value="pieces">Pieces</mat-option>
+              <mat-option value="bag">Bag</mat-option>
+              <mat-option value="bundle">Bundle</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Rate/Unit (₹)</mat-label>
+            <input matInput type="number" [(ngModel)]="ratePerUnit" name="ratePerUnit" min="0" step="0.5" (ngModelChange)="onQtyRateChange()" />
           </mat-form-field>
         </div>
 
@@ -178,6 +205,9 @@ export class TransactionFormComponent implements OnInit {
   type: 'expense' | 'income' = 'expense';
   date = new Date();
   amount = 0;
+  quantity: number | null = null;
+  unit: SaleUnit | '' = '';
+  ratePerUnit: number | null = null;
   segment = '';
   category = '';
   description = '';
@@ -233,6 +263,9 @@ export class TransactionFormComponent implements OnInit {
           this.paidBy = 'other';
           this.customPaidByName = txn.paidByName || '';
         }
+        this.quantity = txn.quantity || null;
+        this.unit = txn.unit || '';
+        this.ratePerUnit = txn.ratePerUnit || null;
         this.paymentMethod = txn.paymentMethod || 'cash';
         this.paymentStatus = txn.paymentStatus || 'received';
         this.onTypeChange();
@@ -243,6 +276,12 @@ export class TransactionFormComponent implements OnInit {
   onPaidByChange(): void {
     if (this.paidBy !== 'other') {
       this.customPaidByName = '';
+    }
+  }
+
+  onQtyRateChange(): void {
+    if (this.quantity && this.ratePerUnit) {
+      this.amount = Math.round(this.quantity * this.ratePerUnit * 100) / 100;
     }
   }
 
@@ -273,6 +312,9 @@ export class TransactionFormComponent implements OnInit {
         type: this.type,
         date: this.date,
         amount: this.amount,
+        quantity: this.quantity || undefined,
+        unit: this.unit || undefined,
+        ratePerUnit: this.ratePerUnit || undefined,
         category: this.category,
         categoryName: selectedCategory?.name || this.category,
         segment: this.segment,

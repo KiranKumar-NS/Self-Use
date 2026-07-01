@@ -137,6 +137,11 @@ async function run() {
     const rawPayment = (row['Payment Type'] || 'upi').toString().toLowerCase().trim();
     const paymentMethod = rawPayment === 'cash' ? 'cash' : 'upi';
 
+    // Quantity / Unit / Rate per unit (optional columns)
+    const quantity = parseFloat(row['Quantity']) || null;
+    const unit = (row['Unit'] || '').toString().toLowerCase().trim() || null;
+    const ratePerUnit = parseFloat(row['Rate Per Unit']) || null;
+
     // Description — use Description column, fallback to Loan Name, fallback to category
     let description = '';
     if (row['Description'] && typeof row['Description'] === 'string') {
@@ -162,7 +167,7 @@ async function run() {
     const batch = db.batch();
 
     // Transaction document
-    batch.set(txnRef, {
+    const txnDoc = {
       id: txnRef.id,
       type: 'expense',
       date: admin.firestore.Timestamp.fromDate(date),
@@ -188,7 +193,11 @@ async function run() {
       }],
       month: month,
       year: year,
-    });
+    };
+    if (quantity) txnDoc.quantity = quantity;
+    if (unit) txnDoc.unit = unit;
+    if (ratePerUnit) txnDoc.ratePerUnit = ratePerUnit;
+    batch.set(txnRef, txnDoc);
 
     // Monthly summary update
     batch.set(summaryRef, {

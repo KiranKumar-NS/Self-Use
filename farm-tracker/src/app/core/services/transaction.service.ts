@@ -71,6 +71,10 @@ export class TransactionService {
       year: data.year,
     };
 
+    if (data.quantity) txnDoc['quantity'] = data.quantity;
+    if (data.unit) txnDoc['unit'] = data.unit;
+    if (data.ratePerUnit) txnDoc['ratePerUnit'] = data.ratePerUnit;
+
     if (data.type === 'income') {
       txnDoc['paymentStatus'] = data.paymentStatus || 'received';
     }
@@ -265,6 +269,9 @@ export class TransactionService {
       paidBy: data.paidBy || user.uid,
       paidByName: data.paidByName || user.displayName,
       paymentStatus: data.type === 'income' ? (data.paymentStatus || 'received') : null,
+      quantity: data.quantity || null,
+      unit: data.unit || null,
+      ratePerUnit: data.ratePerUnit || null,
       month: data.month,
       year: data.year,
       timeline: arrayUnion({
