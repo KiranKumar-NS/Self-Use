@@ -77,7 +77,7 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
                 <th class="sortable" (click)="toggleSort('eventType')">Event <span class="sort-icon">{{ getSortIcon('eventType') }}</span></th>
                 <th class="sortable" (click)="toggleSort('count')">Count <span class="sort-icon">{{ getSortIcon('count') }}</span></th>
                 <th class="sortable" (click)="toggleSort('breed')">Breed <span class="sort-icon">{{ getSortIcon('breed') }}</span></th>
-                <th class="hide-mobile">Note</th>
+                <th class="">Note</th>
                 <th class="sortable" (click)="toggleSort('createdByName')">By <span class="sort-icon">{{ getSortIcon('createdByName') }}</span></th>
                 @if (!auth.isViewer()) {
                   <th class="actions-th">Actions</th>
@@ -88,14 +88,14 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
               @for (ev of paginatedEvents(); track ev.id) {
                 <tr>
                   <td class="date-cell">{{ ev.date.toDate() | date:'dd MMM' }}</td>
-                  <td class="hide-mobile">{{ ev.segmentName }}</td>
+                  <td class="">{{ ev.segmentName }}</td>
                   <td><span class="event-badge" [class]="ev.eventType">{{ ev.eventType }}</span></td>
                   <td class="count-cell" [class.positive]="ev.count > 0" [class.negative]="ev.count < 0">
                     {{ ev.count > 0 ? '+' : '' }}{{ ev.count }}
                   </td>
                   <td class="breed-cell">{{ ev.breed || '-' }}</td>
                   <td class="note-cell">{{ ev.note || '-' }}</td>
-                  <td class="hide-mobile">{{ ev.createdByName }}</td>
+                  <td class="">{{ ev.createdByName }}</td>
                   @if (!auth.isViewer()) {
                     <td class="actions-cell">
                       <button mat-icon-button (click)="editEvent(ev)" title="Edit">

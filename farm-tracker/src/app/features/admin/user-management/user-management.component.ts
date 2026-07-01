@@ -26,6 +26,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
     @if (loading()) {
       <app-loading-spinner />
     } @else {
+      <mat-card class="table-card">
       <div class="table-container">
         <table class="data-table">
           <thead>
@@ -33,7 +34,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
               <th class="sortable" (click)="toggleSort('displayName')">Name <span class="sort-icon">{{ getSortIcon('displayName') }}</span></th>
               <th class="sortable" (click)="toggleSort('email')">Email <span class="sort-icon">{{ getSortIcon('email') }}</span></th>
               <th class="sortable" (click)="toggleSort('role')">Role <span class="sort-icon">{{ getSortIcon('role') }}</span></th>
-              <th class="hide-mobile">Segments</th>
+              <th>Segments</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -42,11 +43,11 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
             @for (user of paginatedUsers(); track user.uid) {
               <tr>
                 <td>{{ user.displayName }}</td>
-                <td class="hide-mobile">{{ user.email }}</td>
+                <td>{{ user.email }}</td>
                 <td>
                   <span class="role-badge" [class]="user.role">{{ user.role }}</span>
                 </td>
-                <td class="hide-mobile">
+                <td>
                   @for (seg of user.assignedSegments; track seg) {
                     <span class="segment-chip">{{ seg }}</span>
                   }
@@ -86,6 +87,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
           </div>
         }
       </div>
+      </mat-card>
     }
   `,
   styles: [`

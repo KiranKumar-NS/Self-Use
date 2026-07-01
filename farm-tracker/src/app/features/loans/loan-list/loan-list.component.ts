@@ -72,6 +72,7 @@ import { DatePipe } from '@angular/common';
     } @else if (loans().length === 0) {
       <app-empty-state icon="🏦" title="No records" message="No owe or lent records found." />
     } @else {
+      <mat-card class="table-card">
       <div class="table-container">
         <table class="data-table">
           <thead>
@@ -83,7 +84,7 @@ import { DatePipe } from '@angular/common';
               <th class="sortable" (click)="toggleSort('totalRepaid')">Repaid <span class="sort-icon">{{ getSortIcon('totalRepaid') }}</span></th>
               <th class="sortable" (click)="toggleSort('balanceRemaining')">Balance <span class="sort-icon">{{ getSortIcon('balanceRemaining') }}</span></th>
               <th class="sortable" (click)="toggleSort('repaymentStatus')">Status <span class="sort-icon">{{ getSortIcon('repaymentStatus') }}</span></th>
-              <th class="hide-mobile">Segment</th>
+              <th class="">Segment</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -96,12 +97,12 @@ import { DatePipe } from '@angular/common';
                 </td>
                 <td>{{ loan.personName }}</td>
                 <td class="amount">{{ loan.amount | currencyInr }}</td>
-                <td class="hide-mobile">{{ loan.totalRepaid | currencyInr }}</td>
+                <td class="">{{ loan.totalRepaid | currencyInr }}</td>
                 <td class="balance">{{ loan.balanceRemaining | currencyInr }}</td>
                 <td>
                   <span class="status-badge" [class]="loan.repaymentStatus">{{ loan.repaymentStatus }}</span>
                 </td>
-                <td class="hide-mobile">
+                <td class="">
                   <span class="segment-tag" [class.personal]="loan.segment === 'personal' || !loan.segment">{{ loan.segmentName || 'Personal' }}</span>
                 </td>
                 <td>
@@ -142,6 +143,7 @@ import { DatePipe } from '@angular/common';
           </div>
         </div>
       </div>
+      </mat-card>
 
       @if (hasMore()) {
         <div class="load-more">
