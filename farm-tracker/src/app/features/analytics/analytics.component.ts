@@ -37,13 +37,13 @@ import { MatInputModule } from '@angular/material/input';
       </div>
       <div class="export-buttons">
         <button mat-stroked-button (click)="exportPdf()">
-          <mat-icon>picture_as_pdf</mat-icon> Export PDF
+          <mat-icon>picture_as_pdf</mat-icon> <span class="btn-label">Export PDF</span>
         </button>
         <button mat-stroked-button (click)="exportCsv()">
-          <mat-icon>download</mat-icon> Export CSV
+          <mat-icon>download</mat-icon> <span class="btn-label">Export CSV</span>
         </button>
         <button mat-stroked-button class="wa-share-btn" (click)="shareWhatsApp()">
-          <mat-icon>share</mat-icon> WhatsApp
+          <mat-icon>share</mat-icon> <span class="btn-label">WhatsApp</span>
         </button>
       </div>
     </div>
@@ -256,10 +256,10 @@ import { MatInputModule } from '@angular/material/input';
             </div>
             <span class="page-info">{{ analyticsPageStart() }}–{{ analyticsPageEnd() }} of {{ sortedFiltered().length }}</span>
             <div class="page-buttons">
-              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1"><mat-icon>first_page</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1"><mat-icon>chevron_left</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage >= analyticsTotalPages()" (click)="currentPage = currentPage + 1"><mat-icon>chevron_right</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage >= analyticsTotalPages()" (click)="currentPage = analyticsTotalPages()"><mat-icon>last_page</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" aria-label="First page"><mat-icon>first_page</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage >= analyticsTotalPages()" (click)="currentPage = currentPage + 1" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage >= analyticsTotalPages()" (click)="currentPage = analyticsTotalPages()" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
             </div>
           </div>
         }
@@ -277,7 +277,7 @@ import { MatInputModule } from '@angular/material/input';
     .toggle-icon.expanded { transform: rotate(180deg); }
     .filters.collapsed { display: none; }
 
-    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
     .stat-card { padding: 1.25rem; display: flex; flex-direction: column; border-left: 4px solid var(--color-border); min-width: 0; overflow: hidden; }
     .stat-card.total { border-color: var(--color-primary); background: #f5f3ff; }
     .stat-card.income-card { border-color: var(--color-income); background: var(--color-income-bg); }
@@ -294,7 +294,7 @@ import { MatInputModule } from '@angular/material/input';
 
     .section-title { margin: 1.5rem 0 0.75rem; font-size: 1.1rem; color: var(--color-text); }
 
-    .person-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+    .person-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
     .person-card { padding: 1.25rem; }
     .person-name { font-size: var(--font-lg); font-weight: 700; color: var(--color-text); }
     .person-amount { font-size: var(--font-xl); font-weight: 700; color: var(--color-expense); margin: 4px 0 8px; }
@@ -317,9 +317,9 @@ import { MatInputModule } from '@angular/material/input';
     @media (max-width: 768px) {
       .charts-grid { grid-template-columns: 1fr; }
       .person-grid { grid-template-columns: 1fr; }
-      .export-buttons { width: 100%; }
-      .export-buttons button { flex: 1; font-size: 0.75rem; padding: 0 8px; }
+      .export-buttons button { font-size: 0.75rem; padding: 0 8px; }
       .export-buttons button mat-icon { font-size: 18px; width: 18px; height: 18px; margin-right: 2px; }
+      .export-buttons .btn-label { display: none; }
     }
     @media (max-width: 480px) {
       .summary-grid { grid-template-columns: 1fr 1fr; gap: 0.5rem; }

@@ -31,12 +31,17 @@ import { DatePipe } from '@angular/common';
     <div class="page-header">
       <h1>Owe & Lent</h1>
       <button mat-flat-button color="primary" (click)="addNew()">
-        <mat-icon>add</mat-icon> Add Entry
+        <mat-icon>add</mat-icon> <span class="btn-label">Add Entry</span>
       </button>
     </div>
 
     <mat-card class="filter-card">
-      <div class="filters">
+      <div class="filter-header" (click)="filtersOpen = !filtersOpen">
+        <mat-icon>filter_list</mat-icon>
+        <span>Filters</span>
+        <mat-icon class="toggle-icon" [class.expanded]="filtersOpen">expand_more</mat-icon>
+      </div>
+      <div class="filters" [class.collapsed]="!filtersOpen">
         <mat-form-field appearance="outline">
           <mat-label>Type</mat-label>
           <mat-select [(ngModel)]="filterType" (selectionChange)="loadData()">
@@ -70,7 +75,7 @@ import { DatePipe } from '@angular/common';
     @if (loading()) {
       <app-loading-spinner />
     } @else if (loans().length === 0) {
-      <app-empty-state icon="🏦" title="No records" message="No owe or lent records found." />
+      <app-empty-state icon="🏦" title="No records" message="No owe or lent records found. Try adjusting your filters or add a new entry." actionLabel="Add Entry" (actionClick)="addNew()" />
     } @else {
       <mat-card class="table-card">
       <div class="table-container">
@@ -106,16 +111,16 @@ import { DatePipe } from '@angular/common';
                   <span class="segment-tag" [class.personal]="loan.segment === 'personal' || !loan.segment">{{ loan.segmentName || 'Personal' }}</span>
                 </td>
                 <td>
-                  <button mat-icon-button (click)="viewDetail(loan.id)" title="View">
+                  <button mat-icon-button (click)="viewDetail(loan.id)" title="View" aria-label="View details">
                     <mat-icon>visibility</mat-icon>
                   </button>
                   @if (loan.repaymentStatus === 'pending') {
-                    <button mat-icon-button (click)="edit(loan.id)" title="Edit">
+                    <button mat-icon-button (click)="edit(loan.id)" title="Edit" aria-label="Edit entry">
                       <mat-icon>edit</mat-icon>
                     </button>
                   }
                   @if (auth.isAdmin()) {
-                    <button mat-icon-button color="warn" (click)="confirmDelete(loan)" title="Delete">
+                    <button mat-icon-button color="warn" (click)="confirmDelete(loan)" title="Delete" aria-label="Delete entry">
                       <mat-icon>delete</mat-icon>
                     </button>
                   }
@@ -136,10 +141,10 @@ import { DatePipe } from '@angular/common';
           </div>
           <span class="page-info">{{ pageStart() }}–{{ pageEnd() }} of {{ sortedLoans().length }}</span>
           <div class="page-buttons">
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1"><mat-icon>first_page</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1"><mat-icon>chevron_left</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1"><mat-icon>chevron_right</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()"><mat-icon>last_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" aria-label="First page"><mat-icon>first_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
           </div>
         </div>
       </div>
@@ -153,8 +158,15 @@ import { DatePipe } from '@angular/common';
     }
   `,
   styles: [`
+    .filter-header { cursor: pointer; }
+    .toggle-icon {
+      margin-left: auto; transition: transform 0.2s; color: var(--color-text-muted);
+      font-size: 20px; width: 20px; height: 20px;
+    }
+    .toggle-icon.expanded { transform: rotate(180deg); }
+    .filters.collapsed { display: none; }
     .filters mat-form-field { flex: 1; min-width: 150px; }
-    .table-container { background: white; border-radius: var(--radius-md); overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .table-container { background: white; border-radius: var(--radius-md); overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 100%; }
     .type-badge { padding: 2px 8px; border-radius: var(--radius-sm); font-size: var(--font-sm); font-weight: 600; }
     .type-badge.given { background: var(--color-warning-light); color: var(--color-warning); }
     .type-badge.received { background: var(--color-info-light); color: var(--color-info); }
@@ -185,6 +197,7 @@ export class LoanListComponent implements OnInit {
   hasMore = signal(false);
   private lastDoc: any = null;
 
+  filtersOpen = window.innerWidth > 768;
   filterType = '';
   filterStatus = '';
   filterSegment = '';

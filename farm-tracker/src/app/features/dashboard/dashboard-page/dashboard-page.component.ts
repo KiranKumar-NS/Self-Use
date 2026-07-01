@@ -30,9 +30,9 @@ import { MatIconModule } from '@angular/material/icon';
       <div class="page-header">
         <h1 class="page-title">Dashboard</h1>
         <div class="month-picker">
-          <button mat-icon-button (click)="prevMonth()"><mat-icon>chevron_left</mat-icon></button>
+          <button mat-icon-button (click)="prevMonth()" aria-label="Previous month"><mat-icon>chevron_left</mat-icon></button>
           <span class="month-label">{{ monthLabel() }}</span>
-          <button mat-icon-button (click)="nextMonth()" [disabled]="isCurrentMonth()"><mat-icon>chevron_right</mat-icon></button>
+          <button mat-icon-button (click)="nextMonth()" [disabled]="isCurrentMonth()" aria-label="Next month"><mat-icon>chevron_right</mat-icon></button>
           @if (!isCurrentMonth()) {
             <button mat-button class="today-btn" (click)="goToCurrentMonth()">Today</button>
           }
@@ -77,7 +77,7 @@ import { MatIconModule } from '@angular/material/icon';
       .charts-grid { grid-template-columns: 1fr; }
       .widgets-grid { grid-template-columns: 1fr; }
       .month-label { min-width: 100px; font-size: 0.9rem; }
-      .today-btn { width: 100%; }
+      .today-btn { width: auto; font-size: 0.75rem; padding: 0 8px; }
     }
   `],
 })

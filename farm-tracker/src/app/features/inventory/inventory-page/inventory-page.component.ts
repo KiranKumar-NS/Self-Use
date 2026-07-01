@@ -32,7 +32,7 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
       </div>
       @if (!auth.isViewer()) {
         <button mat-flat-button color="primary" (click)="openEventDialog()">
-          <mat-icon>add</mat-icon> Record Event
+          <mat-icon>add</mat-icon> <span class="btn-label">Record Event</span>
         </button>
       }
     </div>
@@ -98,10 +98,10 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
                   <td class="">{{ ev.createdByName }}</td>
                   @if (!auth.isViewer()) {
                     <td class="actions-cell">
-                      <button mat-icon-button (click)="editEvent(ev)" title="Edit">
+                      <button mat-icon-button (click)="editEvent(ev)" title="Edit" aria-label="Edit event">
                         <mat-icon>edit</mat-icon>
                       </button>
-                      <button mat-icon-button color="warn" (click)="confirmDeleteEvent(ev)" title="Delete">
+                      <button mat-icon-button color="warn" (click)="confirmDeleteEvent(ev)" title="Delete" aria-label="Delete event">
                         <mat-icon>delete</mat-icon>
                       </button>
                     </td>
@@ -126,10 +126,10 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
             </div>
             <span class="page-info">{{ pageStart() }}–{{ pageEnd() }} of {{ sortedEvents().length }}</span>
             <div class="page-buttons">
-              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1"><mat-icon>first_page</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1"><mat-icon>chevron_left</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1"><mat-icon>chevron_right</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()"><mat-icon>last_page</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" aria-label="First page"><mat-icon>first_page</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
             </div>
           </div>
         }
@@ -137,7 +137,7 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
     }
   `,
   styles: [`
-    .stock-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+    .stock-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
     .stock-card { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; border-left: 4px solid var(--color-primary); min-width: 0; overflow: hidden; }
     .stock-icon { font-size: 1.5rem; flex-shrink: 0; }
     .stock-info { min-width: 0; flex: 1; }

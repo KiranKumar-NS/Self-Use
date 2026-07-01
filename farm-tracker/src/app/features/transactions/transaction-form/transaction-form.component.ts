@@ -63,7 +63,7 @@ import { MatRadioModule } from '@angular/material/radio';
         </div>
 
         <!-- Quantity / Unit / Rate -->
-        <div class="form-row">
+        <div class="form-row qty-row">
           <mat-form-field appearance="outline">
             <mat-label>Quantity (optional)</mat-label>
             <input matInput type="number" [(ngModel)]="quantity" name="quantity" min="0" step="0.1" (ngModelChange)="onQtyRateChange()" />
@@ -185,6 +185,10 @@ import { MatRadioModule } from '@angular/material/radio';
     }
     @media (max-width: 640px) {
       .form-row { flex-direction: column; gap: 0.5rem; }
+      .qty-row { flex-direction: row; flex-wrap: wrap; }
+      .qty-row mat-form-field:nth-child(1) { flex: 2; min-width: 0; }
+      .qty-row mat-form-field:nth-child(2) { flex: 1; min-width: 80px; }
+      .qty-row mat-form-field:nth-child(3) { flex: 2; min-width: 0; }
       .form-card { padding: 1rem; }
     }
   `],

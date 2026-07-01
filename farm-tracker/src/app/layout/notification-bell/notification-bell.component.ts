@@ -13,7 +13,7 @@ import { MatMenuModule } from '@angular/material/menu';
   template: `
     <button mat-icon-button [matMenuTriggerFor]="menu"
       [matBadge]="notificationService.unreadCount() || null"
-      matBadgeColor="warn" matBadgeSize="small">
+      matBadgeColor="warn" matBadgeSize="small" aria-label="Notifications">
       <mat-icon>notifications</mat-icon>
     </button>
 
@@ -40,7 +40,7 @@ import { MatMenuModule } from '@angular/material/menu';
                 <div class="notif-message">{{ n.message }}</div>
               </div>
             </div>
-            <button mat-icon-button class="dismiss-btn" (click)="dismiss($event, n.id)">
+            <button mat-icon-button class="dismiss-btn" (click)="dismiss($event, n.id)" aria-label="Dismiss notification">
               <mat-icon>close</mat-icon>
             </button>
           </div>
@@ -65,6 +65,7 @@ import { MatMenuModule } from '@angular/material/menu';
       min-width: 300px;
     }
     .notif-item:hover { background: var(--color-bg); }
+    .notif-item:active { background: var(--color-bg-alt); }
     .notif-item.warning { border-left: 3px solid var(--color-warning); }
     .notif-item.error { border-left: 3px solid var(--color-expense); }
     .notif-content { display: flex; align-items: flex-start; gap: 10px; flex: 1; }

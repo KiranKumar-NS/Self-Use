@@ -22,7 +22,7 @@ import { NotificationBellComponent } from '../notification-bell/notification-bel
         <app-notification-bell />
         <span class="user-name">{{ auth.userProfile()?.displayName }}</span>
 
-        <button mat-icon-button [matMenuTriggerFor]="menu">
+        <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="User menu">
           <mat-icon>account_circle</mat-icon>
         </button>
         <mat-menu #menu="matMenu">

@@ -62,7 +62,7 @@ import { MatIconModule } from '@angular/material/icon';
     </div>
   `,
   styles: [`
-    .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
+    .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 1rem; }
     .summary-card {
       display: flex; align-items: center; gap: 1rem; padding: 1.25rem;
       border-left: 4px solid transparent;
@@ -96,10 +96,14 @@ import { MatIconModule } from '@angular/material/icon';
     .pending .value { color: var(--color-warning); }
     .pending mat-icon { color: var(--color-warning); }
     @media (max-width: 480px) {
-      .cards-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+      .cards-grid { grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); }
       .summary-card { padding: 1rem; gap: 0.75rem; }
       .value { font-size: 1.2rem; }
       .summary-card mat-icon { font-size: 1.5rem; width: 1.5rem; height: 1.5rem; }
+    }
+    @media (max-width: 360px) {
+      .cards-grid { grid-template-columns: 1fr; gap: 0.5rem; }
+      .value { white-space: normal; word-break: break-word; font-size: 1.1rem; }
     }
   `],
 })

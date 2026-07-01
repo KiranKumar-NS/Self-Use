@@ -28,12 +28,14 @@ import { NotificationService } from '../../core/services/notification.service';
     }
     .main-area {
       flex: 1;
+      min-width: 0;
       margin-left: 250px;
       display: flex;
       flex-direction: column;
     }
     .content {
       flex: 1;
+      min-width: 0;
       padding: 24px;
       background: #f8fafc;
     }

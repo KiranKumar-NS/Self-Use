@@ -274,7 +274,7 @@ import {
     .tab-content { padding: 1rem 0; }
     .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     .section-header h3 { margin: 0; font-size: 1.1rem; color: #1e293b; }
-    .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+    .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
     .item-card { padding: 1rem; position: relative; }
     .item-header { display: flex; align-items: center; gap: 10px; }
     .item-icon { font-size: 1.5rem; }

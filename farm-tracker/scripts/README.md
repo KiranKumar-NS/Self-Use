@@ -23,41 +23,7 @@ Then download the **service account key**:
 
 ## Scripts
 
-### 1. `create-user.js` — Create a New User
-
-Creates a user in Firebase Auth + Firestore with role and segment assignments.
-
-```bash
-node scripts/create-user.js <email> <password> <displayName> <role> [segment1 segment2 ...]
-```
-
-**Roles:**
-| Role | Access |
-|------|--------|
-| `admin` | Full access to everything. Gets all segments automatically. |
-| `manager` | Can add/edit transactions & loans in assigned segments only. |
-| `viewer` | Read-only access to dashboard and reports. |
-
-**Examples:**
-```bash
-# Create admin
-node scripts/create-user.js admin@farm.com Pass123! "Kiran Kumar" admin
-
-# Create manager with specific segments
-node scripts/create-user.js ravi@farm.com Pass123! "Ravi S" manager goats cows
-
-# Create manager with all segments
-node scripts/create-user.js suresh@farm.com Pass123! "Suresh M" manager goats chickens cows fruits crops
-
-# Create viewer
-node scripts/create-user.js viewer@farm.com Pass123! "Priya N" viewer
-```
-
-**Available segments:** `goats`, `chickens`, `cows`, `fruits`, `crops`
-
----
-
-### 2. `setup-collections.js` — Initialize System Collections
+### 1. `setup-collections.js` — Initialize System Collections
 
 Creates all default segments and categories in Firestore. Safe to re-run — skips documents that already exist.
 
@@ -77,7 +43,7 @@ node scripts/setup-collections.js
 
 ---
 
-### 3. `clean-db.js` — Clean / Reset Database
+### 2. `clean-db.js` — Clean / Reset Database
 
 Deletes data from Firestore collections. Useful for development/testing.
 
@@ -115,7 +81,7 @@ node scripts/clean-db.js seed
 
 ---
 
-### 4. `set-custom-claims.js` (in `/firebase` folder)
+### 3. `set-custom-claims.js` (in `/firebase` folder)
 
 Sets role custom claims on an existing Firebase Auth user.
 
@@ -138,13 +104,8 @@ node firebase/set-custom-claims.js abc123def456 admin
 # 1. Create all system collections (segments & categories)
 node scripts/setup-collections.js
 
-# 2. Create your first admin user
-node scripts/create-user.js yourname@email.com YourPass123! "Your Name" admin
-
-# 3. Create team members
-node scripts/create-user.js friend1@email.com Pass123! "Friend 1" manager goats cows
-node scripts/create-user.js friend2@email.com Pass123! "Friend 2" manager chickens fruits
-node scripts/create-user.js friend3@email.com Pass123! "Friend 3" viewer
+# 2. Create users via the Admin panel in the app (Admin > Add User)
+#    Or use set-custom-claims.js to assign roles to existing Firebase Auth users
 ```
 
 ### Reset during development:
@@ -157,7 +118,6 @@ node scripts/clean-db.js audit
 # Or full reset
 node scripts/clean-db.js all
 node scripts/clean-db.js seed
-node scripts/create-user.js admin@farm.com Pass123! "Admin" admin
 ```
 
 ---
@@ -172,5 +132,4 @@ node scripts/create-user.js admin@farm.com Pass123! "Admin" admin
 | `transactions` | All expense and income records |
 | `loans` | Loan records (given/received) with repayment status |
 | `loans/{id}/repayments` | Repayment history for each loan |
-| `auditLogs` | Immutable audit trail of all create/update/delete actions |
 | `monthlySummaries` | Precomputed monthly totals per segment (auto-updated) |

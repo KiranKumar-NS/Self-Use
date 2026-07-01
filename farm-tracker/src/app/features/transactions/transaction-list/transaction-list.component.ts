@@ -38,7 +38,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
         <p class="subtitle">Track all income and expenses</p>
       </div>
       <button mat-flat-button color="primary" (click)="addNew()">
-        <mat-icon>add</mat-icon> Add Transaction
+        <mat-icon>add</mat-icon> <span class="btn-label">Add Transaction</span>
       </button>
     </div>
 
@@ -164,11 +164,11 @@ import { getMonthString } from '../../../core/utils/date.utils';
                   <td class="by-cell">{{ txn.paidByName || txn.createdByName }}</td>
                   <td class="desc-cell">{{ txn.description || '-' }}</td>
                   <td class="actions-cell" (click)="$event.stopPropagation()">
-                    <button mat-icon-button (click)="edit(txn.id)" title="Edit">
+                    <button mat-icon-button (click)="edit(txn.id)" title="Edit" aria-label="Edit transaction">
                       <mat-icon>edit</mat-icon>
                     </button>
                     @if (auth.isAdmin()) {
-                      <button mat-icon-button color="warn" (click)="confirmDelete(txn)" title="Delete">
+                      <button mat-icon-button color="warn" (click)="confirmDelete(txn)" title="Delete" aria-label="Delete transaction">
                         <mat-icon>delete</mat-icon>
                       </button>
                     }
@@ -190,16 +190,16 @@ import { getMonthString } from '../../../core/utils/date.utils';
           </div>
           <span class="page-info">{{ pageStart() }}–{{ pageEnd() }} of {{ displayedTransactions().length }}</span>
           <div class="page-buttons">
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" title="First page">
+            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" title="First page" aria-label="First page">
               <mat-icon>first_page</mat-icon>
             </button>
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" title="Previous page">
+            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" title="Previous page" aria-label="Previous page">
               <mat-icon>chevron_left</mat-icon>
             </button>
-            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1" title="Next page">
+            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1" title="Next page" aria-label="Next page">
               <mat-icon>chevron_right</mat-icon>
             </button>
-            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()" title="Last page">
+            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()" title="Last page" aria-label="Last page">
               <mat-icon>last_page</mat-icon>
             </button>
           </div>

@@ -116,11 +116,23 @@ $theme: mat.m2-define-light-theme((
   max-width: 100%;
   width: 100%;
   box-sizing: border-box;
+  overflow: hidden;
 }
 .table-container {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   width: 100%;
+  max-width: 100%;
+  // Scroll shadow indicators — hint that content is horizontally scrollable
+  background:
+    linear-gradient(to right, white 30%, transparent),
+    linear-gradient(to left, white 30%, transparent),
+    linear-gradient(to right, rgba(0,0,0,0.08), transparent 70%),
+    linear-gradient(to left, rgba(0,0,0,0.08), transparent 70%);
+  background-position: left center, right center, left center, right center;
+  background-repeat: no-repeat;
+  background-size: 20px 100%, 20px 100%, 10px 100%, 10px 100%;
+  background-attachment: local, local, scroll, scroll;
 }
 .data-table {
   width: 100%;
@@ -298,26 +310,49 @@ tr:hover .actions-cell button { opacity: 1; }
   .mat-mdc-select-panel {
     max-width: calc(100vw - 32px) !important;
   }
-  // Prevent content from overflowing viewport
-  .content {
-    overflow-x: hidden;
+  // Ensure all cards fit within viewport
+  mat-card, .mat-mdc-card {
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
   }
 }
 
 // ── Mobile table improvements ──────────────────────────────
 @media (max-width: 640px) {
   .data-table {
-    th { padding: 8px 6px; font-size: 0.6rem; letter-spacing: 0; }
-    td { padding: 8px 6px; font-size: 0.75rem; }
+    th { padding: 6px 4px; font-size: 0.6rem; letter-spacing: 0; }
+    td { padding: 6px 4px; font-size: 0.75rem; }
   }
   .date-cell { font-size: 0.7rem; }
+  .desc-cell { max-width: 120px; }
   .sort-icon { display: none; }
   .actions-cell button {
-    width: 28px !important;
-    height: 28px !important;
+    width: 40px !important;
+    height: 40px !important;
     padding: 0 !important;
     mat-icon { font-size: 18px; width: 18px; height: 18px; }
   }
   .pagination { font-size: 0.7rem; padding: 6px 8px; }
-  .page-buttons button { width: 28px; height: 28px; }
+  .page-buttons button { width: 36px; height: 36px; }
+}
+
+// ── Mobile font size bump ────────────────────────────────
+@media (max-width: 768px) {
+  :root {
+    --font-xs: 0.7rem;
+    --font-sm: 0.8rem;
+    --font-base: 0.9rem;
+  }
+}
+
+// ── Mobile tap feedback for table rows ───────────────────
+.clickable-row:active td {
+  background: var(--color-bg-alt);
+  transition: background 0.1s;
+}
+
+// ── Shorten page-header action button text on small screens ──
+@media (max-width: 480px) {
+  .page-header .btn-label { display: none; }
 }
