@@ -73,12 +73,12 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
             <thead>
               <tr>
                 <th class="sortable" (click)="toggleSort('date')">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
-                <th class="sortable hide-mobile" (click)="toggleSort('segmentName')">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('segmentName')">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
                 <th class="sortable" (click)="toggleSort('eventType')">Event <span class="sort-icon">{{ getSortIcon('eventType') }}</span></th>
                 <th class="sortable" (click)="toggleSort('count')">Count <span class="sort-icon">{{ getSortIcon('count') }}</span></th>
-                <th class="sortable hide-mobile" (click)="toggleSort('breed')">Breed <span class="sort-icon">{{ getSortIcon('breed') }}</span></th>
+                <th class="sortable" (click)="toggleSort('breed')">Breed <span class="sort-icon">{{ getSortIcon('breed') }}</span></th>
                 <th class="hide-mobile">Note</th>
-                <th class="sortable hide-mobile" (click)="toggleSort('createdByName')">By <span class="sort-icon">{{ getSortIcon('createdByName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('createdByName')">By <span class="sort-icon">{{ getSortIcon('createdByName') }}</span></th>
                 @if (!auth.isViewer()) {
                   <th class="actions-th">Actions</th>
                 }
@@ -93,8 +93,8 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
                   <td class="count-cell" [class.positive]="ev.count > 0" [class.negative]="ev.count < 0">
                     {{ ev.count > 0 ? '+' : '' }}{{ ev.count }}
                   </td>
-                  <td class="breed-cell hide-mobile">{{ ev.breed || '-' }}</td>
-                  <td class="note-cell hide-mobile">{{ ev.note || '-' }}</td>
+                  <td class="breed-cell">{{ ev.breed || '-' }}</td>
+                  <td class="note-cell">{{ ev.note || '-' }}</td>
                   <td class="hide-mobile">{{ ev.createdByName }}</td>
                   @if (!auth.isViewer()) {
                     <td class="actions-cell">

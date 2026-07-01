@@ -80,7 +80,7 @@ import { DatePipe } from '@angular/common';
               <th class="sortable" (click)="toggleSort('type')">Type <span class="sort-icon">{{ getSortIcon('type') }}</span></th>
               <th class="sortable" (click)="toggleSort('personName')">Person <span class="sort-icon">{{ getSortIcon('personName') }}</span></th>
               <th class="sortable" (click)="toggleSort('amount')">Amount <span class="sort-icon">{{ getSortIcon('amount') }}</span></th>
-              <th class="sortable hide-mobile" (click)="toggleSort('totalRepaid')">Repaid <span class="sort-icon">{{ getSortIcon('totalRepaid') }}</span></th>
+              <th class="sortable" (click)="toggleSort('totalRepaid')">Repaid <span class="sort-icon">{{ getSortIcon('totalRepaid') }}</span></th>
               <th class="sortable" (click)="toggleSort('balanceRemaining')">Balance <span class="sort-icon">{{ getSortIcon('balanceRemaining') }}</span></th>
               <th class="sortable" (click)="toggleSort('repaymentStatus')">Status <span class="sort-icon">{{ getSortIcon('repaymentStatus') }}</span></th>
               <th class="hide-mobile">Segment</th>

@@ -123,14 +123,14 @@ import { getMonthString } from '../../../core/utils/date.utils';
           <table class="data-table">
             <thead>
               <tr>
-                <th class="sortable" (click)="toggleSort('date')">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
-                <th class="sortable" (click)="toggleSort('type')">Type <span class="sort-icon">{{ getSortIcon('type') }}</span></th>
-                <th class="sortable" (click)="toggleSort('segmentName')">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
-                <th class="sortable" (click)="toggleSort('categoryName')">Category <span class="sort-icon">{{ getSortIcon('categoryName') }}</span></th>
-                <th class="sortable" (click)="toggleSort('amount')">Amount <span class="sort-icon">{{ getSortIcon('amount') }}</span></th>
-                <th class="hide-mobile">Paid Via</th>
-                <th class="sortable hide-mobile" (click)="toggleSort('paidByName')">By <span class="sort-icon">{{ getSortIcon('paidByName') }}</span></th>
-                <th class="hide-mobile">Description</th>
+                <th class="sortable" (click)="toggleSort('date')">Date</th>
+                <th class="sortable" (click)="toggleSort('type')">Type</th>
+                <th class="sortable" (click)="toggleSort('segmentName')">Segment</th>
+                <th class="sortable" (click)="toggleSort('categoryName')">Category</th>
+                <th class="sortable" (click)="toggleSort('amount')">Amount</th>
+                <th>Paid Via</th>
+                <th class="sortable" (click)="toggleSort('paidByName')">By</th>
+                <th>Description</th>
                 <th class="actions-th">Actions</th>
               </tr>
             </thead>
@@ -158,11 +158,11 @@ import { getMonthString } from '../../../core/utils/date.utils';
                       <span class="qty-info">{{ txn.quantity }} {{ txn.unit || '' }} × {{ txn.ratePerUnit | currencyInr }}/{{ txn.unit || 'unit' }}</span>
                     }
                   </td>
-                  <td class="hide-mobile">
+                  <td>
                     <span class="payment-badge" [class]="txn.paymentMethod || 'cash'">{{ (txn.paymentMethod || 'cash') | uppercase }}</span>
                   </td>
-                  <td class="by-cell hide-mobile">{{ txn.paidByName || txn.createdByName }}</td>
-                  <td class="desc-cell hide-mobile">{{ txn.description || '-' }}</td>
+                  <td class="by-cell">{{ txn.paidByName || txn.createdByName }}</td>
+                  <td class="desc-cell">{{ txn.description || '-' }}</td>
                   <td class="actions-cell" (click)="$event.stopPropagation()">
                     <button mat-icon-button (click)="edit(txn.id)" title="Edit">
                       <mat-icon>edit</mat-icon>
@@ -316,26 +316,17 @@ export class TransactionListComponent implements OnInit {
   // Generate last 12 months for month filter
   availableMonths = this.generateMonths(12);
 
-  // Client-side filter/search state signals for memoization
-  private filterPaymentStatusSignal = signal('');
-  private searchTermSignal = signal('');
-  private sortColumnSignal = signal('');
-  private sortDirectionSignal = signal<SortDirection>('asc');
-
-  displayedTransactions = computed(() => {
+  displayedTransactions(): Transaction[] {
     let filtered = this.transactions();
-    const paymentStatus = this.filterPaymentStatusSignal();
-    const term = this.searchTermSignal().toLowerCase().trim();
-    const col = this.sortColumnSignal();
-    const dir = this.sortDirectionSignal();
 
-    if (paymentStatus) {
+    if (this.filterPaymentStatus) {
       filtered = filtered.filter(txn => {
-        if (paymentStatus === 'pending') return txn.paymentStatus === 'pending';
+        if (this.filterPaymentStatus === 'pending') return txn.paymentStatus === 'pending';
         return txn.type === 'expense' || txn.paymentStatus !== 'pending';
       });
     }
 
+    const term = this.searchTerm.toLowerCase().trim();
     if (term) {
       filtered = filtered.filter(txn =>
         txn.description?.toLowerCase().includes(term) ||
@@ -347,8 +338,8 @@ export class TransactionListComponent implements OnInit {
       );
     }
 
-    return sortData(filtered, col, dir);
-  });
+    return sortData(filtered, this.sortColumn, this.sortDirection);
+  }
 
   async ngOnInit(): Promise<void> {
     this.segments.set(await this.segmentService.getAll());
@@ -383,16 +374,7 @@ export class TransactionListComponent implements OnInit {
     this.hasMore.set(result.transactions.length === 20);
   }
 
-  /** Sync plain filter fields into signals so computed() picks them up. */
-  private syncFilterSignals(): void {
-    this.filterPaymentStatusSignal.set(this.filterPaymentStatus);
-    this.searchTermSignal.set(this.searchTerm);
-    this.sortColumnSignal.set(this.sortColumn);
-    this.sortDirectionSignal.set(this.sortDirection);
-  }
-
   paginatedTransactions(): Transaction[] {
-    this.syncFilterSignals();
     return paginate(this.displayedTransactions(), this.currentPage, this.pageSize);
   }
 

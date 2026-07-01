@@ -217,7 +217,7 @@ import { MatInputModule } from '@angular/material/input';
                 <th class="sortable" (click)="toggleSort('segmentName')">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
                 <th class="sortable" (click)="toggleSort('categoryName')">Category <span class="sort-icon">{{ getSortIcon('categoryName') }}</span></th>
                 <th class="sortable" (click)="toggleSort('amount')">Amount <span class="sort-icon">{{ getSortIcon('amount') }}</span></th>
-                <th class="sortable hide-mobile" (click)="toggleSort('paidByName')">Paid By <span class="sort-icon">{{ getSortIcon('paidByName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('paidByName')">Paid By <span class="sort-icon">{{ getSortIcon('paidByName') }}</span></th>
                 <th class="hide-mobile">Via</th>
                 <th class="hide-mobile">Description</th>
               </tr>
@@ -231,7 +231,7 @@ import { MatInputModule } from '@angular/material/input';
                   <td class="amount-cell">{{ txn.amount | currencyInr }}</td>
                   <td class="hide-mobile">{{ txn.paidByName }}</td>
                   <td class="hide-mobile"><span class="payment-badge" [class]="txn.paymentMethod || 'upi'">{{ (txn.paymentMethod || 'upi') | uppercase }}</span></td>
-                  <td class="desc-cell hide-mobile">{{ txn.description }}</td>
+                  <td class="desc-cell">{{ txn.description }}</td>
                 </tr>
               }
             </tbody>

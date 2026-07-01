@@ -31,7 +31,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
           <thead>
             <tr>
               <th class="sortable" (click)="toggleSort('displayName')">Name <span class="sort-icon">{{ getSortIcon('displayName') }}</span></th>
-              <th class="sortable hide-mobile" (click)="toggleSort('email')">Email <span class="sort-icon">{{ getSortIcon('email') }}</span></th>
+              <th class="sortable" (click)="toggleSort('email')">Email <span class="sort-icon">{{ getSortIcon('email') }}</span></th>
               <th class="sortable" (click)="toggleSort('role')">Role <span class="sort-icon">{{ getSortIcon('role') }}</span></th>
               <th class="hide-mobile">Segments</th>
               <th>Status</th>
