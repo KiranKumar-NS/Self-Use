@@ -282,6 +282,23 @@ tr:hover .actions-cell button { opacity: 1; }
   .filter-card { padding: 0.75rem; }
 }
 
+// ── Fix Material component overflow on mobile ──────────────
+.cdk-overlay-pane {
+  max-width: calc(100vw - 32px) !important;
+}
+@media (max-width: 768px) {
+  .filter-field .mat-mdc-form-field {
+    width: 100%;
+  }
+  .mat-mdc-select-panel {
+    max-width: calc(100vw - 32px) !important;
+  }
+  // Prevent content from overflowing viewport
+  .content {
+    overflow-x: hidden;
+  }
+}
+
 // ── Mobile column hiding ───────────────────────────────────
 @media (max-width: 640px) {
   .hide-mobile { display: none !important; }
