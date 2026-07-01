@@ -211,14 +211,14 @@ export class ExportService {
   }
 
   exportTransactionsCsv(transactions: Transaction[], filename: string): void {
-    const headers = 'Date,Type,Segment,Category,Amount,Paid By,Description,Distribution\n';
+    const headers = 'Date,Type,Segment,Category,Amount,Paid By,Payment Method,Description,Quantity,Unit,Rate Per Unit,Payment Status,Distribution\n';
     const rows = transactions
       .map(
         (t) => {
           const distStr = t.distributions?.length
             ? `"${t.distributions.map(d => `${d.name}: ${d.amount}`).join('; ')}"`
             : '';
-          return `${t.date.toDate().toLocaleDateString('en-IN')},${t.type},${t.segmentName},${t.categoryName},${t.amount},${t.paidByName || t.createdByName},"${t.description}",${distStr}`;
+          return `${t.date.toDate().toLocaleDateString('en-IN')},${t.type},${t.segmentName},${t.categoryName},${t.amount},${t.paidByName || t.createdByName},${t.paymentMethod || 'upi'},"${t.description}",${t.quantity || ''},${t.unit || ''},${t.ratePerUnit || ''},${t.paymentStatus || ''},${distStr}`;
         }
       )
       .join('\n');
