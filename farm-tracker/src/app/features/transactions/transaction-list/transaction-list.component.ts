@@ -339,7 +339,7 @@ export class TransactionListComponent implements OnInit {
 
   filterType = '';
   filterSegment = '';
-  filterMonth = '';
+  filterMonth = getMonthString(new Date());
   filterPaymentStatus = '';
   searchTerm = '';
 
