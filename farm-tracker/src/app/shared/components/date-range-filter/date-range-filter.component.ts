@@ -119,7 +119,7 @@ interface YearOption { value: number; }
   `],
 })
 export class DateRangeFilterComponent implements OnInit {
-  @Input() defaultMode: ViewMode = 'monthly';
+  @Input() defaultMode: ViewMode = 'alltime';
   @Input() startYear = 2024;
   @Output() rangeChange = new EventEmitter<DateRangeSelection>();
 

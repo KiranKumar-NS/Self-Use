@@ -3,7 +3,7 @@ import { SummaryService } from '../../../core/services/summary.service';
 import { UserService } from '../../../core/services/user.service';
 import { LoanService } from '../../../core/services/loan.service';
 import { MonthlySummary } from '../../../core/models/monthly-summary.model';
-import { getMonthString, getMonthName, getLast6MonthsFrom, getMonthRange } from '../../../core/utils/date.utils';
+import { getMonthName, getLast6MonthsFrom, getMonthRange } from '../../../core/utils/date.utils';
 import { SummaryCardsComponent } from '../summary-cards/summary-cards.component';
 import { SegmentBreakdownChartComponent } from '../segment-breakdown-chart/segment-breakdown-chart.component';
 import { MonthlyTrendChartComponent } from '../monthly-trend-chart/monthly-trend-chart.component';
@@ -96,6 +96,7 @@ export class DashboardPageComponent implements OnInit {
 
   private nameMap: Record<string, string> = {};
   private initialized = false;
+  private pendingSelection: DateRangeSelection | null = null;
 
   async ngOnInit(): Promise<void> {
     const [users, loans, segs] = await Promise.all([
@@ -108,10 +109,19 @@ export class DashboardPageComponent implements OnInit {
     this.loanSummary.set(loans);
     this.initialized = true;
     this.initialLoading.set(false);
+
+    // Load data from the selection that arrived before init
+    if (this.pendingSelection) {
+      await this.onRangeChange(this.pendingSelection);
+      this.pendingSelection = null;
+    }
   }
 
   async onRangeChange(selection: DateRangeSelection): Promise<void> {
-    if (!this.initialized) return;
+    if (!this.initialized) {
+      this.pendingSelection = selection;
+      return;
+    }
     this.loading.set(true);
     this.currentMode = selection.mode;
 
