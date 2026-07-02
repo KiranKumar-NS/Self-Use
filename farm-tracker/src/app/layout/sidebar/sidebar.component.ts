@@ -46,11 +46,6 @@ import { MatIconModule } from '@angular/material/icon';
           <span>Tasks</span>
         </a>
 
-        <a routerLink="/analytics" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
-          <mat-icon>analytics</mat-icon>
-          <span>Analytics</span>
-        </a>
-
         @if (auth.isAdmin()) {
           <div class="nav-section">
             <span class="nav-section-label">Admin</span>

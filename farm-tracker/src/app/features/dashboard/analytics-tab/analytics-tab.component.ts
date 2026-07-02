@@ -1,102 +1,61 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, Input, OnChanges, SimpleChanges, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe, UpperCasePipe } from '@angular/common';
-import { Transaction } from '../../core/models/transaction.model';
-import { TransactionService } from '../../core/services/transaction.service';
-import { SummaryService } from '../../core/services/summary.service';
-import { SegmentService } from '../../core/services/segment.service';
-import { Segment } from '../../core/models/segment.model';
+import { Transaction } from '../../../core/models/transaction.model';
+import { TransactionService } from '../../../core/services/transaction.service';
+import { SummaryService } from '../../../core/services/summary.service';
+import { SegmentService } from '../../../core/services/segment.service';
+import { Segment } from '../../../core/models/segment.model';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { WhatsappShareDialogComponent, WhatsappShareData, ShareTransaction } from './whatsapp-share-dialog.component';
-import { getMonthRange, getMonthString } from '../../core/utils/date.utils';
-import { CurrencyInrPipe } from '../../shared/pipes/currency-inr.pipe';
-import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
-import { DateRangeFilterComponent, DateRangeSelection } from '../../shared/components/date-range-filter/date-range-filter.component';
-import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../core/utils/table.utils';
+import { getMonthRange } from '../../../core/utils/date.utils';
+import { normalizeName } from '../../../core/utils/name.utils';
+import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
+import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
+import { DateRangeSelection } from '../../../shared/components/date-range-filter/date-range-filter.component';
+import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatSelectModule } from '@angular/material/select';
-import { MatInputModule } from '@angular/material/input';
-
 @Component({
-  selector: 'app-analytics',
+  selector: 'app-analytics-tab',
   standalone: true,
   imports: [
-    FormsModule, DatePipe, UpperCasePipe, CurrencyInrPipe, LoadingSpinnerComponent, DateRangeFilterComponent,
+    FormsModule, DatePipe, UpperCasePipe, CurrencyInrPipe, LoadingSpinnerComponent,
     BaseChartDirective,
-    MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule, MatDialogModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatDialogModule,
   ],
   template: `
-    <div class="page-header">
-      <div>
-        <h1>Analytics</h1>
-        <p class="subtitle">Deep dive into your farm finances</p>
+    <!-- Filter Chips -->
+    <div class="filters-area">
+      <!-- Person Chips -->
+      <div class="filter-row">
+        <span class="filter-label">Person</span>
+        <div class="chip-scroll">
+          <button class="filter-chip" [class.active]="!filterPaidBy" (click)="onPersonChipClick('')">All</button>
+          @for (p of allPaidBy(); track p) {
+            <button class="filter-chip" [class.active]="filterPaidBy === p" (click)="onPersonChipClick(p)">{{ p }}</button>
+          }
+        </div>
       </div>
-      <div class="export-buttons">
-        <button mat-stroked-button (click)="exportPdf()">
-          <mat-icon>picture_as_pdf</mat-icon> <span class="btn-label">Export PDF</span>
-        </button>
-        <button mat-stroked-button (click)="exportCsv()">
-          <mat-icon>download</mat-icon> <span class="btn-label">Export CSV</span>
-        </button>
-        <button mat-stroked-button class="wa-share-btn" (click)="shareWhatsApp()">
-          <mat-icon>share</mat-icon> <span class="btn-label">WhatsApp</span>
-        </button>
+      <!-- Segment Chips -->
+      <div class="filter-row">
+        <span class="filter-label">Segment</span>
+        <div class="chip-scroll">
+          <button class="filter-chip" [class.active]="!filterSegment" (click)="onSegmentChipClick('')">All</button>
+          @for (s of allSegments(); track s) {
+            <button class="filter-chip" [class.active]="filterSegment === s" (click)="onSegmentChipClick(s)">{{ s }}</button>
+          }
+        </div>
       </div>
     </div>
-
-    <!-- Date Range Filter -->
-    <app-date-range-filter (rangeChange)="onRangeChange($event)" />
-
-    <!-- Filters -->
-    <mat-card class="filter-card">
-      <div class="filter-header" (click)="filtersOpen = !filtersOpen">
-        <mat-icon>filter_list</mat-icon>
-        <span>Filters</span>
-        @if (hasFilters()) {
-          <button mat-button class="clear-btn" (click)="clearFilters(); $event.stopPropagation()">Clear All</button>
-        }
-        <mat-icon class="toggle-icon" [class.expanded]="filtersOpen">expand_more</mat-icon>
-      </div>
-      <div class="filters" [class.collapsed]="!filtersOpen">
-        <mat-form-field appearance="outline" class="filter-field">
-          <mat-label>Segment</mat-label>
-          <mat-select [(ngModel)]="filterSegment" (selectionChange)="applyFilters()">
-            <mat-option value="">All Segments</mat-option>
-            @for (s of allSegments(); track s) {
-              <mat-option [value]="s">{{ s }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field appearance="outline" class="filter-field">
-          <mat-label>Paid By</mat-label>
-          <mat-select [(ngModel)]="filterPaidBy" (selectionChange)="applyFilters()">
-            <mat-option value="">All People</mat-option>
-            @for (p of allPaidBy(); track p) {
-              <mat-option [value]="p">{{ p }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field appearance="outline" class="filter-field">
-          <mat-label>Category</mat-label>
-          <mat-select [(ngModel)]="filterCategory" (selectionChange)="applyFilters()">
-            <mat-option value="">All Categories</mat-option>
-            @for (c of allCategories(); track c) {
-              <mat-option [value]="c">{{ c }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-      </div>
-    </mat-card>
 
     @if (loading()) {
       <app-loading-spinner />
     } @else {
-      <!-- Summary Cards -->
+      <!-- Summary Stats -->
       <div class="summary-grid">
         <mat-card class="stat-card total">
           <span class="stat-label">Total Expense</span>
@@ -112,17 +71,10 @@ import { MatInputModule } from '@angular/material/input';
           <span class="stat-label">Net Profit/Loss</span>
           <span class="stat-value" [class.income-text]="netProfit() >= 0" [class.expense-text]="netProfit() < 0">{{ netProfit() | currencyInr }}</span>
         </mat-card>
-        @for (seg of segmentTotals(); track seg.name) {
-          <mat-card class="stat-card">
-            <span class="stat-label">{{ seg.name }}</span>
-            <span class="stat-value">{{ seg.total | currencyInr }}</span>
-            <span class="stat-count">{{ seg.count }} txns</span>
-          </mat-card>
-        }
       </div>
 
-      <!-- Person Investment Summary -->
-      <h3 class="section-title">Person Investment Summary</h3>
+      <!-- Person Investment -->
+      <h3 class="section-title">Person Investment</h3>
       <div class="person-grid">
         @for (p of investmentSummary(); track p.name) {
           <mat-card class="person-card">
@@ -140,21 +92,28 @@ import { MatInputModule } from '@angular/material/input';
                 <span class="invest-label">Income received</span>
                 <span class="invest-value income">-{{ p.incomeReceived | currencyInr }}</span>
               </div>
+              @if (p.holding > 0) {
+                <div class="invest-row holding-row">
+                  <span class="invest-label">Holding</span>
+                  <span class="invest-value holding">{{ p.holding | currencyInr }}</span>
+                </div>
+              }
             </div>
           </mat-card>
         }
       </div>
 
-      <!-- Charts -->
+      <!-- Charts Section -->
+      <h3 class="section-title">Breakdown</h3>
       <div class="charts-grid">
         <mat-card class="chart-card">
-          <h3>Expense by Segment</h3>
-          @if (segmentChartData.labels!.length > 0) {
+          <h3>Expense by Person</h3>
+          @if (personChartData.labels!.length > 0) {
             <canvas baseChart
-              [datasets]="segmentChartData.datasets"
-              [labels]="segmentChartData.labels"
-              [options]="pieOptions"
-              type="doughnut"></canvas>
+              [datasets]="personChartData.datasets"
+              [labels]="personChartData.labels"
+              [options]="barOptions"
+              type="bar"></canvas>
           }
         </mat-card>
         <mat-card class="chart-card">
@@ -169,15 +128,27 @@ import { MatInputModule } from '@angular/material/input';
         </mat-card>
       </div>
 
+      <!-- Segment Cards -->
+      <h3 class="section-title">Segments</h3>
+      <div class="summary-grid">
+        @for (seg of segmentTotals(); track seg.name) {
+          <mat-card class="stat-card">
+            <span class="stat-label">{{ seg.name }}</span>
+            <span class="stat-value">{{ seg.total | currencyInr }}</span>
+            <span class="stat-count">{{ seg.count }} txns</span>
+          </mat-card>
+        }
+      </div>
+
       <div class="charts-grid">
         <mat-card class="chart-card">
-          <h3>Expense by Person</h3>
-          @if (personChartData.labels!.length > 0) {
+          <h3>Expense by Segment</h3>
+          @if (segmentChartData.labels!.length > 0) {
             <canvas baseChart
-              [datasets]="personChartData.datasets"
-              [labels]="personChartData.labels"
-              [options]="barOptions"
-              type="bar"></canvas>
+              [datasets]="segmentChartData.datasets"
+              [labels]="segmentChartData.labels"
+              [options]="pieOptions"
+              type="doughnut"></canvas>
           }
         </mat-card>
         <mat-card class="chart-card">
@@ -253,15 +224,19 @@ import { MatInputModule } from '@angular/material/input';
     }
   `,
   styles: [`
-    .export-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-    .wa-share-btn { color: #25D366 !important; border-color: #25D366 !important; }
-    .filter-header { cursor: pointer; }
-    .toggle-icon {
-      margin-left: auto; transition: transform 0.2s; color: var(--color-text-muted);
-      font-size: 20px; width: 20px; height: 20px;
+    .filters-area { margin-bottom: 1rem; }
+
+    .filter-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .filter-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--color-text-muted); letter-spacing: 0.05em; min-width: 56px; flex-shrink: 0; }
+    .chip-scroll { display: flex; gap: 0.4rem; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding: 2px 0; }
+    .chip-scroll::-webkit-scrollbar { display: none; }
+    .filter-chip {
+      border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text-secondary);
+      padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 500; cursor: pointer;
+      white-space: nowrap; transition: all 0.15s; outline: none;
     }
-    .toggle-icon.expanded { transform: rotate(180deg); }
-    .filters.collapsed { display: none; }
+    .filter-chip:hover { border-color: var(--color-primary); color: var(--color-primary); }
+    .filter-chip.active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
 
     .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
     .stat-card { padding: 1.25rem; display: flex; flex-direction: column; border-left: 4px solid var(--color-border); min-width: 0; overflow: hidden; }
@@ -292,20 +267,18 @@ import { MatInputModule } from '@angular/material/input';
     .invest-value { font-weight: 600; }
     .invest-value.expense { color: var(--color-expense); }
     .invest-value.income { color: var(--color-income); }
+    .invest-value.holding { color: var(--color-warning, #d97706); }
+    .holding-row { border-top: 1px dashed var(--color-border); padding-top: 6px; margin-top: 2px; }
 
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
     .chart-card { padding: 1.25rem; }
     .chart-card h3 { margin: 0 0 1rem; font-size: var(--font-md); color: var(--color-text); }
-
     .amount-cell { color: var(--color-expense); }
     .desc-cell { max-width: 250px; }
 
     @media (max-width: 768px) {
       .charts-grid { grid-template-columns: 1fr; }
       .person-grid { grid-template-columns: 1fr; }
-      .export-buttons button { font-size: 0.75rem; padding: 0 8px; }
-      .export-buttons button mat-icon { font-size: 18px; width: 18px; height: 18px; margin-right: 2px; }
-      .export-buttons .btn-label { display: none; }
     }
     @media (max-width: 480px) {
       .summary-grid { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
@@ -317,10 +290,13 @@ import { MatInputModule } from '@angular/material/input';
       .person-card { padding: 1rem; }
       .person-amount { font-size: 1rem; }
       .invest-row { font-size: 0.75rem; }
+      .filter-chip { padding: 5px 10px; font-size: 0.75rem; }
     }
   `],
 })
-export class AnalyticsComponent implements OnInit {
+export class AnalyticsTabComponent implements OnInit, OnChanges {
+  @Input() dateSelection!: DateRangeSelection;
+
   private transactionService = inject(TransactionService);
   private summaryService = inject(SummaryService);
   private segmentService = inject(SegmentService);
@@ -329,10 +305,8 @@ export class AnalyticsComponent implements OnInit {
   loading = signal(true);
   allTransactions = signal<Transaction[]>([]);
   filtered = signal<Transaction[]>([]);
-  filtersOpen = window.innerWidth > 768;
 
-  // Date range state
-  private currentSelection: DateRangeSelection = { mode: 'monthly', month: getMonthString(new Date()) };
+  private currentSelection!: DateRangeSelection;
 
   // Filters
   filterSegment = '';
@@ -354,7 +328,7 @@ export class AnalyticsComponent implements OnInit {
   totalExpense = signal(0);
   segmentTotals = signal<{ name: string; total: number; count: number }[]>([]);
   personTotals = signal<{ name: string; total: number; segments: { name: string; total: number }[] }[]>([]);
-  investmentSummary = signal<{ name: string; expensesPaid: number; incomeReceived: number; net: number }[]>([]);
+  investmentSummary = signal<{ name: string; expensesPaid: number; incomeReceived: number; holding: number; net: number }[]>([]);
   maxInvestment = signal(0);
   incomeTransactions = signal<Transaction[]>([]);
   segments = signal<Segment[]>([]);
@@ -387,17 +361,18 @@ export class AnalyticsComponent implements OnInit {
     this.segments.set(await this.segmentService.getAll());
   }
 
-  async onRangeChange(selection: DateRangeSelection): Promise<void> {
-    this.currentSelection = selection;
-    await this.loadTransactions();
-    this.loading.set(false);
+  async ngOnChanges(changes: SimpleChanges): Promise<void> {
+    if (changes['dateSelection'] && this.dateSelection) {
+      this.currentSelection = this.dateSelection;
+      await this.loadTransactions();
+      this.loading.set(false);
+    }
   }
 
   async loadTransactions(): Promise<void> {
     this.loading.set(true);
     const filters: any = { type: 'expense' as const };
 
-    // Use server-side month filter for single month
     if (this.currentSelection.mode === 'monthly') {
       filters.month = this.currentSelection.month;
     }
@@ -405,16 +380,14 @@ export class AnalyticsComponent implements OnInit {
     const result = await this.transactionService.getAll(filters, 200);
     let txns = result.transactions;
 
-    // Client-side month range filter for custom mode
     if (this.currentSelection.mode === 'custom') {
       txns = txns.filter(t => t.month >= this.currentSelection.fromMonth! && t.month <= this.currentSelection.toMonth!);
     }
 
     this.allTransactions.set(txns);
 
-    // Build unique values from loaded data
     this.allSegments.set([...new Set(txns.map((t) => t.segmentName))].sort());
-    this.allPaidBy.set([...new Set(txns.map((t) => t.paidByName || 'Unknown'))].sort());
+    this.allPaidBy.set([...new Set(txns.map((t) => normalizeName(t.paidByName || 'Unknown')))].sort());
     this.allCategories.set([...new Set(txns.map((t) => t.categoryName))].sort());
 
     this.applyFilters();
@@ -422,14 +395,14 @@ export class AnalyticsComponent implements OnInit {
   }
 
   private async buildInvestmentSummary(expenseTxns: Transaction[]): Promise<void> {
-    const personMap: Record<string, { expensesPaid: number; incomeReceived: number }> = {};
+    const personMap: Record<string, { expensesPaid: number; incomeReceived: number; holding: number }> = {};
 
     const ensurePerson = (name: string) => {
-      if (!personMap[name]) personMap[name] = { expensesPaid: 0, incomeReceived: 0 };
+      if (!personMap[name]) personMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0 };
     };
 
     for (const txn of expenseTxns) {
-      const name = txn.paidByName || txn.createdByName || 'Unknown';
+      const name = normalizeName(txn.paidByName || txn.createdByName || 'Unknown');
       ensurePerson(name);
       personMap[name].expensesPaid += txn.amount;
     }
@@ -437,6 +410,14 @@ export class AnalyticsComponent implements OnInit {
     try {
       const incomeResult = await this.transactionService.getAll({ type: 'income' }, 200);
       this.incomeTransactions.set(incomeResult.transactions);
+
+      // Add distribution recipients to person chip list
+      const distributionNames = incomeResult.transactions
+        .flatMap(t => (t.distributions || []))
+        .filter(d => d.uid !== 'reinvestment')
+        .map(d => d.name);
+      const currentPaidBy = this.allPaidBy();
+      this.allPaidBy.set([...new Set([...currentPaidBy, ...distributionNames])].sort());
 
       let incomeForRange = incomeResult.transactions;
       if (this.currentSelection.mode === 'monthly') {
@@ -451,11 +432,23 @@ export class AnalyticsComponent implements OnInit {
       this.netProfit.set(incomeTotal - this.totalExpense());
 
       for (const txn of incomeForRange) {
-        if (!txn.distributions?.length) continue;
-        for (const d of txn.distributions) {
+        // Total of ALL distributions (including reinvestment) = money that's been allocated
+        const totalAllocated = (txn.distributions || [])
+          .reduce((s, d) => s + d.amount, 0);
+
+        // Only count person distributions as income (not reinvestment)
+        for (const d of (txn.distributions || [])) {
           if (d.uid === 'reinvestment') continue;
           ensurePerson(d.name);
           personMap[d.name].incomeReceived += d.amount;
+        }
+
+        // Undistributed = total income - everything allocated (including reinvestment)
+        const receiver = normalizeName(txn.paidByName || txn.createdByName || 'Unknown');
+        const undistributed = txn.amount - totalAllocated;
+        if (undistributed > 0) {
+          ensurePerson(receiver);
+          personMap[receiver].holding += undistributed;
         }
       }
     } catch {}
@@ -472,15 +465,31 @@ export class AnalyticsComponent implements OnInit {
     this.maxInvestment.set(summary.length > 0 ? Math.max(...summary.map(s => s.net)) : 0);
   }
 
+  setFilter(type: 'all' | 'person' | 'segment', value: string): void {
+    if (type === 'all') {
+      this.filterPaidBy = '';
+      this.filterSegment = '';
+      this.filterCategory = '';
+    }
+    this.applyFilters();
+  }
+
+  onPersonChipClick(person: string): void {
+    this.filterPaidBy = this.filterPaidBy === person ? '' : person;
+    this.applyFilters();
+  }
+
+  onSegmentChipClick(segment: string): void {
+    this.filterSegment = this.filterSegment === segment ? '' : segment;
+    this.applyFilters();
+  }
+
   hasFilters(): boolean {
     return !!(this.filterSegment || this.filterPaidBy || this.filterCategory);
   }
 
   clearFilters(): void {
-    this.filterSegment = '';
-    this.filterPaidBy = '';
-    this.filterCategory = '';
-    this.applyFilters();
+    this.setFilter('all', '');
   }
 
   applyFilters(): void {
@@ -491,7 +500,7 @@ export class AnalyticsComponent implements OnInit {
       txns = txns.filter((t) => t.segmentName === this.filterSegment);
     }
     if (this.filterPaidBy) {
-      txns = txns.filter((t) => (t.paidByName || 'Unknown') === this.filterPaidBy);
+      txns = txns.filter((t) => normalizeName(t.paidByName || 'Unknown') === this.filterPaidBy);
     }
     if (this.filterCategory) {
       txns = txns.filter((t) => t.categoryName === this.filterCategory);
@@ -515,7 +524,7 @@ export class AnalyticsComponent implements OnInit {
     // Person totals with segment breakdown
     const personMap = new Map<string, Map<string, number>>();
     txns.forEach((t) => {
-      const name = t.paidByName || 'Unknown';
+      const name = normalizeName(t.paidByName || 'Unknown');
       if (!personMap.has(name)) personMap.set(name, new Map());
       const segInner = personMap.get(name)!;
       segInner.set(t.segmentName, (segInner.get(t.segmentName) || 0) + t.amount);
@@ -530,7 +539,8 @@ export class AnalyticsComponent implements OnInit {
 
     this.buildCharts(txns);
 
-    // Re-filter income and rebuild investment summary with all active filters
+    // Re-filter income — filter by date range and segment/category only (NOT by person)
+    // Person filter is applied later per-distribution, not on the whole income transaction
     let incomeForRange = this.incomeTransactions();
     if (this.currentSelection.mode === 'monthly') {
       incomeForRange = incomeForRange.filter(t => t.month === this.currentSelection.month);
@@ -539,31 +549,48 @@ export class AnalyticsComponent implements OnInit {
     }
     if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segmentName === this.filterSegment);
     if (this.filterCategory) incomeForRange = incomeForRange.filter(t => t.categoryName === this.filterCategory);
-    if (this.filterPaidBy) incomeForRange = incomeForRange.filter(t => (t.paidByName || 'Unknown') === this.filterPaidBy);
     this.filteredIncome.set(incomeForRange);
     const incomeTotal = incomeForRange.reduce((s, t) => s + t.amount, 0);
     this.totalIncomeAmount.set(incomeTotal);
     this.netProfit.set(incomeTotal - this.totalExpense());
 
     // Rebuild person investment from filtered data
-    const investMap: Record<string, { expensesPaid: number; incomeReceived: number }> = {};
+    const investMap: Record<string, { expensesPaid: number; incomeReceived: number; holding: number }> = {};
     const ensurePerson = (name: string) => {
-      if (!investMap[name]) investMap[name] = { expensesPaid: 0, incomeReceived: 0 };
+      if (!investMap[name]) investMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0 };
     };
     for (const t of txns) {
-      const name = t.paidByName || t.createdByName || 'Unknown';
+      const name = normalizeName(t.paidByName || t.createdByName || 'Unknown');
       ensurePerson(name);
       investMap[name].expensesPaid += t.amount;
     }
     for (const t of incomeForRange) {
-      if (!t.distributions?.length) continue;
-      for (const d of t.distributions) {
+      // Total allocated = all distributions including reinvestment
+      const totalAllocated = (t.distributions || [])
+        .reduce((s, d) => s + d.amount, 0);
+
+      // Only person distributions count as income received (not reinvestment)
+      for (const d of (t.distributions || [])) {
         if (d.uid === 'reinvestment') continue;
         ensurePerson(d.name);
         investMap[d.name].incomeReceived += d.amount;
       }
+
+      // Undistributed = income - everything allocated (including reinvestment)
+      const receiver = normalizeName(t.paidByName || t.createdByName || 'Unknown');
+      const undistributed = t.amount - totalAllocated;
+      if (undistributed > 0) {
+        ensurePerson(receiver);
+        investMap[receiver].holding += undistributed;
+      }
     }
-    const summary = Object.entries(investMap)
+
+    // If person filter is active, keep only that person's investment data
+    let summaryEntries = Object.entries(investMap);
+    if (this.filterPaidBy) {
+      summaryEntries = summaryEntries.filter(([name]) => name === this.filterPaidBy);
+    }
+    const summary = summaryEntries
       .map(([name, data]) => ({ name, ...data, net: data.expensesPaid - data.incomeReceived }))
       .sort((a, b) => b.net - a.net);
     this.investmentSummary.set(summary);
@@ -600,7 +627,7 @@ export class AnalyticsComponent implements OnInit {
   }
 
   private async getExportService() {
-    const { ExportService } = await import('../../core/services/export.service');
+    const { ExportService } = await import('../../../core/services/export.service');
     return new ExportService();
   }
 

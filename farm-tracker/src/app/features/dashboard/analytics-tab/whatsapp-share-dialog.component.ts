@@ -4,7 +4,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { FormsModule } from '@angular/forms';
-import { formatCurrency } from '../../core/utils/firestore.utils';
+import { formatCurrency } from '../../../core/utils/firestore.utils';
 
 export interface ShareTransaction {
   date: string; // formatted date
@@ -174,7 +174,6 @@ export class WhatsappShareDialogComponent {
   }
 
   private formatRangeLabel(label: string): string {
-    // Convert "2026-06" or "2026-05_to_2026-06" to readable format
     const formatMonth = (m: string) => {
       const [y, mo] = m.split('-');
       if (!y || !mo) return m;

@@ -1,27 +1,31 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, OnInit, ViewChild } from '@angular/core';
 import { SummaryService } from '../../../core/services/summary.service';
 import { UserService } from '../../../core/services/user.service';
 import { LoanService } from '../../../core/services/loan.service';
 import { MonthlySummary } from '../../../core/models/monthly-summary.model';
 import { getMonthName, getLast6MonthsFrom, getMonthRange } from '../../../core/utils/date.utils';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
 import { SummaryCardsComponent } from '../summary-cards/summary-cards.component';
 import { SegmentBreakdownChartComponent } from '../segment-breakdown-chart/segment-breakdown-chart.component';
 import { MonthlyTrendChartComponent } from '../monthly-trend-chart/monthly-trend-chart.component';
 import { LoanSummaryWidgetComponent } from '../loan-summary-widget/loan-summary-widget.component';
 import { BudgetWidgetComponent } from '../budget-widget/budget-widget.component';
 import { StockWidgetComponent } from '../stock-widget/stock-widget.component';
+import { AnalyticsTabComponent } from '../analytics-tab/analytics-tab.component';
 import { SegmentService } from '../../../core/services/segment.service';
 import { Segment } from '../../../core/models/segment.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/components/date-range-filter/date-range-filter.component';
-
 @Component({
   selector: 'app-dashboard-page',
   standalone: true,
   imports: [
     SummaryCardsComponent, SegmentBreakdownChartComponent, MonthlyTrendChartComponent,
     LoanSummaryWidgetComponent, BudgetWidgetComponent, StockWidgetComponent,
+    AnalyticsTabComponent,
     LoadingSpinnerComponent, DateRangeFilterComponent,
+    MatIconModule, MatButtonModule,
   ],
   template: `
     @if (initialLoading()) {
@@ -29,6 +33,17 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
     } @else {
       <div class="page-header">
         <h1 class="page-title">Dashboard</h1>
+        <div class="header-actions">
+          <button mat-icon-button (click)="exportExcel()" aria-label="Export Excel backup">
+            <mat-icon>download</mat-icon>
+          </button>
+          <button mat-icon-button (click)="exportPdf()" aria-label="Export PDF report">
+            <mat-icon>picture_as_pdf</mat-icon>
+          </button>
+          <button mat-icon-button class="wa-share-btn" (click)="shareWhatsApp()" aria-label="Share on WhatsApp">
+            <mat-icon>share</mat-icon>
+          </button>
+        </div>
       </div>
 
       <app-date-range-filter (rangeChange)="onRangeChange($event)" />
@@ -44,39 +59,48 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
           [pendingIncome]="totals().pendingIncome"
         />
 
+        <app-stock-widget [segments]="segments()" />
+
         <div class="charts-grid">
           <app-segment-breakdown-chart [summaries]="currentMonthSummaries()" [personBreakdown]="personBreakdown()" />
           <app-monthly-trend-chart [trendData]="trendData()" [chartTitle]="trendTitle()" />
         </div>
 
-        <div class="widgets-grid">
+        <div class="widgets-row">
           @if (currentMode === 'monthly') {
             <app-budget-widget [segments]="segments()" [summaries]="currentMonthSummaries()" />
           }
-          <app-stock-widget [segments]="segments()" />
+          <app-loan-summary-widget
+              [totalGiven]="loanSummary().totalGiven"
+              [totalReceived]="loanSummary().totalReceived"
+              [pendingGiven]="loanSummary().pendingGiven"
+              [pendingReceived]="loanSummary().pendingReceived" />
         </div>
 
-        <app-loan-summary-widget
-            [totalGiven]="loanSummary().totalGiven"
-            [totalReceived]="loanSummary().totalReceived"
-            [pendingGiven]="loanSummary().pendingGiven"
-            [pendingReceived]="loanSummary().pendingReceived" />
+        <hr class="section-divider" />
+
+        <app-analytics-tab [dateSelection]="currentSelection!" />
       }
     }
   `,
   styles: [`
     .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     .page-title { margin: 0; font-size: var(--font-2xl); color: var(--color-text); }
+    .header-actions { display: flex; gap: 0.25rem; }
+    .wa-share-btn { color: #25D366 !important; }
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
-    .widgets-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+    .widgets-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+    .section-divider { border: none; border-top: 1px solid var(--color-border); margin: 1.5rem 0; }
     @media (max-width: 768px) {
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .charts-grid { grid-template-columns: 1fr; }
-      .widgets-grid { grid-template-columns: 1fr; }
+      .widgets-row { grid-template-columns: 1fr; }
     }
   `],
 })
 export class DashboardPageComponent implements OnInit {
+  @ViewChild(AnalyticsTabComponent) analyticsTab!: AnalyticsTabComponent;
+
   private summaryService = inject(SummaryService);
   private segmentService = inject(SegmentService);
   private userService = inject(UserService);
@@ -85,6 +109,7 @@ export class DashboardPageComponent implements OnInit {
   initialLoading = signal(true);
   loading = signal(false);
   currentMode: 'monthly' | 'custom' | 'alltime' = 'monthly';
+  currentSelection: DateRangeSelection | null = null;
   trendTitle = signal('Monthly Trend (Last 6 Months)');
   currentMonthSummaries = signal<MonthlySummary[]>([]);
   totals = signal({ totalIncome: 0, totalExpense: 0, netProfit: 0, pendingIncome: 0 });
@@ -124,6 +149,7 @@ export class DashboardPageComponent implements OnInit {
     }
     this.loading.set(true);
     this.currentMode = selection.mode;
+    this.currentSelection = selection;
 
     let summaries: MonthlySummary[];
 
@@ -192,5 +218,46 @@ export class DashboardPageComponent implements OnInit {
       }
     }
     return breakdown;
+  }
+
+  private get rangeLabel(): string {
+    if (!this.currentSelection) return 'all';
+    if (this.currentSelection.mode === 'monthly') return this.currentSelection.month || 'all';
+    if (this.currentSelection.mode === 'custom') return `${this.currentSelection.fromMonth}_to_${this.currentSelection.toMonth}`;
+    return 'all-time';
+  }
+
+  async exportExcel(): Promise<void> {
+    if (!this.analyticsTab) return;
+    const { ExportService } = await import('../../../core/services/export.service');
+    const exportService = new ExportService();
+    const segs = this.segments().map(s => ({
+      name: s.name,
+      icon: s.icon,
+      type: s.segmentType,
+      unit: s.unit,
+      currentStock: s.currentStock,
+      breeds: s.breeds,
+      budgetExpense: s.budgets?.monthlyExpenseLimit,
+      budgetIncome: s.budgets?.monthlyIncomeTarget,
+    }));
+    await exportService.exportBackupExcel(
+      this.analyticsTab.filtered(),
+      this.analyticsTab.filteredIncome(),
+      segs,
+      this.rangeLabel,
+    );
+  }
+
+  async exportPdf(): Promise<void> {
+    if (this.analyticsTab) {
+      await this.analyticsTab.exportPdf();
+    }
+  }
+
+  shareWhatsApp(): void {
+    if (this.analyticsTab) {
+      this.analyticsTab.shareWhatsApp();
+    }
   }
 }

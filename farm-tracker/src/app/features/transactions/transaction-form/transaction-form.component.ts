@@ -9,10 +9,11 @@ import { UserService } from '../../../core/services/user.service';
 import { Category } from '../../../core/models/category.model';
 import { Segment } from '../../../core/models/segment.model';
 import { AppUser } from '../../../core/models/user.model';
-import { TransactionFormData, PaymentMethod, IncomePaymentStatus, SaleUnit } from '../../../core/models/transaction.model';
+import { TransactionFormData, PaymentMethod, IncomePaymentStatus, ExpensePaymentStatus, SaleUnit } from '../../../core/models/transaction.model';
 
 import { MatIconModule } from '@angular/material/icon';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
+import { normalizeName, nameKey } from '../../../core/utils/name.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -133,6 +134,19 @@ import { MatRadioModule } from '@angular/material/radio';
           </div>
         }
 
+        <!-- Expense Payment Status -->
+        @if (type === 'expense') {
+          <div class="form-row">
+            <div class="payment-method-group">
+              <label class="field-label">Payment Status</label>
+              <mat-radio-group [(ngModel)]="expensePaymentStatus" name="expensePaymentStatus">
+                <mat-radio-button value="paid">Paid</mat-radio-button>
+                <mat-radio-button value="pending">Pending (Credit)</mat-radio-button>
+              </mat-radio-group>
+            </div>
+          </div>
+        }
+
         <!-- Paid By -->
         <div class="form-row">
           <mat-form-field appearance="outline">
@@ -148,7 +162,10 @@ import { MatRadioModule } from '@angular/material/radio';
           @if (paidBy === 'other') {
             <mat-form-field appearance="outline">
               <mat-label>Enter Name</mat-label>
-              <input matInput [(ngModel)]="customPaidByName" name="customPaidByName" required placeholder="e.g. Raju" />
+              <input matInput [(ngModel)]="customPaidByName" name="customPaidByName" required placeholder="e.g. Raju" (ngModelChange)="checkSimilarName()" />
+              @if (suggestedName) {
+                <mat-hint class="name-hint">Did you mean <button type="button" class="hint-btn" (click)="useSuggestedName()">{{ suggestedName }}</button>?</mat-hint>
+              }
             </mat-form-field>
           }
         </div>
@@ -182,6 +199,11 @@ import { MatRadioModule } from '@angular/material/radio';
     }
     .field-label {
       font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600;
+    }
+    .name-hint { color: var(--color-primary); font-size: 0.8rem; }
+    .hint-btn {
+      background: none; border: none; color: var(--color-primary); font-weight: 700;
+      cursor: pointer; text-decoration: underline; padding: 0; font-size: 0.8rem;
     }
     @media (max-width: 640px) {
       .form-row { flex-direction: column; gap: 0.5rem; }
@@ -219,6 +241,7 @@ export class TransactionFormComponent implements OnInit {
   customPaidByName = '';
   paymentMethod: PaymentMethod = 'upi';
   paymentStatus: IncomePaymentStatus = 'received';
+  expensePaymentStatus: ExpensePaymentStatus = 'paid';
 
   allCategories = signal<Category[]>([]);
   allSegments = signal<Segment[]>([]);
@@ -226,6 +249,8 @@ export class TransactionFormComponent implements OnInit {
   filteredCategories = signal<Category[]>([]);
   filteredSegments = signal<Segment[]>([]);
 
+  suggestedName = '';
+  private knownNames: string[] = [];
   private editId = '';
 
   async ngOnInit(): Promise<void> {
@@ -239,6 +264,16 @@ export class TransactionFormComponent implements OnInit {
     this.allSegments.set(segments);
     this.users.set(users.filter((u) => u.isActive));
     this.paidBy = this.authService.currentUser()?.uid || '';
+
+    // Load known custom names for duplicate detection
+    try {
+      const recent = await this.transactionService.getAll({}, 200);
+      this.knownNames = [...new Set(
+        recent.transactions
+          .filter(t => t.paidBy === 'other' && t.paidByName)
+          .map(t => t.paidByName!)
+      )];
+    } catch {}
 
     // Filter segments by user access
     const accessibleSegments = this.authService.isAdmin()
@@ -272,6 +307,7 @@ export class TransactionFormComponent implements OnInit {
         this.ratePerUnit = txn.ratePerUnit || null;
         this.paymentMethod = txn.paymentMethod || 'cash';
         this.paymentStatus = txn.paymentStatus || 'received';
+        this.expensePaymentStatus = txn.expensePaymentStatus || 'paid';
         this.onTypeChange();
       }
     }
@@ -280,7 +316,21 @@ export class TransactionFormComponent implements OnInit {
   onPaidByChange(): void {
     if (this.paidBy !== 'other') {
       this.customPaidByName = '';
+      this.suggestedName = '';
     }
+  }
+
+  checkSimilarName(): void {
+    this.suggestedName = '';
+    if (!this.customPaidByName || this.customPaidByName.trim().length < 2) return;
+    const inputKey = nameKey(this.customPaidByName);
+    const match = this.knownNames.find(n => nameKey(n) === inputKey && n !== this.customPaidByName);
+    if (match) this.suggestedName = match;
+  }
+
+  useSuggestedName(): void {
+    this.customPaidByName = this.suggestedName;
+    this.suggestedName = '';
   }
 
   onQtyRateChange(): void {
@@ -310,7 +360,7 @@ export class TransactionFormComponent implements OnInit {
       const isCustom = this.paidBy === 'other';
       const paidByUser = isCustom ? null : this.users().find((u) => u.uid === this.paidBy);
       const resolvedPaidBy = isCustom ? 'other' : this.paidBy;
-      const resolvedPaidByName = isCustom ? this.customPaidByName : paidByUser?.displayName;
+      const resolvedPaidByName = isCustom ? normalizeName(this.customPaidByName) : paidByUser?.displayName;
 
       const formData: TransactionFormData = {
         type: this.type,
@@ -326,6 +376,7 @@ export class TransactionFormComponent implements OnInit {
         description: this.description,
         paymentMethod: this.paymentMethod,
         paymentStatus: this.type === 'income' ? this.paymentStatus : undefined,
+        expensePaymentStatus: this.type === 'expense' ? this.expensePaymentStatus : undefined,
         paidBy: resolvedPaidBy,
         paidByName: resolvedPaidByName,
         month: getMonthString(this.date),

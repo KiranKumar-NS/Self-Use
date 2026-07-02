@@ -260,6 +260,98 @@ export class ExportService {
     this.downloadFile(headers + rows, `${filename}.csv`, 'text/csv');
   }
 
+  async exportBackupExcel(
+    expenses: Transaction[],
+    income: Transaction[],
+    segments: { name: string; icon: string; type?: string; unit?: string; currentStock?: number; breeds?: string[]; budgetExpense?: number; budgetIncome?: number }[],
+    period: string
+  ): Promise<void> {
+    const XLSX = await import('xlsx');
+
+    // --- Expenses Sheet ---
+    const expenseRows = expenses.map(t => ({
+      'Date': t.date.toDate().toLocaleDateString('en-IN'),
+      'Month': t.month,
+      'Segment': t.segmentName,
+      'Category': t.categoryName,
+      'Amount': t.amount,
+      'Quantity': t.quantity || '',
+      'Unit': t.unit || '',
+      'Rate Per Unit': t.ratePerUnit || '',
+      'Paid By': t.paidByName || t.createdByName || '',
+      'Payment Method': t.paymentMethod || 'upi',
+      'Payment Status': t.expensePaymentStatus || 'paid',
+      'Description': t.description,
+      'Created By': t.createdByName,
+      'Created At': t.createdAt?.toDate?.()?.toLocaleDateString('en-IN') || '',
+    }));
+    const expenseSheet = XLSX.utils.json_to_sheet(expenseRows);
+
+    // --- Income Sheet ---
+    const incomeRows = income.map(t => {
+      const distStr = t.distributions?.length
+        ? t.distributions.map(d => `${d.name}: ${d.amount}`).join('; ')
+        : '';
+      return {
+        'Date': t.date.toDate().toLocaleDateString('en-IN'),
+        'Month': t.month,
+        'Segment': t.segmentName,
+        'Category': t.categoryName,
+        'Amount': t.amount,
+        'Quantity': t.quantity || '',
+        'Unit': t.unit || '',
+        'Rate Per Unit': t.ratePerUnit || '',
+        'Received By': t.paidByName || t.createdByName || '',
+        'Payment Method': t.paymentMethod || 'upi',
+        'Payment Status': t.paymentStatus || 'received',
+        'Description': t.description,
+        'Distribution': distStr,
+        'Created By': t.createdByName,
+        'Created At': t.createdAt?.toDate?.()?.toLocaleDateString('en-IN') || '',
+      };
+    });
+    const incomeSheet = XLSX.utils.json_to_sheet(incomeRows);
+
+    // --- Stock Sheet ---
+    const stockRows = segments.map(s => ({
+      'Segment': s.name,
+      'Icon': s.icon,
+      'Type': s.type || '',
+      'Unit': s.unit || '',
+      'Current Stock': s.currentStock ?? '',
+      'Breeds': s.breeds?.join(', ') || '',
+      'Monthly Expense Budget': s.budgetExpense ?? '',
+      'Monthly Income Target': s.budgetIncome ?? '',
+    }));
+    const stockSheet = XLSX.utils.json_to_sheet(stockRows);
+
+    // Build workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, expenseSheet, 'Expenses');
+    XLSX.utils.book_append_sheet(wb, incomeSheet, 'Income');
+    XLSX.utils.book_append_sheet(wb, stockSheet, 'Stock');
+
+    // Auto-width columns
+    [expenseSheet, incomeSheet, stockSheet].forEach(ws => {
+      const ref = ws['!ref'];
+      if (!ref) return;
+      const range = XLSX.utils.decode_range(ref);
+      const colWidths: number[] = [];
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        let max = 10;
+        for (let r = range.s.r; r <= range.e.r; r++) {
+          const cell = ws[XLSX.utils.encode_cell({ r, c })];
+          if (cell?.v) max = Math.max(max, String(cell.v).length + 2);
+        }
+        colWidths.push(Math.min(max, 40));
+      }
+      ws['!cols'] = colWidths.map(w => ({ wch: w }));
+    });
+
+    const periodLabel = this.formatPeriodLabel(period);
+    XLSX.writeFile(wb, `farm-backup-${periodLabel.replace(/\s/g, '-')}.xlsx`);
+  }
+
   private downloadFile(content: string, filename: string, mimeType: string): void {
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);

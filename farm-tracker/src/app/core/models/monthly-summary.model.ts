@@ -14,5 +14,6 @@ export interface MonthlySummary {
   totalDistributed?: number;
   distributionByPerson?: Record<string, number>;
   pendingIncome?: number;
+  pendingExpense?: number;
   updatedAt: Timestamp;
 }

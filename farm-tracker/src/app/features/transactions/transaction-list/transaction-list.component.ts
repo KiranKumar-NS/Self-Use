@@ -22,6 +22,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { getMonthString } from '../../../core/utils/date.utils';
+import { normalizeName } from '../../../core/utils/name.utils';
 
 @Component({
   selector: 'app-transaction-list',
@@ -95,6 +96,8 @@ import { getMonthString } from '../../../core/utils/date.utils';
             <mat-option value="">All</mat-option>
             <mat-option value="received">Received</mat-option>
             <mat-option value="pending">Pending</mat-option>
+            <mat-option value="paid">Paid</mat-option>
+            <mat-option value="credit">Credit (Unpaid)</mat-option>
           </mat-select>
         </mat-form-field>
 
@@ -153,6 +156,9 @@ import { getMonthString } from '../../../core/utils/date.utils';
                       @if (txn.paymentStatus === 'pending') {
                         <span class="pay-status-chip pending">Pending</span>
                       }
+                    }
+                    @if (txn.type === 'expense' && txn.expensePaymentStatus === 'pending') {
+                      <span class="pay-status-chip credit">Credit</span>
                     }
                   </td>
                   <td>{{ txn.segmentName }}</td>
@@ -274,6 +280,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
       text-transform: uppercase; vertical-align: middle;
     }
     .pay-status-chip.pending { background: var(--color-expense-bg); color: var(--color-expense); }
+    .pay-status-chip.credit { background: #fef3c7; color: #d97706; }
 
     .load-more { text-align: center; padding: 1.5rem; }
     .load-more button { padding: 8px 24px; }
@@ -333,13 +340,16 @@ export class TransactionListComponent implements OnInit {
     }
 
     if (this.filterPaidBy) {
-      filtered = filtered.filter(txn => (txn.paidByName || txn.createdByName || 'Unknown') === this.filterPaidBy);
+      filtered = filtered.filter(txn => normalizeName(txn.paidByName || txn.createdByName || 'Unknown') === this.filterPaidBy);
     }
 
     if (this.filterPaymentStatus) {
       filtered = filtered.filter(txn => {
         if (this.filterPaymentStatus === 'pending') return txn.paymentStatus === 'pending';
-        return txn.type === 'expense' || txn.paymentStatus !== 'pending';
+        if (this.filterPaymentStatus === 'received') return txn.type === 'income' && txn.paymentStatus !== 'pending';
+        if (this.filterPaymentStatus === 'credit') return txn.type === 'expense' && txn.expensePaymentStatus === 'pending';
+        if (this.filterPaymentStatus === 'paid') return txn.type === 'expense' && txn.expensePaymentStatus !== 'pending';
+        return true;
       });
     }
 
@@ -385,7 +395,7 @@ export class TransactionListComponent implements OnInit {
     this.transactions.set(result.transactions);
     this.lastDoc = result.lastDoc;
     this.hasMore.set(result.transactions.length === limit);
-    this.paidByList.set([...new Set(result.transactions.map(t => t.paidByName || t.createdByName || 'Unknown'))].sort());
+    this.paidByList.set([...new Set(result.transactions.map(t => normalizeName(t.paidByName || t.createdByName || 'Unknown')))].sort());
     this.loading.set(false);
   }
 

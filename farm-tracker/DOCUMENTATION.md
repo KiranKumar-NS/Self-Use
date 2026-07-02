@@ -34,22 +34,53 @@ A web application for managing a small farming business involving multiple users
 - Password reset via email
 - Admin can register new users (without logging out)
 
-### 2. Dashboard
-- **Month picker** with prev/next arrows and "Today" button — view any month's data
+### 2. Dashboard (Unified Single Page)
+Dashboard and Analytics are merged into one scrollable page. No separate Analytics route.
+
+- **Shared date range filter** with 3 view modes:
+  - **Monthly** — prev/next arrows and "Today" button
+  - **Custom** — year + month dropdowns for From/To range
+  - **All Time** — aggregates all historical data (default)
+- **Export buttons** in page header (always visible):
+  - **Excel backup** (.xlsx) — 3 sheets: Expenses, Income, Stock (full data for backup/import)
+  - **PDF report** — summary + transaction details
+  - **WhatsApp share** — selectable sections via dialog
 - Total income, expense, net profit/loss summary cards
 - Distributed / Undistributed income cards
-- **Budget vs Actual** widget — progress bars per segment (green/yellow/red)
 - **Current Stock** widget — animal counts per segment from inventory
-- Income vs Expense by Segment (grouped bar chart) with person breakdown tooltip (hover shows who spent/earned)
-- Monthly trend chart (line, last 6 months from selected month)
+- Income vs Expense by Segment (grouped bar chart) with person breakdown tooltip
+- Monthly trend chart (line, adapts to selected date range)
+- **Budget vs Actual** widget — progress bars per segment (green/yellow/red) (monthly mode only)
 - Loan summary widget (given/received totals)
+- **Filter chips** — horizontal scrollable chip rows for quick filtering:
+  - **Person row:** `[All] [Karthik] [Ravi] [Priya]` — tap to filter by person
+  - **Segment row:** `[All] [Goats] [Chickens] [Dragon]` — tap to filter by segment
+  - Both filters can be active simultaneously (combined filtering)
+  - Tap active chip again to deselect
+- Summary stats (total expense, income, net profit/loss) — reacts to active filters
+- **Person Investment cards** — per-person breakdown:
+  - Net investment (expenses paid − income received)
+  - Visual progress bar
+  - Expenses paid (red), Income received (green)
+  - **Holding** (amber) — undistributed income the person received but hasn't distributed yet
+- Charts: Expense by Person (bar), Expense by Category (doughnut)
+- Segment stat cards with transaction counts
+- Charts: Expense by Segment (doughnut), Monthly Expense Trend (bar)
+- **Transaction details table** — sortable, paginated (10/20/50 rows per page)
 
 ### 3. Transactions (Expense & Income)
 - Add/edit/delete (soft) transactions
+- **Shared date range filter** — same Monthly/Custom/All Time selector as dashboard
 - **Search** by description, person, category, segment, amount (client-side, zero extra reads)
-- Filter by type, segment, month
+- Filter by type, segment, paid by, payment status
+- **Payment status filters:** Received, Pending (income), Paid, Credit/Unpaid (expense)
 - Pagination (20 per page)
 - Amount, category, segment, description, payment method (cash/UPI), paid-by tracking
+- **Pending Expenses (Credit Purchases):**
+  - Mark expense as "Paid" or "Pending (Credit)" when creating
+  - "Credit" chip shown on pending expense rows in transaction list
+  - "Mark as Paid" button on transaction detail page
+  - `pendingExpense` tracked in monthly summaries
 - Inline timeline for audit trail (created/updated/deleted/distributed events)
 - **Income Distribution:** Admin/Manager can distribute income among partners
   - Distribute from transaction detail page via dialog
@@ -82,27 +113,23 @@ A web application for managing a small farming business involving multiple users
 - Subtasks with individual due dates
 - Tags for organization
 
-### 6. Analytics
-- Deep dive into expense data with filters
-- **Default filter:** Current month (not all-time)
-- Filter by segment, category, date range (from/to month), paid-by person
-- Clear all filters button
-- **Person Investment Summary** — per-person cards showing:
-  - Net investment (expenses paid − income received)
-  - Visual progress bar
-  - Breakdown: expenses paid (red), income received (green)
-- Charts: segment breakdown (doughnut), category breakdown (doughnut), person-wise spending (bar), monthly expense trend (bar)
-- Transaction detail table with totals
-- All authenticated users can access
+### 6. Analytics (merged into Dashboard)
+- Analytics is no longer a separate page — it's part of the unified Dashboard
+- `/analytics` route redirects to `/dashboard`
+- See Dashboard section above for full feature list
 
-### 7. Reports
+### 7. Reports & Export
 - Monthly income vs expense summary
 - Segment breakdown table
 - Transaction detail list
 - **Distributions tab** — person-wise totals, per-transaction breakdown
 - Loan summary
 - **Export to PDF** (jsPDF + jspdf-autotable) — includes distribution summary page
-- **Export to CSV** — includes distribution column for income transactions
+- **Export to Excel** (.xlsx, 3 sheets):
+  - **Expenses** — Date, Month, Segment, Category, Amount, Quantity, Unit, Rate Per Unit, Paid By, Payment Method, Payment Status, Description, Created By, Created At
+  - **Income** — Date, Month, Segment, Category, Amount, Quantity, Unit, Rate Per Unit, Received By, Payment Method, Payment Status, Description, Distribution, Created By, Created At
+  - **Stock** — Segment, Icon, Type, Unit, Current Stock, Breeds, Monthly Expense Budget, Monthly Income Target
+- **WhatsApp share** — customizable sections (summary, segments, categories, persons, income, stock, transactions)
 
 ### 8. Inventory Tracking
 - Track animal stock per segment (e.g., 10 goats, 50 chickens)
@@ -205,6 +232,8 @@ A web application for managing a small farming business involving multiple users
 ├── createdAt: Timestamp
 ├── isDeleted: boolean (soft delete)
 ├── distributions?: DistributionEntry[] (income only)
+├── paymentStatus?: "received" | "pending" (income only)
+├── expensePaymentStatus?: "paid" | "pending" (expense only — credit purchases)
 ├── timeline: TimelineEntry[] (inline audit trail)
 ├── month: string ("2026-05")
 └── year: number
@@ -219,7 +248,7 @@ A web application for managing a small farming business involving multiple users
 
 **TimelineEntry:**
 ```
-├── action: "created" | "updated" | "deleted" | "distributed"
+├── action: "created" | "updated" | "deleted" | "distributed" | "payment_received" | "payment_paid"
 ├── by: string (userId)
 ├── byName: string
 ├── at: Timestamp
@@ -323,6 +352,8 @@ A web application for managing a small farming business involving multiple users
 ├── incomeBySource: { milk: number, eggs: number, ... }
 ├── expenseByPerson?: { uid: amount, ... }
 ├── incomeByPerson?: { uid: amount, ... }
+├── pendingIncome?: number
+├── pendingExpense?: number
 ├── totalDistributed?: number
 ├── distributionByPerson?: { uid: amount, ... }
 └── updatedAt: Timestamp
@@ -344,9 +375,9 @@ farm-tracker/
 │   │   ├── guards/             (auth.guard.ts, role.guard.ts)
 │   │   ├── services/           (auth, user, transaction, loan, task, summary, export, segment, category, inventory, notification)
 │   │   ├── models/             (TypeScript interfaces: transaction, loan, task, segment, category, inventory, notification, user, monthly-summary)
-│   │   └── utils/              (date.utils.ts, firestore.utils.ts)
+│   │   └── utils/              (date.utils.ts, firestore.utils.ts, name.utils.ts, table.utils.ts)
 │   ├── shared/
-│   │   ├── components/         (loading-spinner, empty-state, confirm-dialog)
+│   │   ├── components/         (loading-spinner, empty-state, confirm-dialog, date-range-filter)
 │   │   ├── pipes/              (currency-inr, relative-time)
 │   │   └── directives/         (has-role)
 │   ├── layout/
@@ -357,13 +388,12 @@ farm-tracker/
 │   │   └── not-found/          (404 page)
 │   ├── features/
 │   │   ├── auth/               (login, register, forgot-password)
-│   │   ├── dashboard/          (summary cards, charts, loan widget, budget widget, stock widget)
+│   │   ├── dashboard/          (summary cards, charts, loan widget, budget widget, stock widget, analytics-tab with filter chips)
 │   │   ├── transactions/       (list, form, detail, distribution-dialog)
 │   │   ├── loans/              (list, form, detail with repayments + add-more)
 │   │   ├── inventory/          (inventory-page, inventory-event-dialog)
 │   │   ├── tasks/              (kanban-board, form, detail)
-│   │   ├── analytics/          (analytics with filters and charts)
-│   │   ├── reports/            (monthly reports with PDF/CSV export)
+│   │   ├── reports/            (monthly reports with PDF/Excel export)
 │   │   └── admin/              (user management, user form, data setup + budgets)
 │   └── environments/           (Firebase config for dev and prod)
 ├── scripts/
@@ -385,12 +415,12 @@ farm-tracker/
 
 | Path | Feature | Guard | Access |
 |------|---------|-------|--------|
-| `/dashboard` | Dashboard page | authGuard | All authenticated |
+| `/dashboard` | Dashboard (overview + analytics + filters + charts + table) | authGuard | All authenticated |
+| `/analytics` | Redirects to `/dashboard` | authGuard | All authenticated |
 | `/transactions` | Transaction list/form/detail | authGuard + roleGuard | Admin, Manager |
 | `/loans` | Loan list/form/detail | authGuard + roleGuard | Admin, Manager |
 | `/inventory` | Inventory stock + events | authGuard + roleGuard | Admin, Manager |
 | `/tasks` | Kanban board/form/detail | authGuard | All authenticated |
-| `/analytics` | Analytics charts | authGuard | All authenticated |
 | `/reports` | Reports with export | authGuard | All authenticated |
 | `/admin` | User management | authGuard + roleGuard | Admin only |
 | `/admin/register` | Register new user | authGuard + roleGuard | Admin only |
@@ -409,8 +439,6 @@ farm-tracker/
 | Owe & Lent | account_balance | Admin, Manager |
 | Inventory | inventory_2 | Admin, Manager |
 | Tasks | view_kanban | All |
-| Analytics | analytics | All |
-| Reports | assessment | All |
 | Admin | admin_panel_settings | Admin |
 | Data Setup | dataset | Admin |
 
@@ -560,6 +588,39 @@ firebase deploy --only hosting
 - Tracks whether transaction was paid via cash or UPI
 - Useful for reconciliation and person-wise expense tracking
 
+### Why name normalization for custom "Paid By" names?
+- Custom names (e.g., "raju", "Raju", " RAJU ") are auto-normalized to title case ("Raju")
+- Prevents duplicate person entries in analytics and monthly summary aggregations
+- Transaction form warns "Did you mean Raju?" when typing a similar existing name
+- Utility functions: `normalizeName()` for title-case, `nameKey()` for lowercase dedup key
+
+### Why "Holding" in Person Investment?
+Income is received in two stages:
+1. A person receives the total income (e.g., from a sale) — stored as `paidByName` on the income transaction
+2. The income is later distributed to beneficiaries via `distributions[]`
+
+Until distribution, the received amount is "held" by the receiver — it's not their income. The Person Investment card shows:
+- **Expenses paid** — what the person spent (from expense transactions)
+- **Income received** — only from `distributions[]` entries (not from `paidByName`)
+- **Holding** — undistributed income (`transaction.amount - sum of all distributions including reinvestment`)
+- **Net** = Expenses paid − Income received (holding is not included in net)
+
+Reinvestment (`uid === 'reinvestment'`) is treated as allocated (not held), but not as personal income.
+
+### Why merged Dashboard + Analytics?
+- Previously two separate pages with overlapping summary cards and date filters
+- Users found it confusing navigating between Dashboard and Analytics
+- Merged into one scrollable page with filter chips instead of tabs
+- Filter chips allow quick person/segment filtering without dropdown menus
+- Both filters can be combined (e.g., "Karthik" + "Goats")
+
+### Why shared DateRangeFilterComponent?
+- Same date filter UI across Dashboard, Transactions pages
+- 3 modes: Monthly (prev/next), Custom (year+month dropdowns), All Time
+- Default mode: All Time — shows complete financial picture
+- Year dropdown prevents scrolling through long month lists
+- Firestore `in` query 30-item limit handled via `getForMonthsBatched()` batching
+
 ---
 
 ## Spark Plan Limits & Feasibility
@@ -634,6 +695,7 @@ Deploy with: `firebase deploy --only firestore:indexes`
 | @angular/material | 21.2.10 | UI components (forms, tables, dialogs, icons) | MIT |
 | chart.js + ng2-charts | 4.5.1 / 10.0.0 | Dashboard & analytics charts | MIT |
 | jspdf + jspdf-autotable | 4.2.1 / 5.0.7 | PDF export | MIT |
+| xlsx | latest | Multi-sheet Excel export (.xlsx) for backup | Apache-2.0 |
 | firebase | 12.13.0 | Firebase client SDK | Apache-2.0 |
 | rxjs | 7.8.0 | Reactive programming | Apache-2.0 |
 

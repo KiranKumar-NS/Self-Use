@@ -18,7 +18,7 @@ import {
   DocumentSnapshot,
   arrayUnion,
 } from '@angular/fire/firestore';
-import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatus } from '../models/transaction.model';
+import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatus, ExpensePaymentStatus } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 
 @Injectable({ providedIn: 'root' })
@@ -26,10 +26,13 @@ export class TransactionService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
 
-  /** Build a unique summary key per person. Custom "other" names get sanitized as the key. */
+  /** Build a unique summary key per person. Custom "other" names get normalized and sanitized. */
   private personSummaryKey(paidBy: string | null | undefined, paidByName: string | null | undefined, fallbackUid: string): string {
     if (paidBy === 'other' && paidByName) {
-      return paidByName.replace(/[.$/\[\]#]/g, '_');
+      // Normalize: trim, collapse whitespace, title-case, then sanitize for Firestore field paths
+      const normalized = paidByName.trim().replace(/\s+/g, ' ')
+        .split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      return normalized.replace(/[.$/\[\]#]/g, '_');
     }
     return paidBy || fallbackUid;
   }
@@ -78,6 +81,9 @@ export class TransactionService {
     if (data.type === 'income') {
       txnDoc['paymentStatus'] = data.paymentStatus || 'received';
     }
+    if (data.type === 'expense') {
+      txnDoc['expensePaymentStatus'] = data.expensePaymentStatus || 'paid';
+    }
 
     batch.set(txnRef, txnDoc);
 
@@ -107,6 +113,9 @@ export class TransactionService {
 
     if (data.type === 'income' && (data.paymentStatus || 'received') === 'pending') {
       summaryData['pendingIncome'] = increment(data.amount);
+    }
+    if (data.type === 'expense' && (data.expensePaymentStatus || 'paid') === 'pending') {
+      summaryData['pendingExpense'] = increment(data.amount);
     }
 
     batch.set(summaryRef, summaryData, { merge: true });
@@ -507,6 +516,38 @@ export class TransactionService {
     const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
     batch.set(summaryRef, {
       pendingIncome: increment(-oldData.amount),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    await batch.commit();
+  }
+
+  async markAsPaid(transactionId: string): Promise<void> {
+    const batch = writeBatch(this.firestore);
+    const user = this.authService.userProfile()!;
+    const txnRef = doc(this.firestore, 'transactions', transactionId);
+
+    const oldDoc = await getDoc(txnRef);
+    const oldData = oldDoc.data() as Transaction;
+
+    if (oldData.isDeleted) throw new Error('Cannot update a deleted transaction');
+    if (oldData.type !== 'expense') throw new Error('Only expense transactions have expense payment status');
+    if (oldData.expensePaymentStatus !== 'pending') throw new Error('Expense is already paid');
+
+    batch.update(txnRef, {
+      expensePaymentStatus: 'paid' as ExpensePaymentStatus,
+      timeline: arrayUnion({
+        action: 'payment_paid',
+        by: user.uid,
+        byName: user.displayName,
+        at: Timestamp.now(),
+      }),
+    });
+
+    const summaryId = `${oldData.month}-${oldData.segment}`;
+    const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
+    batch.set(summaryRef, {
+      pendingExpense: increment(-oldData.amount),
       updatedAt: serverTimestamp(),
     }, { merge: true });
 

@@ -31,6 +31,12 @@ import { DatePipe } from '@angular/common';
               {{ marking() ? 'Updating...' : 'Mark as Received' }}
             </button>
           }
+          @if (transaction()!.type === 'expense' && transaction()!.expensePaymentStatus === 'pending' && !auth.isViewer()) {
+            <button mat-flat-button color="primary" (click)="markAsPaid()" [disabled]="marking()">
+              <mat-icon>check_circle</mat-icon>
+              {{ marking() ? 'Updating...' : 'Mark as Paid' }}
+            </button>
+          }
           <button mat-stroked-button (click)="edit()">
             <mat-icon>edit</mat-icon> Edit
           </button>
@@ -69,6 +75,14 @@ import { DatePipe } from '@angular/common';
               <label>Payment Status</label>
               <span class="pay-status-badge" [class]="transaction()!.paymentStatus || 'received'">
                 {{ (transaction()!.paymentStatus || 'received').toUpperCase() }}
+              </span>
+            </div>
+          }
+          @if (transaction()!.type === 'expense') {
+            <div class="detail-item">
+              <label>Payment Status</label>
+              <span class="pay-status-badge" [class]="transaction()!.expensePaymentStatus || 'paid'">
+                {{ (transaction()!.expensePaymentStatus || 'paid').toUpperCase() }}
               </span>
             </div>
           }
@@ -150,6 +164,8 @@ import { DatePipe } from '@angular/common';
                 distributed this income
               } @else if (entry.action === 'payment_received') {
                 marked this income as received
+              } @else if (entry.action === 'payment_paid') {
+                marked this expense as paid
               } @else {
                 {{ entry.action }} this transaction
               }
@@ -181,7 +197,7 @@ import { DatePipe } from '@angular/common';
     .payment-badge.upi { background: #dbeafe; color: #2563eb; }
     .pay-status-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
     .pay-status-badge.pending { background: #fef2f2; color: #dc2626; }
-    .pay-status-badge.received { background: #f0fdf4; color: #16a34a; }
+    .pay-status-badge.received, .pay-status-badge.paid { background: #f0fdf4; color: #16a34a; }
     .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: #1e293b; }
     .dist-header { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; }
@@ -267,6 +283,16 @@ export class TransactionDetailComponent implements OnInit {
     this.marking.set(true);
     try {
       await this.transactionService.markAsReceived(this.txnId);
+      await this.loadTransaction();
+    } finally {
+      this.marking.set(false);
+    }
+  }
+
+  async markAsPaid(): Promise<void> {
+    this.marking.set(true);
+    try {
+      await this.transactionService.markAsPaid(this.txnId);
       await this.loadTransaction();
     } finally {
       this.marking.set(false);
