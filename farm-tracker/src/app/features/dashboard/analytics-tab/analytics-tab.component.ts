@@ -5,6 +5,7 @@ import { Transaction } from '../../../core/models/transaction.model';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { SummaryService } from '../../../core/services/summary.service';
 import { SegmentService } from '../../../core/services/segment.service';
+import { UserService } from '../../../core/services/user.service';
 import { Segment } from '../../../core/models/segment.model';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { WhatsappShareDialogComponent, WhatsappShareData, ShareTransaction } from './whatsapp-share-dialog.component';
@@ -300,6 +301,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   private transactionService = inject(TransactionService);
   private summaryService = inject(SummaryService);
   private segmentService = inject(SegmentService);
+  private userService = inject(UserService);
   private dialog = inject(MatDialog);
 
   loading = signal(true);
@@ -359,7 +361,14 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   private colors = ['#4f46e5', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#be123c', '#65a30d'];
 
   async ngOnInit(): Promise<void> {
-    this.segments.set(await this.segmentService.getAll());
+    const [segs, users] = await Promise.all([
+      this.segmentService.getAll(),
+      this.userService.getAll(),
+    ]);
+    this.segments.set(segs);
+    // Always show all active segments and users in filter chips
+    this.allSegments.set(segs.filter(s => s.isActive).map(s => s.name).sort());
+    this.allPaidBy.set(users.filter(u => u.isActive).map(u => u.displayName).sort());
   }
 
   async ngOnChanges(changes: SimpleChanges): Promise<void> {
@@ -387,8 +396,9 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
 
     this.allTransactions.set(txns);
 
-    this.allSegments.set([...new Set(txns.map((t) => t.segmentName))].sort());
-    this.allPaidBy.set([...new Set(txns.map((t) => normalizeName(t.paidByName || 'Unknown')))].sort());
+    // Merge transaction names with base reference data (adds external/non-registered persons)
+    const txnPersons = txns.map(t => normalizeName(t.paidByName || 'Unknown'));
+    this.allPaidBy.set([...new Set([...this.allPaidBy(), ...txnPersons])].sort());
     this.allCategories.set([...new Set(txns.map((t) => t.categoryName))].sort());
 
     this.applyFilters();
