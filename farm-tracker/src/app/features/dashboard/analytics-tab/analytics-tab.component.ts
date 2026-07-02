@@ -428,9 +428,9 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       }
       if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segment === this.filterSegment);
       this.filteredIncome.set(incomeForRange);
-      const incomeTotal = incomeForRange.reduce((s, t) => s + t.amount, 0);
-      this.totalIncomeAmount.set(incomeTotal);
-      this.netProfit.set(incomeTotal - this.totalExpense());
+
+      let distributedTotal = 0;
+      let undistributedTotal = 0;
 
       for (const txn of incomeForRange) {
         // Total of ALL distributions (including reinvestment) = money that's been allocated
@@ -442,6 +442,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
           if (d.uid === 'reinvestment') continue;
           ensurePerson(d.name);
           personMap[d.name].incomeReceived += d.amount;
+          distributedTotal += d.amount;
         }
 
         // Undistributed = total income - everything allocated (including reinvestment)
@@ -450,8 +451,13 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
         if (undistributed > 0) {
           ensurePerson(receiver);
           personMap[receiver].holding += undistributed;
+          undistributedTotal += undistributed;
         }
       }
+
+      // Total Income = only distributed to persons (not undistributed, not reinvestment)
+      this.totalIncomeAmount.set(distributedTotal);
+      this.netProfit.set(distributedTotal - this.totalExpense());
     } catch {}
 
     const summary = Object.entries(personMap)
@@ -552,15 +558,13 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segmentName === this.filterSegment);
     if (this.filterCategory) incomeForRange = incomeForRange.filter(t => t.categoryName === this.filterCategory);
     this.filteredIncome.set(incomeForRange);
-    const incomeTotal = incomeForRange.reduce((s, t) => s + t.amount, 0);
-    this.totalIncomeAmount.set(incomeTotal);
-    this.netProfit.set(incomeTotal - this.totalExpense());
 
     // Rebuild person investment from filtered data
     const investMap: Record<string, { expensesPaid: number; incomeReceived: number; holding: number }> = {};
     const ensurePerson = (name: string) => {
       if (!investMap[name]) investMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0 };
     };
+    let distributedTotal = 0;
     for (const t of txns) {
       const name = normalizeName(t.paidByName || t.createdByName || 'Unknown');
       ensurePerson(name);
@@ -576,6 +580,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
         if (d.uid === 'reinvestment') continue;
         ensurePerson(d.name);
         investMap[d.name].incomeReceived += d.amount;
+        distributedTotal += d.amount;
       }
 
       // Undistributed = income - everything allocated (including reinvestment)
@@ -586,6 +591,9 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
         investMap[receiver].holding += undistributed;
       }
     }
+    // Total Income = only distributed to persons (not undistributed, not reinvestment)
+    this.totalIncomeAmount.set(distributedTotal);
+    this.netProfit.set(distributedTotal - this.totalExpense());
 
     // If person filter is active, keep only that person's investment data
     let summaryEntries = Object.entries(investMap);
