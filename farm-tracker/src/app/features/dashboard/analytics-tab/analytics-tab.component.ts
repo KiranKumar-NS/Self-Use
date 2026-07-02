@@ -71,6 +71,12 @@ import { MatIconModule } from '@angular/material/icon';
           <span class="stat-label">Net Profit/Loss</span>
           <span class="stat-value" [class.income-text]="netProfit() >= 0" [class.expense-text]="netProfit() < 0">{{ netProfit() | currencyInr }}</span>
         </mat-card>
+        @if (totalUndistributed() > 0) {
+          <mat-card class="stat-card undistributed-card">
+            <span class="stat-label">Undistributed</span>
+            <span class="stat-value holding-text">{{ totalUndistributed() | currencyInr }}</span>
+          </mat-card>
+        }
       </div>
 
       <!-- Person Investment -->
@@ -92,12 +98,6 @@ import { MatIconModule } from '@angular/material/icon';
                 <span class="invest-label">Income received</span>
                 <span class="invest-value income">-{{ p.incomeReceived | currencyInr }}</span>
               </div>
-              @if (p.holding > 0) {
-                <div class="invest-row holding-row">
-                  <span class="invest-label">Holding</span>
-                  <span class="invest-value holding">{{ p.holding | currencyInr }}</span>
-                </div>
-              }
             </div>
           </mat-card>
         }
@@ -246,6 +246,8 @@ import { MatIconModule } from '@angular/material/icon';
     .stat-card.loss { border-color: var(--color-expense); background: var(--color-expense-bg); }
     .expense-text { color: var(--color-expense); }
     .income-text { color: var(--color-income); }
+    .holding-text { color: var(--color-warning, #d97706); }
+    .undistributed-card { border-color: var(--color-warning, #d97706); background: #fffbeb; }
     .stat-label { font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
     .stat-value {
       font-size: var(--font-2xl); font-weight: 700; color: var(--color-text); margin: 4px 0;
@@ -267,8 +269,6 @@ import { MatIconModule } from '@angular/material/icon';
     .invest-value { font-weight: 600; }
     .invest-value.expense { color: var(--color-expense); }
     .invest-value.income { color: var(--color-income); }
-    .invest-value.holding { color: var(--color-warning, #d97706); }
-    .holding-row { border-top: 1px dashed var(--color-border); padding-top: 6px; margin-top: 2px; }
 
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
     .chart-card { padding: 1.25rem; }
@@ -334,6 +334,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   segments = signal<Segment[]>([]);
   totalIncomeAmount = signal(0);
   netProfit = signal(0);
+  totalUndistributed = signal(0);
   filteredIncome = signal<Transaction[]>([]);
 
   // Charts
@@ -463,6 +464,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
 
     this.investmentSummary.set(summary);
     this.maxInvestment.set(summary.length > 0 ? Math.max(...summary.map(s => s.net)) : 0);
+    this.totalUndistributed.set(Object.values(personMap).reduce((s, p) => s + p.holding, 0));
   }
 
   setFilter(type: 'all' | 'person' | 'segment', value: string): void {
@@ -595,6 +597,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       .sort((a, b) => b.net - a.net);
     this.investmentSummary.set(summary);
     this.maxInvestment.set(summary.length > 0 ? Math.max(...summary.map(s => s.net)) : 0);
+    this.totalUndistributed.set(Object.values(investMap).reduce((s, p) => s + p.holding, 0));
   }
 
   sortedFiltered(): Transaction[] {
