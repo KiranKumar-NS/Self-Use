@@ -54,7 +54,7 @@ import { getMonthString } from '../../../core/utils/date.utils';
         @if (activeFilterCount() > 0) {
           <span class="filter-count">{{ activeFilterCount() }} active</span>
         }
-        @if (filterType || filterSegment || filterPaymentStatus || searchTerm) {
+        @if (filterType || filterSegment || filterPaidBy || filterPaymentStatus || searchTerm) {
           <button mat-button class="clear-btn" (click)="clearFilters(); $event.stopPropagation()">Clear All</button>
         }
         <mat-icon class="toggle-icon" [class.expanded]="filtersOpen">expand_more</mat-icon>
@@ -75,6 +75,16 @@ import { getMonthString } from '../../../core/utils/date.utils';
             <mat-option value="">All Segments</mat-option>
             @for (seg of segments(); track seg.id) {
               <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>Paid By</mat-label>
+          <mat-select [(ngModel)]="filterPaidBy">
+            <mat-option value="">All People</mat-option>
+            @for (p of paidByList(); track p) {
+              <mat-option [value]="p">{{ p }}</mat-option>
             }
           </mat-select>
         </mat-form-field>
@@ -289,8 +299,10 @@ export class TransactionListComponent implements OnInit {
   filtersOpen = window.innerWidth > 768;
   filterType = '';
   filterSegment = '';
+  filterPaidBy = '';
   filterPaymentStatus = '';
   searchTerm = '';
+  paidByList = signal<string[]>([]);
 
   // Date range state
   private currentSelection: DateRangeSelection = { mode: 'monthly', month: getMonthString(new Date()) };
@@ -299,6 +311,7 @@ export class TransactionListComponent implements OnInit {
     let count = 0;
     if (this.filterType) count++;
     if (this.filterSegment) count++;
+    if (this.filterPaidBy) count++;
     if (this.filterPaymentStatus) count++;
     if (this.searchTerm) count++;
     return count;
@@ -317,6 +330,10 @@ export class TransactionListComponent implements OnInit {
       filtered = filtered.filter(txn =>
         txn.month >= this.currentSelection.fromMonth! && txn.month <= this.currentSelection.toMonth!
       );
+    }
+
+    if (this.filterPaidBy) {
+      filtered = filtered.filter(txn => (txn.paidByName || txn.createdByName || 'Unknown') === this.filterPaidBy);
     }
 
     if (this.filterPaymentStatus) {
@@ -368,6 +385,7 @@ export class TransactionListComponent implements OnInit {
     this.transactions.set(result.transactions);
     this.lastDoc = result.lastDoc;
     this.hasMore.set(result.transactions.length === limit);
+    this.paidByList.set([...new Set(result.transactions.map(t => t.paidByName || t.createdByName || 'Unknown'))].sort());
     this.loading.set(false);
   }
 
@@ -416,6 +434,7 @@ export class TransactionListComponent implements OnInit {
   clearFilters(): void {
     this.filterType = '';
     this.filterSegment = '';
+    this.filterPaidBy = '';
     this.filterPaymentStatus = '';
     this.searchTerm = '';
     this.loadData();
