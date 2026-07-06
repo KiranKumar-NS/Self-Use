@@ -93,8 +93,11 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
     .page-title { margin: 0; font-size: var(--font-2xl); color: var(--color-text); }
     .header-actions { display: flex; gap: 0.25rem; }
     .wa-share-btn { color: #25D366 !important; }
-    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
-    .widgets-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+    :host app-summary-cards,
+    :host app-stock-widget,
+    :host app-recent-transactions { display: block; margin-bottom: 1rem; }
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+    .widgets-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 1rem; margin-bottom: 1rem; }
     .section-divider { border: none; border-top: 1px solid var(--color-border); margin: 1.5rem 0; }
     @media (max-width: 768px) {
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }

@@ -720,9 +720,26 @@ import { DatePipe, TitleCasePipe } from '@angular/common';
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .detail-grid { grid-template-columns: 1fr 1fr; gap: 1rem; }
       .detail-card { padding: 1rem; }
-      .repayment-form mat-form-field { min-width: 0; flex-basis: 100%; }
+      .repayment-form { flex-direction: column; gap: 0.5rem; }
+      .repayment-form mat-form-field { min-width: 0; flex-basis: 100%; width: 100%; }
+      .inline-form { padding: 0.75rem 0; }
+      .emi-actions, .interest-actions { flex-direction: column; gap: 0.5rem; }
+      .emi-actions button, .interest-actions button { width: 100%; }
+      .emi-table { font-size: 0.7rem; }
+      .emi-table th, .emi-table td { padding: 4px 4px; }
+      .emi-table th:nth-child(4), .emi-table td:nth-child(4),
+      .emi-table th:nth-child(5), .emi-table td:nth-child(5) { display: none; }
+      .interest-summary { flex-direction: column; gap: 0.75rem; font-size: 0.85rem; }
+      .utilization-bar { flex-direction: column; gap: 0.25rem; font-size: 0.8rem; }
+      .list-main { flex-direction: column; align-items: flex-start; gap: 2px; }
+      .list-entry { padding: 8px 12px; }
     }
-    @media (max-width: 480px) { .detail-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) {
+      .detail-grid { grid-template-columns: 1fr; }
+      .header-actions { width: 100%; }
+      .header-actions button { flex: 1; }
+      .amount-large { font-size: 1.2rem !important; }
+    }
   `],
 })
 export class LoanDetailComponent implements OnInit {

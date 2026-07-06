@@ -22,6 +22,7 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { DatePipe, DecimalPipe } from '@angular/common';
 
 interface DeductionRow {
@@ -59,7 +60,7 @@ interface DocRow {
   imports: [
     FormsModule, DatePipe, DecimalPipe, CurrencyInrPipe, MatCardModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatDatepickerModule, MatRadioModule,
-    MatIconModule, MatSlideToggleModule, MatChipsModule,
+    MatIconModule, MatSlideToggleModule, MatChipsModule, MatTooltipModule,
   ],
   template: `
     <div class="page-header">
@@ -132,7 +133,9 @@ interface DocRow {
         <!-- ===== FORMAL LOAN FIELDS ===== -->
         @if (loanCategory === 'formal') {
           <!-- Basic Info -->
-          <h3 class="section-title">Basic Info</h3>
+          <h3 class="section-title">Basic Info
+            <mat-icon class="info-icon" matTooltip="Enter the lender details, loan account number, and the total sanctioned amount">info</mat-icon>
+          </h3>
           <div class="form-row">
             <mat-form-field appearance="outline">
               <mat-label>Loan Source</mat-label>
@@ -167,6 +170,7 @@ interface DocRow {
               <mat-label>Sanctioned Amount (INR)</mat-label>
               <input matInput type="number" [(ngModel)]="sanctionedAmount" name="sanctionedAmount" required min="1"
                 (ngModelChange)="recalculate()" />
+              <mat-icon matSuffix class="info-icon" matTooltip="Total loan amount approved by the lender. e.g. Bank sanctions Rs.5,00,000">info</mat-icon>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
@@ -185,7 +189,9 @@ interface DocRow {
           <!-- Held By -->
           <div class="form-row">
             <mat-form-field appearance="outline">
-              <mat-label>Loan Amount Held By</mat-label>
+              <mat-label>Loan Amount Held By
+              </mat-label>
+              <mat-icon matPrefix class="info-icon" matTooltip="Who physically received and manages the loan money? e.g. Ramesh holds the SBI loan funds in his account">info</mat-icon>
               <mat-select [(ngModel)]="heldByUid" name="heldByUid" (ngModelChange)="onHeldByChange()">
                 <mat-option value="">Not assigned</mat-option>
                 @for (u of activeUsers(); track u.uid) {
@@ -199,6 +205,7 @@ interface DocRow {
           <div class="form-row">
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>Segments</mat-label>
+              <mat-icon matPrefix class="info-icon" matTooltip="Which business areas will use this loan? Select multiple if the loan funds will be used across segments. e.g. Goats + Chickens">info</mat-icon>
               <mat-select [(ngModel)]="selectedSegments" name="selectedSegments" multiple>
                 @for (seg of segments(); track seg.id) {
                   <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
@@ -213,7 +220,9 @@ interface DocRow {
 
           <!-- Repayment Structure -->
           @if (!isFormalEdit()) {
-          <h3 class="section-title">Repayment Structure</h3>
+          <h3 class="section-title">Repayment Structure
+            <mat-icon class="info-icon" matTooltip="EMI: Fixed monthly payment (principal + interest) for banks. Interest Only: Pay only interest periodically, close principal at once — common for local lenders">info</mat-icon>
+          </h3>
           <div class="form-row">
             <mat-radio-group [(ngModel)]="repaymentType" name="repaymentType">
               <mat-radio-button value="emi">EMI (Fixed monthly payment)</mat-radio-button>
@@ -222,7 +231,9 @@ interface DocRow {
           </div>
 
           <!-- Interest -->
-          <h3 class="section-title">Interest</h3>
+          <h3 class="section-title">Interest
+            <mat-icon class="info-icon" matTooltip="Fixed: rate stays same throughout. Floating: rate can change based on RBI/market. Enter rate in your preferred frequency — we auto-convert to annual">info</mat-icon>
+          </h3>
           <div class="form-row">
             <mat-radio-group [(ngModel)]="interestType" name="interestType">
               <mat-radio-button value="fixed">Fixed Rate</mat-radio-button>
@@ -254,6 +265,7 @@ interface DocRow {
           <div class="form-row">
             <mat-slide-toggle [(ngModel)]="isSubsidized" name="isSubsidized" (ngModelChange)="recalculate()">
               Government Subsidized
+              <mat-icon class="info-icon" matTooltip="e.g. Kisan Credit Card (KCC) at 4% instead of 10%. The government pays the interest difference.">info</mat-icon>
             </mat-slide-toggle>
           </div>
 
@@ -283,6 +295,7 @@ interface DocRow {
               <mat-form-field appearance="outline">
                 <mat-label>Moratorium (months)</mat-label>
                 <input matInput type="number" [(ngModel)]="moratoriumMonths" name="moratoriumMonths" min="0" />
+                <mat-icon matSuffix class="info-icon" matTooltip="Grace period before EMIs start. e.g. 3 months moratorium means first EMI is in month 4. Interest accrues during moratorium.">info</mat-icon>
               </mat-form-field>
 
               <mat-form-field appearance="outline">
@@ -337,6 +350,7 @@ interface DocRow {
           <!-- Deductions -->
           <h3 class="section-title">
             Deductions
+            <mat-icon class="info-icon" matTooltip="Charges deducted before you receive the money. Financed = deducted from loan amount. Not financed = you paid separately. e.g. Processing fee Rs.5,000 deducted from Rs.5L loan, you receive Rs.4,95,000">info</mat-icon>
             <button mat-icon-button type="button" (click)="addDeductionRow()"><mat-icon>add_circle</mat-icon></button>
           </h3>
           @for (ded of deductions; track $index) {
@@ -393,6 +407,7 @@ interface DocRow {
           <!-- Collateral -->
           <h3 class="section-title">
             Collateral / Security
+            <mat-icon class="info-icon" matTooltip="What you pledged against the loan. e.g. Gold chain (30g, 22K, value Rs.1,50,000), Farm land, Fixed Deposit. Track release when loan is closed.">info</mat-icon>
             <button mat-icon-button type="button" (click)="addCollateralRow()"><mat-icon>add_circle</mat-icon></button>
           </h3>
           @for (col of collaterals; track $index) {
@@ -448,6 +463,7 @@ interface DocRow {
           <!-- Documents -->
           <h3 class="section-title">
             Documents / References
+            <mat-icon class="info-icon" matTooltip="Store reference numbers of loan documents. e.g. Sanction letter number, Agreement ID, Insurance policy number, NOC reference">info</mat-icon>
             <button mat-icon-button type="button" (click)="addDocRow()"><mat-icon>add_circle</mat-icon></button>
           </h3>
           @for (d of loanDocs; track $index) {
@@ -499,6 +515,8 @@ interface DocRow {
     .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: #1e293b; display: flex; align-items: center; gap: 4px; }
     .computed-info { font-size: 0.875rem; color: #6366f1; margin-bottom: 1rem; padding: 8px 12px; background: #eef2ff; border-radius: 6px; }
     .computed-info.highlight { color: #059669; background: #ecfdf5; font-weight: 600; }
+    .info-icon { font-size: 16px; width: 16px; height: 16px; color: #94a3b8; cursor: help; vertical-align: middle; margin-left: 4px; }
+    .field-hint { font-size: 0.7rem; color: #94a3b8; margin-top: -8px; margin-bottom: 8px; padding-left: 4px; }
     .deduction-row, .collateral-row { border-left: 3px solid #e2e8f0; padding-left: 12px; margin-bottom: 0.75rem; }
     mat-radio-group { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
     mat-slide-toggle { margin-bottom: 0.5rem; }
@@ -507,10 +525,19 @@ interface DocRow {
     .preview-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
     .preview-table th { background: #f8fafc; padding: 6px 8px; text-align: left; border-bottom: 1px solid #e2e8f0; }
     .preview-table td { padding: 4px 8px; border-bottom: 1px solid #f1f5f9; }
+    .preview-table-wrap { overflow-x: auto; }
     @media (max-width: 640px) {
       .form-row { flex-direction: column; gap: 0; }
-      .form-card { padding: 1rem; }
+      .form-row mat-form-field { width: 100%; }
+      .form-card { padding: 1rem; max-width: 100%; }
       mat-radio-group { flex-direction: column; gap: 0.5rem; }
+      .deduction-row, .collateral-row { padding-left: 8px; }
+      .deduction-row .form-row, .collateral-row .form-row { gap: 0; }
+      mat-slide-toggle { font-size: 0.85rem; }
+      .section-title { font-size: 0.9rem; flex-wrap: wrap; }
+      .computed-info { font-size: 0.8rem; padding: 6px 10px; }
+      .preview-table { font-size: 0.7rem; }
+      .preview-table th, .preview-table td { padding: 3px 4px; }
     }
   `],
 })

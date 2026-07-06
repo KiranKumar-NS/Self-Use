@@ -72,6 +72,12 @@ import { MatButtonModule } from '@angular/material/button';
     .loan-value.upcoming { color: #0284c7; font-size: 1rem; }
     .formal-divider { border-top: 1px solid #e2e8f0; margin: 1rem 0; }
     .formal-header { font-size: 0.8rem; color: #7c3aed; font-weight: 600; text-transform: uppercase; margin-bottom: 0.75rem; }
+    @media (max-width: 480px) {
+      .loan-card { padding: 1rem; }
+      .loan-grid { gap: 0.75rem; }
+      .loan-value { font-size: 1rem; }
+      .loan-value.upcoming { font-size: 0.85rem; }
+    }
   `],
 })
 export class LoanSummaryWidgetComponent {

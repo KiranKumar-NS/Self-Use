@@ -194,6 +194,15 @@ import { DatePipe } from '@angular/common';
     .load-more { text-align: center; padding: 1rem; }
     @media (max-width: 768px) {
       .filters mat-form-field { min-width: 0; flex-basis: 100%; }
+      .data-table th:nth-child(6), .data-table td:nth-child(6),
+      .data-table th:nth-child(8), .data-table td:nth-child(8) { display: none; }
+    }
+    @media (max-width: 480px) {
+      .data-table th:nth-child(2), .data-table td:nth-child(2),
+      .data-table th:nth-child(5), .data-table td:nth-child(5),
+      .data-table th:nth-child(6), .data-table td:nth-child(6),
+      .data-table th:nth-child(8), .data-table td:nth-child(8) { display: none; }
+      .data-table { font-size: 0.8rem; }
     }
   `],
 })

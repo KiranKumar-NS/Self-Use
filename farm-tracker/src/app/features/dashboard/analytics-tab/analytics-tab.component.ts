@@ -4,6 +4,7 @@ import { DatePipe, UpperCasePipe } from '@angular/common';
 import { Transaction } from '../../../core/models/transaction.model';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { LoanService } from '../../../core/services/loan.service';
+import { Loan } from '../../../core/models/loan.model';
 import { SummaryService } from '../../../core/services/summary.service';
 import { SegmentService } from '../../../core/services/segment.service';
 import { UserService } from '../../../core/services/user.service';
@@ -331,6 +332,8 @@ import { MatIconModule } from '@angular/material/icon';
       .person-card { padding: 1rem; }
       .person-amount { font-size: 1rem; }
       .invest-row { font-size: 0.75rem; }
+      .invest-row.sub-row { padding-left: 0.75rem; font-size: 0.65rem; }
+      .holding-tag { font-size: 0.5rem; padding: 1px 3px; }
       .filter-chip { padding: 5px 10px; font-size: 0.75rem; }
     }
   `],
@@ -390,6 +393,10 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   totalUndistributed = signal(0);
   filteredIncome = signal<Transaction[]>([]);
 
+  // Cached data (loaded once, reused across filter changes)
+  private cachedUidToName: Record<string, string> = {};
+  private cachedLoans: Loan[] = [];
+
   // Charts
   segmentChartData: ChartConfiguration<'doughnut'>['data'] = { labels: [], datasets: [] };
   categoryChartData: ChartConfiguration<'doughnut'>['data'] = { labels: [], datasets: [] };
@@ -432,6 +439,9 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
 
   async loadTransactions(): Promise<void> {
     this.loading.set(true);
+    // Clear cache on fresh data load
+    this.cachedUidToName = {};
+    this.cachedLoans = [];
     const filters: any = { type: 'expense' as const };
 
     if (this.currentSelection.mode === 'monthly') {
@@ -467,12 +477,14 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       loanOwesDetails: { loanId: string; label: string; amount: number }[];
     }> = {};
 
-    // Build UID→name lookup from active users for consistent keying
-    const users = await this.userService.getAll();
-    const uidToName: Record<string, string> = {};
-    for (const u of users) {
-      if (u.isActive) uidToName[u.uid] = normalizeName(u.displayName);
+    // Build UID→name lookup (cache for reuse in applyFilters)
+    if (Object.keys(this.cachedUidToName).length === 0) {
+      const users = await this.userService.getAll();
+      for (const u of users) {
+        if (u.isActive) this.cachedUidToName[u.uid] = normalizeName(u.displayName);
+      }
     }
+    const uidToName = this.cachedUidToName;
 
     // Resolve a person to a consistent key (prefer UID-based name, fallback to normalized input)
     const resolveKey = (uid: string | null | undefined, name: string | null | undefined): string => {
@@ -545,8 +557,11 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
 
     // Loan tracking — separate "holds" (custody) from "owes" (personal debt)
     try {
-      const loanResult = await this.loanService.getAll({}, 200);
-      for (const loan of loanResult.loans) {
+      if (this.cachedLoans.length === 0) {
+        const loanResult = await this.loanService.getAll({}, 200);
+        this.cachedLoans = loanResult.loans;
+      }
+      for (const loan of this.cachedLoans) {
         // Personal withdrawals = OWES (person took money for personal use, must return)
         if (loan.parentFormalLoanId && loan.balanceRemaining > 0) {
           const name = resolveKey(loan.personUid, loan.personName);
@@ -613,7 +628,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     this.setFilter('all', '');
   }
 
-  async applyFilters(): Promise<void> {
+  applyFilters(): void {
     this.currentPage = 1;
     let txns = [...this.allTransactions()];
 
@@ -672,11 +687,8 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     if (this.filterCategory) incomeForRange = incomeForRange.filter(t => t.categoryName === this.filterCategory);
     this.filteredIncome.set(incomeForRange);
 
-    // Rebuild person investment from filtered data (reuse resolveKey from parent scope not available — inline)
-    const uidToName2: Record<string, string> = {};
-    for (const u of (await this.userService.getAll())) {
-      if (u.isActive) uidToName2[u.uid] = normalizeName(u.displayName);
-    }
+    // Rebuild person investment from filtered data (use cached UID lookup)
+    const uidToName2 = this.cachedUidToName;
     const resolveKey2 = (uid: string | null | undefined, name: string | null | undefined): string => {
       if (uid && uid !== 'other' && uidToName2[uid]) return uidToName2[uid];
       return normalizeName(name || 'Unknown');
@@ -711,10 +723,9 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
         investMap[receiver].holding += undistributed;
       }
     }
-    // Loan tracking — holds vs owes (same logic as buildInvestmentSummary)
+    // Loan tracking — holds vs owes (use cached loans)
     try {
-      const loanResult = await this.loanService.getAll({}, 200);
-      for (const loan of loanResult.loans) {
+      for (const loan of this.cachedLoans) {
         if (loan.parentFormalLoanId && loan.balanceRemaining > 0) {
           const name = resolveKey2(loan.personUid, loan.personName);
           ensurePerson2(name);
