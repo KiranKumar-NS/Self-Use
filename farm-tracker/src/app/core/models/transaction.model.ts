@@ -50,6 +50,9 @@ export interface Transaction {
   paymentStatus?: IncomePaymentStatus;           // income: received | pending
   expensePaymentStatus?: ExpensePaymentStatus;   // expense: paid | pending
 
+  // Loan linkage (auto-created transactions from loan operations)
+  linkedLoanId?: string;
+
   // For queries
   month: string;
   year: number;

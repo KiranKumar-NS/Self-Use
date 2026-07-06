@@ -32,6 +32,29 @@ import { MatButtonModule } from '@angular/material/button';
           <span class="loan-value pending">{{ pendingReceived | currencyInr }}</span>
         </div>
       </div>
+
+      @if (totalSanctioned > 0) {
+        <div class="formal-divider"></div>
+        <div class="formal-header">Formal Loans</div>
+        <div class="loan-grid">
+          <div class="loan-item">
+            <span class="loan-label">Total Sanctioned</span>
+            <span class="loan-value formal">{{ totalSanctioned | currencyInr }}</span>
+          </div>
+          <div class="loan-item">
+            <span class="loan-label">Total Outstanding</span>
+            <span class="loan-value pending">{{ totalOutstanding | currencyInr }}</span>
+          </div>
+          <div class="loan-item">
+            <span class="loan-label">Upcoming EMIs</span>
+            <span class="loan-value upcoming">{{ upcomingEMICount }} ({{ upcomingEMIAmount | currencyInr }})</span>
+          </div>
+          <div class="loan-item">
+            <span class="loan-label">Interest Paid</span>
+            <span class="loan-value">{{ totalInterestPaid | currencyInr }}</span>
+          </div>
+        </div>
+      }
     </mat-card>
   `,
   styles: [`
@@ -45,6 +68,10 @@ import { MatButtonModule } from '@angular/material/button';
     .loan-value.given { color: #d97706; }
     .loan-value.received { color: #2563eb; }
     .loan-value.pending { color: #dc2626; }
+    .loan-value.formal { color: #7c3aed; }
+    .loan-value.upcoming { color: #0284c7; font-size: 1rem; }
+    .formal-divider { border-top: 1px solid #e2e8f0; margin: 1rem 0; }
+    .formal-header { font-size: 0.8rem; color: #7c3aed; font-weight: 600; text-transform: uppercase; margin-bottom: 0.75rem; }
   `],
 })
 export class LoanSummaryWidgetComponent {
@@ -52,6 +79,13 @@ export class LoanSummaryWidgetComponent {
   @Input() totalReceived = 0;
   @Input() pendingGiven = 0;
   @Input() pendingReceived = 0;
+
+  // Formal loan metrics
+  @Input() totalSanctioned = 0;
+  @Input() totalOutstanding = 0;
+  @Input() upcomingEMICount = 0;
+  @Input() upcomingEMIAmount = 0;
+  @Input() totalInterestPaid = 0;
 
   constructor(private router: Router) {}
   viewAll(): void { this.router.navigate(['/loans']); }

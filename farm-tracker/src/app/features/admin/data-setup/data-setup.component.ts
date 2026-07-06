@@ -254,6 +254,7 @@ import {
             }
           </div>
         </mat-tab>
+
       </mat-tab-group>
     }
   `,
@@ -326,6 +327,7 @@ export class DataSetupComponent implements OnInit {
 
   newSegment = { id: '', name: '', description: '', icon: '', segmentType: 'animal' as 'animal' | 'crop' };
   newCategory = { id: '', name: '', type: 'expense' as 'expense' | 'income' };
+
 
   async ngOnInit(): Promise<void> {
     await this.loadData();

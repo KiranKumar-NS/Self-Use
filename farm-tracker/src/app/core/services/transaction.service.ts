@@ -132,6 +132,11 @@ export class TransactionService {
     const oldDoc = await getDoc(txnRef);
     const oldData = oldDoc.data() as Transaction;
 
+    // Block edit of linked loan transactions
+    if (oldData.linkedLoanId) {
+      throw new Error('This transaction is linked to a loan. Manage it from the loan detail page.');
+    }
+
     // Build changes description
     const changesList: string[] = [];
     if (oldData.amount !== data.amount) changesList.push(`amount: ${oldData.amount}→${data.amount}`);
@@ -310,6 +315,11 @@ export class TransactionService {
     const oldDoc = await getDoc(txnRef);
     const oldData = oldDoc.data() as Transaction;
 
+    // Block delete of linked loan transactions
+    if (oldData.linkedLoanId) {
+      throw new Error('This transaction is linked to a loan. Manage it from the loan detail page.');
+    }
+
     // Reverse summary
     const summaryId = `${oldData.month}-${oldData.segment}`;
     const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
@@ -368,6 +378,11 @@ export class TransactionService {
 
     const oldDoc = await getDoc(txnRef);
     const oldData = oldDoc.data() as Transaction;
+
+    // Block delete of linked loan transactions
+    if (oldData.linkedLoanId) {
+      throw new Error('This transaction is linked to a loan. Manage it from the loan detail page.');
+    }
 
     // Reverse summary
     const summaryId = `${oldData.month}-${oldData.segment}`;

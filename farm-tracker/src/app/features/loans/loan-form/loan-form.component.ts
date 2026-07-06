@@ -1,31 +1,69 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, OnInit, computed } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { LoanService } from '../../../core/services/loan.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { SegmentService } from '../../../core/services/segment.service';
+import { UserService } from '../../../core/services/user.service';
 import { Segment } from '../../../core/models/segment.model';
-import { LoanFormData } from '../../../core/models/loan.model';
+import {
+  LoanFormData, LoanCategory, LoanSource, RepaymentType, InterestType,
+  InterestFrequency, DeductionType, CollateralType, LoanDocumentType, EMIEntry,
+} from '../../../core/models/loan.model';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
+import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDatepickerModule } from '@angular/material/datepicker';
-
 import { MatRadioModule } from '@angular/material/radio';
+import { MatIconModule } from '@angular/material/icon';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatChipsModule } from '@angular/material/chips';
+import { DatePipe, DecimalPipe } from '@angular/common';
+
+interface DeductionRow {
+  type: DeductionType;
+  customLabel: string;
+  amount: number;
+  paidTo: string;
+  date: Date;
+  paymentReference: string;
+  isFinanced: boolean;
+  note: string;
+}
+
+interface CollateralRow {
+  type: CollateralType;
+  description: string;
+  estimatedValue: number;
+  weight: number | null;
+  purity: string;
+  documentReference: string;
+  note: string;
+}
+
+interface DocRow {
+  type: LoanDocumentType;
+  customLabel: string;
+  referenceNumber: string;
+  date: Date | null;
+  note: string;
+}
 
 @Component({
   selector: 'app-loan-form',
   standalone: true,
   imports: [
-    FormsModule, MatCardModule, MatFormFieldModule, MatInputModule,
+    FormsModule, DatePipe, DecimalPipe, CurrencyInrPipe, MatCardModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatDatepickerModule, MatRadioModule,
+    MatIconModule, MatSlideToggleModule, MatChipsModule,
   ],
   template: `
     <div class="page-header">
-      <h1>{{ isEdit() ? 'Edit' : 'Add' }} Owe / Lent Entry</h1>
+      <h1>{{ isEdit() ? 'Edit' : 'Add' }} {{ loanCategory === 'formal' ? 'Formal Loan' : 'Owe / Lent Entry' }}</h1>
     </div>
 
     <mat-card class="form-card">
@@ -34,6 +72,17 @@ import { MatRadioModule } from '@angular/material/radio';
       }
 
       <form (ngSubmit)="save()">
+        <!-- Loan Category Toggle (only on create) -->
+        @if (!isEdit()) {
+          <div class="form-row">
+            <mat-radio-group [(ngModel)]="loanCategory" name="loanCategory" (ngModelChange)="onCategoryChange()">
+              <mat-radio-button value="simple">Simple (Owe / Lent)</mat-radio-button>
+              <mat-radio-button value="formal">Formal Loan (Bank / Finance)</mat-radio-button>
+            </mat-radio-group>
+          </div>
+        }
+
+        <!-- Type (both modes) -->
         <div class="form-row">
           <mat-radio-group [(ngModel)]="type" name="type">
             <mat-radio-button value="given">Lent (We gave money)</mat-radio-button>
@@ -41,46 +90,398 @@ import { MatRadioModule } from '@angular/material/radio';
           </mat-radio-group>
         </div>
 
-        <div class="form-row">
-          <mat-form-field appearance="outline">
-            <mat-label>Date</mat-label>
-            <input matInput [matDatepicker]="picker" [(ngModel)]="date" name="date" required />
-            <mat-datepicker-toggle matIconSuffix [for]="picker" />
-            <mat-datepicker #picker />
+        <!-- ===== SIMPLE LOAN FIELDS ===== -->
+        @if (loanCategory === 'simple') {
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Date</mat-label>
+              <input matInput [matDatepicker]="picker" [(ngModel)]="date" name="date" required />
+              <mat-datepicker-toggle matIconSuffix [for]="picker" />
+              <mat-datepicker #picker />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Amount (INR)</mat-label>
+              <input matInput type="number" [(ngModel)]="amount" name="amount" required min="1" />
+            </mat-form-field>
+          </div>
+
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Person Name</mat-label>
+              <input matInput [(ngModel)]="personName" name="personName" required />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Segment (optional)</mat-label>
+              <mat-select [(ngModel)]="segment" name="segment">
+                <mat-option value="">Personal (No segment)</mat-option>
+                @for (seg of segments(); track seg.id) {
+                  <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Purpose / Reason</mat-label>
+            <input matInput [(ngModel)]="purpose" name="purpose" required placeholder="e.g. Personal need, Goat feed" />
+          </mat-form-field>
+        }
+
+        <!-- ===== FORMAL LOAN FIELDS ===== -->
+        @if (loanCategory === 'formal') {
+          <!-- Basic Info -->
+          <h3 class="section-title">Basic Info</h3>
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Loan Source</mat-label>
+              <mat-select [(ngModel)]="loanSource" name="loanSource" required (ngModelChange)="onSourceChange()">
+                <mat-option value="bank">Bank</mat-option>
+                <mat-option value="finance_company">Finance Company</mat-option>
+                <mat-option value="individual">Individual Lender</mat-option>
+                <mat-option value="gold_loan">Gold Loan</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>{{ loanSource === 'individual' ? 'Lender Name' : 'Source Name' }}</mat-label>
+              <input matInput [(ngModel)]="loanSourceName" name="loanSourceName" required placeholder="e.g. SBI, Muthoot Finance" />
+            </mat-form-field>
+          </div>
+
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Account / Loan Number</mat-label>
+              <input matInput [(ngModel)]="accountNumber" name="accountNumber" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Lender / Borrower Name</mat-label>
+              <input matInput [(ngModel)]="personName" name="formalPersonName" required />
+            </mat-form-field>
+          </div>
+
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Sanctioned Amount (INR)</mat-label>
+              <input matInput type="number" [(ngModel)]="sanctionedAmount" name="sanctionedAmount" required min="1"
+                (ngModelChange)="recalculate()" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Disbursement Date</mat-label>
+              <input matInput [matDatepicker]="disPicker" [(ngModel)]="disbursementDate" name="disbursementDate" required />
+              <mat-datepicker-toggle matIconSuffix [for]="disPicker" />
+              <mat-datepicker #disPicker />
+            </mat-form-field>
+          </div>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Purpose / Reason</mat-label>
+            <input matInput [(ngModel)]="purpose" name="formalPurpose" required placeholder="e.g. Farm expansion, Working capital" />
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Amount (INR)</mat-label>
-            <input matInput type="number" [(ngModel)]="amount" name="amount" required min="1" />
-          </mat-form-field>
-        </div>
+          <!-- Held By -->
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Loan Amount Held By</mat-label>
+              <mat-select [(ngModel)]="heldByUid" name="heldByUid" (ngModelChange)="onHeldByChange()">
+                <mat-option value="">Not assigned</mat-option>
+                @for (u of activeUsers(); track u.uid) {
+                  <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          </div>
 
-        <div class="form-row">
-          <mat-form-field appearance="outline">
-            <mat-label>Person Name</mat-label>
-            <input matInput [(ngModel)]="personName" name="personName" required />
-          </mat-form-field>
+          <!-- Segments (multi-select) -->
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Segments</mat-label>
+              <mat-select [(ngModel)]="selectedSegments" name="selectedSegments" multiple>
+                @for (seg of segments(); track seg.id) {
+                  <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          </div>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Segment (optional)</mat-label>
-            <mat-select [(ngModel)]="segment" name="segment">
-              <mat-option value="">Personal (No segment)</mat-option>
-              @for (seg of segments(); track seg.id) {
-                <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
+          @if (isFormalEdit()) {
+            <div class="computed-info">Financial details are locked after creation. Use the loan detail page to manage deductions, rate changes, collateral, etc.</div>
+          }
+
+          <!-- Repayment Structure -->
+          @if (!isFormalEdit()) {
+          <h3 class="section-title">Repayment Structure</h3>
+          <div class="form-row">
+            <mat-radio-group [(ngModel)]="repaymentType" name="repaymentType">
+              <mat-radio-button value="emi">EMI (Fixed monthly payment)</mat-radio-button>
+              <mat-radio-button value="interest_only">Interest Only (Pay interest periodically, close principal at once)</mat-radio-button>
+            </mat-radio-group>
+          </div>
+
+          <!-- Interest -->
+          <h3 class="section-title">Interest</h3>
+          <div class="form-row">
+            <mat-radio-group [(ngModel)]="interestType" name="interestType">
+              <mat-radio-button value="fixed">Fixed Rate</mat-radio-button>
+              <mat-radio-button value="floating">Floating Rate</mat-radio-button>
+            </mat-radio-group>
+          </div>
+
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Rate Frequency</mat-label>
+              <mat-select [(ngModel)]="interestFrequency" name="interestFrequency" (ngModelChange)="recalculate()">
+                <mat-option value="annual">Annual (% p.a.)</mat-option>
+                <mat-option value="monthly">Monthly (% per month)</mat-option>
+                <mat-option value="weekly">Weekly (% per week)</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Interest Rate ({{ frequencyLabel() }})</mat-label>
+              <input matInput type="number" [(ngModel)]="interestRateInput" name="interestRateInput" required min="0" step="0.01"
+                (ngModelChange)="recalculate()" />
+            </mat-form-field>
+          </div>
+
+          @if (interestFrequency !== 'annual' && interestRateInput > 0) {
+            <div class="computed-info">= {{ computedAnnualRate() | number:'1.2-2' }}% p.a.</div>
+          }
+
+          <div class="form-row">
+            <mat-slide-toggle [(ngModel)]="isSubsidized" name="isSubsidized" (ngModelChange)="recalculate()">
+              Government Subsidized
+            </mat-slide-toggle>
+          </div>
+
+          @if (isSubsidized) {
+            <div class="form-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Subsidy Details</mat-label>
+                <input matInput [(ngModel)]="subsidyDetails" name="subsidyDetails" placeholder="e.g. KCC - 4% interest subvention" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Effective Rate (% p.a.)</mat-label>
+                <input matInput type="number" [(ngModel)]="effectiveRate" name="effectiveRate" min="0" step="0.01"
+                  (ngModelChange)="recalculate()" />
+              </mat-form-field>
+            </div>
+          }
+
+          <!-- EMI mode fields -->
+          @if (repaymentType === 'emi') {
+            <div class="form-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Tenure (months)</mat-label>
+                <input matInput type="number" [(ngModel)]="tenure" name="tenure" required min="1"
+                  (ngModelChange)="recalculate()" />
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Moratorium (months)</mat-label>
+                <input matInput type="number" [(ngModel)]="moratoriumMonths" name="moratoriumMonths" min="0" />
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>EMI Amount (auto-calculated)</mat-label>
+                <input matInput type="number" [(ngModel)]="emiAmount" name="emiAmount" min="0" step="1" />
+              </mat-form-field>
+            </div>
+
+            @if (computedEMI() > 0) {
+              <div class="computed-info">Calculated EMI: {{ computedEMI() | currencyInr }}</div>
+            }
+
+            @if (showEMIPreview()) {
+              <div class="emi-preview">
+                <h4>EMI Preview (first 6 months)</h4>
+                <table class="preview-table">
+                  <tr><th>#</th><th>Due Date</th><th>EMI</th><th>Principal</th><th>Interest</th></tr>
+                  @for (entry of emiPreview(); track entry.emiNumber) {
+                    <tr>
+                      <td>{{ entry.emiNumber }}</td>
+                      <td>{{ entry.dueDate | date:'MMM yyyy' }}</td>
+                      <td>{{ entry.emiAmount | currencyInr }}</td>
+                      <td>{{ entry.principal | currencyInr }}</td>
+                      <td>{{ entry.interest | currencyInr }}</td>
+                    </tr>
+                  }
+                </table>
+              </div>
+            }
+          }
+
+          <!-- Interest-only mode fields -->
+          @if (repaymentType === 'interest_only') {
+            <div class="form-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Interest Payment Frequency</mat-label>
+                <mat-select [(ngModel)]="interestPaymentFrequency" name="interestPaymentFrequency"
+                  (ngModelChange)="recalculate()">
+                  <mat-option value="monthly">Monthly</mat-option>
+                  <mat-option value="weekly">Weekly</mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
+            @if (computedInterestPerPeriod() > 0) {
+              <div class="computed-info">
+                You'll pay {{ computedInterestPerPeriod() | currencyInr }} per {{ interestPaymentFrequency === 'weekly' ? 'week' : 'month' }} as interest.
+                Principal {{ sanctionedAmount | currencyInr }} to be paid when ready.
+              </div>
+            }
+          }
+
+          <!-- Deductions -->
+          <h3 class="section-title">
+            Deductions
+            <button mat-icon-button type="button" (click)="addDeductionRow()"><mat-icon>add_circle</mat-icon></button>
+          </h3>
+          @for (ded of deductions; track $index) {
+            <div class="deduction-row">
+              <div class="form-row">
+                <mat-form-field appearance="outline">
+                  <mat-label>Type</mat-label>
+                  <mat-select [(ngModel)]="ded.type" [name]="'dedType' + $index">
+                    <mat-option value="documentation_charges">Documentation</mat-option>
+                    <mat-option value="processing_fee">Processing Fee</mat-option>
+                    <mat-option value="insurance">Insurance</mat-option>
+                    <mat-option value="legal_charges">Legal</mat-option>
+                    <mat-option value="valuation_charges">Valuation</mat-option>
+                    <mat-option value="stamp_duty">Stamp Duty</mat-option>
+                    <mat-option value="other">Other</mat-option>
+                  </mat-select>
+                </mat-form-field>
+                @if (ded.type === 'other') {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Label</mat-label>
+                    <input matInput [(ngModel)]="ded.customLabel" [name]="'dedLabel' + $index" />
+                  </mat-form-field>
+                }
+                <mat-form-field appearance="outline">
+                  <mat-label>Amount</mat-label>
+                  <input matInput type="number" [(ngModel)]="ded.amount" [name]="'dedAmt' + $index" min="0"
+                    (ngModelChange)="recalculate()" />
+                </mat-form-field>
+              </div>
+              <div class="form-row">
+                <mat-form-field appearance="outline">
+                  <mat-label>Paid To</mat-label>
+                  <input matInput [(ngModel)]="ded.paidTo" [name]="'dedPaid' + $index" />
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Reference</mat-label>
+                  <input matInput [(ngModel)]="ded.paymentReference" [name]="'dedRef' + $index" />
+                </mat-form-field>
+                <mat-slide-toggle [(ngModel)]="ded.isFinanced" [name]="'dedFin' + $index"
+                  (ngModelChange)="recalculate()">Financed</mat-slide-toggle>
+                <button mat-icon-button type="button" color="warn" (click)="removeDeductionRow($index)">
+                  <mat-icon>remove_circle</mat-icon>
+                </button>
+              </div>
+            </div>
+          }
+          @if (deductions.length > 0) {
+            <div class="computed-info highlight">
+              Total Deductions: {{ totalDeductionsAmount() | currencyInr }}
+              &nbsp;|&nbsp; Net Amount You'll Receive: {{ netDisbursedAmount() | currencyInr }}
+            </div>
+          }
+
+          <!-- Collateral -->
+          <h3 class="section-title">
+            Collateral / Security
+            <button mat-icon-button type="button" (click)="addCollateralRow()"><mat-icon>add_circle</mat-icon></button>
+          </h3>
+          @for (col of collaterals; track $index) {
+            <div class="collateral-row">
+              <div class="form-row">
+                <mat-form-field appearance="outline">
+                  <mat-label>Type</mat-label>
+                  <mat-select [(ngModel)]="col.type" [name]="'colType' + $index">
+                    <mat-option value="gold">Gold</mat-option>
+                    <mat-option value="property">Property</mat-option>
+                    <mat-option value="vehicle">Vehicle</mat-option>
+                    <mat-option value="fixed_deposit">Fixed Deposit</mat-option>
+                    <mat-option value="other">Other</mat-option>
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Description</mat-label>
+                  <input matInput [(ngModel)]="col.description" [name]="'colDesc' + $index" />
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Estimated Value</mat-label>
+                  <input matInput type="number" [(ngModel)]="col.estimatedValue" [name]="'colVal' + $index" min="0" />
+                </mat-form-field>
+              </div>
+              @if (col.type === 'gold') {
+                <div class="form-row">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Weight (grams)</mat-label>
+                    <input matInput type="number" [(ngModel)]="col.weight" [name]="'colWt' + $index" min="0" step="0.1" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Purity</mat-label>
+                    <mat-select [(ngModel)]="col.purity" [name]="'colPur' + $index">
+                      <mat-option value="24K">24K</mat-option>
+                      <mat-option value="22K">22K</mat-option>
+                      <mat-option value="18K">18K</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                </div>
               }
-            </mat-select>
-          </mat-form-field>
-        </div>
+              <div class="form-row">
+                <mat-form-field appearance="outline">
+                  <mat-label>Document Reference</mat-label>
+                  <input matInput [(ngModel)]="col.documentReference" [name]="'colRef' + $index" />
+                </mat-form-field>
+                <button mat-icon-button type="button" color="warn" (click)="removeCollateralRow($index)">
+                  <mat-icon>remove_circle</mat-icon>
+                </button>
+              </div>
+            </div>
+          }
 
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Purpose / Reason</mat-label>
-          <input matInput [(ngModel)]="purpose" name="purpose" required placeholder="e.g. Personal need, Goat feed, Medical emergency" />
-        </mat-form-field>
+          <!-- Documents -->
+          <h3 class="section-title">
+            Documents / References
+            <button mat-icon-button type="button" (click)="addDocRow()"><mat-icon>add_circle</mat-icon></button>
+          </h3>
+          @for (d of loanDocs; track $index) {
+            <div class="form-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Type</mat-label>
+                <mat-select [(ngModel)]="d.type" [name]="'docType' + $index">
+                  <mat-option value="sanction_letter">Sanction Letter</mat-option>
+                  <mat-option value="agreement">Agreement</mat-option>
+                  <mat-option value="insurance_policy">Insurance Policy</mat-option>
+                  <mat-option value="noc">NOC</mat-option>
+                  <mat-option value="other">Other</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Reference Number</mat-label>
+                <input matInput [(ngModel)]="d.referenceNumber" [name]="'docRef' + $index" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Note</mat-label>
+                <input matInput [(ngModel)]="d.note" [name]="'docNote' + $index" />
+              </mat-form-field>
+              <button mat-icon-button type="button" color="warn" (click)="removeDocRow($index)">
+                <mat-icon>remove_circle</mat-icon>
+              </button>
+            </div>
+          }
+          } <!-- end @if (!isFormalEdit()) -->
+        }
 
         <div class="form-actions">
           <button mat-button type="button" (click)="cancel()">Cancel</button>
           <button mat-flat-button color="primary" type="submit" [disabled]="saving()">
-            {{ saving() ? 'Saving...' : 'Save Entry' }}
+            {{ saving() ? 'Saving...' : 'Save' }}
           </button>
         </div>
       </form>
@@ -89,13 +490,23 @@ import { MatRadioModule } from '@angular/material/radio';
   styles: [`
     .page-header { margin-bottom: 1rem; }
     .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; }
-    .form-card { max-width: 700px; padding: 1.5rem; }
-    .form-row { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
+    .form-card { max-width: 800px; padding: 1.5rem; }
+    .form-row { display: flex; gap: 1rem; margin-bottom: 0.5rem; align-items: center; }
     .form-row mat-form-field { flex: 1; }
     .full-width { width: 100%; }
-    .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+    .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem; }
     .error-message { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: #1e293b; display: flex; align-items: center; gap: 4px; }
+    .computed-info { font-size: 0.875rem; color: #6366f1; margin-bottom: 1rem; padding: 8px 12px; background: #eef2ff; border-radius: 6px; }
+    .computed-info.highlight { color: #059669; background: #ecfdf5; font-weight: 600; }
+    .deduction-row, .collateral-row { border-left: 3px solid #e2e8f0; padding-left: 12px; margin-bottom: 0.75rem; }
     mat-radio-group { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
+    mat-slide-toggle { margin-bottom: 0.5rem; }
+    .emi-preview { margin-bottom: 1rem; }
+    .emi-preview h4 { margin: 0 0 0.5rem; font-size: 0.875rem; color: #64748b; }
+    .preview-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .preview-table th { background: #f8fafc; padding: 6px 8px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    .preview-table td { padding: 4px 8px; border-bottom: 1px solid #f1f5f9; }
     @media (max-width: 640px) {
       .form-row { flex-direction: column; gap: 0; }
       .form-card { padding: 1rem; }
@@ -107,21 +518,77 @@ export class LoanFormComponent implements OnInit {
   private loanService = inject(LoanService);
   private authService = inject(AuthService);
   private segmentService = inject(SegmentService);
+  private userService = inject(UserService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
   isEdit = signal(false);
+  isFormalEdit = signal(false);
   error = signal('');
   saving = signal(false);
   segments = signal<Segment[]>([]);
 
-  type: 'given' | 'received' = 'given';
+  // Common
+  type: 'given' | 'received' = 'received';
+  personName = '';
+  purpose = '';
+  segment = '';
   date = new Date();
   amount = 0;
-  personName = '';
-  segment = '';
-  purpose = '';
   private editId = '';
+
+  // Category
+  loanCategory: LoanCategory = 'simple';
+
+  // Formal loan fields
+  loanSource: LoanSource = 'bank';
+  loanSourceName = '';
+  accountNumber = '';
+  sanctionedAmount = 0;
+  disbursementDate = new Date();
+  selectedSegments: string[] = [];
+  heldByUid = '';
+  heldByName = '';
+  activeUsers = signal<{ uid: string; displayName: string }[]>([]);
+
+  // Repayment
+  repaymentType: RepaymentType = 'emi';
+  interestType: InterestType = 'fixed';
+  interestFrequency: InterestFrequency = 'annual';
+  interestRateInput = 0;
+  isSubsidized = false;
+  subsidyDetails = '';
+  effectiveRate = 0;
+
+  // EMI mode
+  tenure = 0;
+  moratoriumMonths = 0;
+  emiAmount: number | null = null;
+
+  // Interest-only mode
+  interestPaymentFrequency: InterestFrequency = 'monthly';
+
+  // Dynamic rows
+  deductions: DeductionRow[] = [];
+  collaterals: CollateralRow[] = [];
+  loanDocs: DocRow[] = [];
+
+  // Computed values
+  frequencyLabel = computed(() => {
+    switch (this.interestFrequency) {
+      case 'monthly': return '% per month';
+      case 'weekly': return '% per week';
+      default: return '% p.a.';
+    }
+  });
+
+  computedAnnualRate = signal(0);
+  computedEMI = signal(0);
+  computedInterestPerPeriod = signal(0);
+  showEMIPreview = signal(false);
+  emiPreview = signal<EMIEntry[]>([]);
+  totalDeductionsAmount = signal(0);
+  netDisbursedAmount = signal(0);
 
   async ngOnInit(): Promise<void> {
     const segs = await this.segmentService.getAll();
@@ -130,54 +597,276 @@ export class LoanFormComponent implements OnInit {
       : segs.filter((s) => this.authService.assignedSegments().includes(s.id));
     this.segments.set(accessible);
 
+    // Load active users for "Held By" dropdown
+    const users = await this.userService.getAll();
+    this.activeUsers.set(users.filter(u => u.isActive).map(u => ({ uid: u.uid, displayName: u.displayName })));
+
+    // Check for balance transfer mode
+    const transferFrom = this.route.snapshot.queryParams['transferFrom'];
+    if (transferFrom) {
+      const oldLoan = await this.loanService.getById(transferFrom);
+      if (oldLoan) {
+        this.loanCategory = 'formal';
+        this.type = 'received';
+        this.purpose = `Balance transfer from ${oldLoan.loanSourceName ?? oldLoan.personName}`;
+      }
+    }
+
     this.editId = this.route.snapshot.params['id'];
     if (this.editId) {
       this.isEdit.set(true);
       const loan = await this.loanService.getById(this.editId);
-      if (!loan) {
-        this.router.navigate(['/loans']);
-        return;
+      if (!loan) { this.router.navigate(['/loans']); return; }
+
+      if (loan.loanCategory === 'formal') {
+        this.isFormalEdit.set(true);
+        this.loanCategory = 'formal';
+        this.personName = loan.personName;
+        this.purpose = loan.purpose;
+        this.loanSourceName = loan.loanSourceName ?? '';
+        this.accountNumber = loan.accountNumber ?? '';
+      } else {
+        if (loan.repaymentStatus !== 'pending') {
+          this.router.navigate(['/loans', this.editId]);
+          return;
+        }
+        this.type = loan.type;
+        this.date = loan.date.toDate();
+        this.amount = loan.amount;
+        this.personName = loan.personName;
+        this.segment = loan.segment;
+        this.purpose = loan.purpose;
       }
-      if (loan.repaymentStatus !== 'pending') {
-        this.router.navigate(['/loans', this.editId]);
-        return;
-      }
-      this.type = loan.type;
-      this.date = loan.date.toDate();
-      this.amount = loan.amount;
-      this.personName = loan.personName;
-      this.segment = loan.segment;
-      this.purpose = loan.purpose;
     }
   }
+
+  onCategoryChange(): void {
+    if (this.loanCategory === 'formal') {
+      this.type = 'received';
+      this.repaymentType = (this.loanSource === 'individual' || this.loanSource === 'gold_loan') ? 'interest_only' : 'emi';
+      this.interestFrequency = (this.loanSource === 'individual' || this.loanSource === 'gold_loan') ? 'monthly' : 'annual';
+    }
+  }
+
+  onHeldByChange(): void {
+    const user = this.activeUsers().find(u => u.uid === this.heldByUid);
+    this.heldByName = user?.displayName ?? '';
+  }
+
+  onSourceChange(): void {
+    const isLocal = this.loanSource === 'individual' || this.loanSource === 'gold_loan';
+    this.repaymentType = isLocal ? 'interest_only' : 'emi';
+    this.interestFrequency = isLocal ? 'monthly' : 'annual';
+    this.recalculate();
+  }
+
+  recalculate(): void {
+    const annualRate = this.loanService.toAnnualRate(this.interestRateInput, this.interestFrequency);
+    this.computedAnnualRate.set(annualRate);
+
+    const rateForCalc = this.isSubsidized && this.effectiveRate > 0 ? this.effectiveRate : annualRate;
+
+    // Total deductions
+    const totalDed = this.deductions.reduce((s, d) => s + (d.amount || 0), 0);
+    this.totalDeductionsAmount.set(totalDed);
+    const financedDed = this.deductions.filter(d => d.isFinanced).reduce((s, d) => s + (d.amount || 0), 0);
+    this.netDisbursedAmount.set(this.sanctionedAmount - financedDed);
+
+    // EMI calculation
+    if (this.repaymentType === 'emi' && this.sanctionedAmount > 0 && this.tenure > 0) {
+      const r = rateForCalc / 100 / 12;
+      let emi: number;
+      if (r > 0) {
+        const rPowN = Math.pow(1 + r, this.tenure);
+        emi = Math.round((this.sanctionedAmount * r * rPowN / (rPowN - 1)) * 100) / 100;
+      } else {
+        emi = Math.round((this.sanctionedAmount / this.tenure) * 100) / 100;
+      }
+      this.computedEMI.set(emi);
+      if (!this.emiAmount) this.emiAmount = emi;
+
+      // Preview
+      const schedule = this.loanService.generateEMISchedule(
+        this.sanctionedAmount, annualRate, this.tenure,
+        this.disbursementDate, this.moratoriumMonths,
+        this.isSubsidized ? this.effectiveRate : undefined,
+      );
+      const previewCount = Math.min(6, schedule.length);
+      this.emiPreview.set(schedule.slice(0, previewCount));
+      this.showEMIPreview.set(previewCount > 0);
+    } else {
+      this.computedEMI.set(0);
+      this.showEMIPreview.set(false);
+    }
+
+    // Interest-only calculation
+    if (this.repaymentType === 'interest_only' && this.sanctionedAmount > 0 && this.interestRateInput > 0) {
+      const freq = this.interestPaymentFrequency ?? this.interestFrequency;
+      const ratePerPeriod = freq === 'weekly'
+        ? annualRate / 52 / 100
+        : annualRate / 12 / 100;
+      this.computedInterestPerPeriod.set(Math.round(this.sanctionedAmount * ratePerPeriod * 100) / 100);
+    } else {
+      this.computedInterestPerPeriod.set(0);
+    }
+  }
+
+  // Dynamic row management
+  addDeductionRow(): void {
+    this.deductions.push({
+      type: 'processing_fee', customLabel: '', amount: 0, paidTo: '',
+      date: new Date(), paymentReference: '', isFinanced: true, note: '',
+    });
+  }
+  removeDeductionRow(i: number): void { this.deductions.splice(i, 1); this.recalculate(); }
+
+  addCollateralRow(): void {
+    this.collaterals.push({
+      type: 'gold', description: '', estimatedValue: 0,
+      weight: null, purity: '22K', documentReference: '', note: '',
+    });
+  }
+  removeCollateralRow(i: number): void { this.collaterals.splice(i, 1); }
+
+  addDocRow(): void {
+    this.loanDocs.push({ type: 'sanction_letter', customLabel: '', referenceNumber: '', date: null, note: '' });
+  }
+  removeDocRow(i: number): void { this.loanDocs.splice(i, 1); }
 
   async save(): Promise<void> {
     this.error.set('');
     this.saving.set(true);
     try {
-      const seg = this.segment ? this.segments().find((s) => s.id === this.segment) : null;
-      const data: LoanFormData = {
-        date: this.date,
-        amount: this.amount,
-        type: this.type,
-        personName: this.personName,
-        purpose: this.purpose,
-        segment: this.segment || 'personal',
-        segmentName: seg?.name || 'Personal',
-        month: getMonthString(this.date),
-        year: getYear(this.date),
-      };
-
-      if (this.isEdit()) {
-        await this.loanService.update(this.editId, data);
+      if (this.loanCategory === 'formal') {
+        await this.saveFormalLoan();
       } else {
-        await this.loanService.create(data);
+        await this.saveSimpleLoan();
       }
       this.router.navigate(['/loans']);
     } catch (err: any) {
       this.error.set(err.message || 'Failed to save loan');
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  private async saveSimpleLoan(): Promise<void> {
+    const seg = this.segment ? this.segments().find((s) => s.id === this.segment) : null;
+    const data: LoanFormData = {
+      date: this.date,
+      amount: this.amount,
+      type: this.type,
+      personName: this.personName,
+      purpose: this.purpose,
+      segment: this.segment || 'personal',
+      segmentName: seg?.name || 'Personal',
+      month: getMonthString(this.date),
+      year: getYear(this.date),
+    };
+    if (this.isEdit()) {
+      await this.loanService.update(this.editId, data);
+    } else {
+      await this.loanService.create(data);
+    }
+  }
+
+  private async saveFormalLoan(): Promise<void> {
+    // For edit mode, only update cosmetic fields
+    if (this.isEdit()) {
+      const seg = this.selectedSegments.length > 0
+        ? this.segments().find(s => s.id === this.selectedSegments[0])
+        : null;
+      await this.loanService.update(this.editId, {
+        date: this.disbursementDate,
+        amount: this.sanctionedAmount,
+        type: this.type,
+        personName: this.personName,
+        purpose: this.purpose,
+        segment: this.selectedSegments[0] || 'personal',
+        segmentName: seg?.name || 'Personal',
+        month: getMonthString(this.disbursementDate),
+        year: getYear(this.disbursementDate),
+        loanCategory: 'formal',
+        loanSourceName: this.loanSourceName,
+        accountNumber: this.accountNumber,
+      });
+      return;
+    }
+
+    // Create
+    const annualRate = this.loanService.toAnnualRate(this.interestRateInput, this.interestFrequency);
+    const primarySeg = this.selectedSegments[0] || 'personal';
+    const primarySegObj = this.segments().find(s => s.id === primarySeg);
+
+    const data: LoanFormData = {
+      date: this.disbursementDate,
+      amount: this.sanctionedAmount,
+      type: this.type,
+      personName: this.personName,
+      purpose: this.purpose,
+      segment: primarySeg,
+      segmentName: primarySegObj?.name || 'Personal',
+      month: getMonthString(this.disbursementDate),
+      year: getYear(this.disbursementDate),
+      loanCategory: 'formal',
+      loanSource: this.loanSource,
+      loanSourceName: this.loanSourceName,
+      accountNumber: this.accountNumber,
+      sanctionedAmount: this.sanctionedAmount,
+      repaymentType: this.repaymentType,
+      interestType: this.interestType,
+      interestFrequency: this.interestFrequency,
+      interestRateInput: this.interestRateInput,
+      interestRate: annualRate,
+      tenure: this.repaymentType === 'emi' ? this.tenure : undefined,
+      emiAmount: this.repaymentType === 'emi' ? (this.emiAmount ?? undefined) : undefined,
+      totalEMIs: this.repaymentType === 'emi' ? this.tenure : undefined,
+      moratoriumMonths: this.repaymentType === 'emi' ? this.moratoriumMonths : undefined,
+      interestPaymentFrequency: this.repaymentType === 'interest_only' ? this.interestPaymentFrequency : undefined,
+      disbursementDate: this.disbursementDate,
+      segments: this.selectedSegments.length > 0 ? this.selectedSegments : [primarySeg],
+      segmentNames: this.selectedSegments.length > 0
+        ? this.selectedSegments.map(id => this.segments().find(s => s.id === id)?.name ?? id)
+        : [primarySegObj?.name || 'Personal'],
+      deductions: this.deductions.filter(d => d.amount > 0).map(d => ({
+        type: d.type,
+        customLabel: d.type === 'other' ? d.customLabel : undefined,
+        amount: d.amount,
+        paidTo: d.paidTo,
+        date: d.date,
+        paymentReference: d.paymentReference || undefined,
+        isFinanced: d.isFinanced,
+        note: d.note || undefined,
+      })) as any[],
+      collaterals: this.collaterals.filter(c => c.description).map(c => ({
+        type: c.type,
+        description: c.description,
+        estimatedValue: c.estimatedValue,
+        weight: c.type === 'gold' ? (c.weight ?? undefined) : undefined,
+        purity: c.type === 'gold' ? c.purity : undefined,
+        documentReference: c.documentReference || undefined,
+        note: c.note || undefined,
+      })),
+      documents: this.loanDocs.filter(d => d.referenceNumber || d.note).map(d => ({
+        type: d.type,
+        customLabel: d.type === 'other' ? d.customLabel : undefined,
+        referenceNumber: d.referenceNumber || undefined,
+        date: d.date instanceof Date ? d.date : undefined,
+        note: d.note || undefined,
+      })) as any[],
+      isSubsidized: this.isSubsidized,
+      subsidyDetails: this.isSubsidized ? this.subsidyDetails : undefined,
+      effectiveRate: this.isSubsidized ? this.effectiveRate : undefined,
+      heldByUid: this.heldByUid || undefined,
+      heldByName: this.heldByName || undefined,
+      replacesLoanId: this.route.snapshot.queryParams['transferFrom'] || undefined,
+    };
+
+    // Use balance transfer if replacing an old loan
+    if (data.replacesLoanId) {
+      await this.loanService.balanceTransfer(data.replacesLoanId, data);
+    } else {
+      await this.loanService.createFormalLoan(data);
     }
   }
 

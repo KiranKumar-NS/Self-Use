@@ -24,14 +24,16 @@ export class NotificationService {
     const items: AppNotification[] = [];
     const now = new Date();
 
-    // 1. Overdue loans (pending/partial, older than 30 days)
+    // 1. Overdue loans + EMI/Interest due date alerts
     try {
       const loanResult = await this.loanService.getAll({}, 100);
       for (const loan of loanResult.loans) {
         if (loan.repaymentStatus === 'completed') continue;
+
+        // Simple loan overdue (existing)
         const loanDate = loan.date.toDate();
         const daysSince = Math.floor((now.getTime() - loanDate.getTime()) / (1000 * 60 * 60 * 24));
-        if (daysSince > 30) {
+        if (daysSince > 30 && loan.loanCategory !== 'formal') {
           const id = `loan_overdue_${loan.id}`;
           if (!this.dismissedIds.has(id)) {
             items.push({
@@ -43,6 +45,46 @@ export class NotificationService {
               link: `/loans/${loan.id}`,
               createdAt: now,
             });
+          }
+        }
+
+        // Formal loan EMI/Interest payment alerts
+        if (loan.loanCategory === 'formal' && loan.nextPaymentDueDate) {
+          const dueDate = loan.nextPaymentDueDate.toDate();
+          const daysUntil = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          const sourceName = loan.loanSourceName ?? loan.personName;
+          const isEMI = loan.repaymentType === 'emi';
+          const paymentAmount = isEMI ? (loan.emiAmount ?? 0) : (loan.interestAmountPerPeriod ?? 0);
+          const paymentLabel = isEMI ? `EMI #${loan.nextPaymentNumber ?? ''}` : 'Interest payment';
+
+          if (daysUntil < 0) {
+            // Overdue
+            const id = `payment_overdue_${loan.id}_${loan.nextPaymentNumber}`;
+            if (!this.dismissedIds.has(id)) {
+              items.push({
+                id,
+                type: 'loan_overdue',
+                title: `${paymentLabel} overdue: ${sourceName}`,
+                message: `₹${paymentAmount.toLocaleString('en-IN')} was due ${Math.abs(daysUntil)} days ago`,
+                severity: 'error',
+                link: `/loans/${loan.id}`,
+                createdAt: now,
+              });
+            }
+          } else if (daysUntil <= 5) {
+            // Due soon
+            const id = `payment_due_${loan.id}_${loan.nextPaymentNumber}`;
+            if (!this.dismissedIds.has(id)) {
+              items.push({
+                id,
+                type: 'loan_overdue',
+                title: `${paymentLabel} due soon: ${sourceName}`,
+                message: `₹${paymentAmount.toLocaleString('en-IN')} due ${daysUntil === 0 ? 'today' : `in ${daysUntil} days`}`,
+                severity: 'warning',
+                link: `/loans/${loan.id}`,
+                createdAt: now,
+              });
+            }
           }
         }
       }

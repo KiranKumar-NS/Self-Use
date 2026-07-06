@@ -84,6 +84,7 @@ import { DatePipe } from '@angular/common';
             <tr>
               <th class="sortable" (click)="toggleSort('date')">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
               <th class="sortable" (click)="toggleSort('type')">Type <span class="sort-icon">{{ getSortIcon('type') }}</span></th>
+              <th>Source</th>
               <th class="sortable" (click)="toggleSort('personName')">Person <span class="sort-icon">{{ getSortIcon('personName') }}</span></th>
               <th class="sortable" (click)="toggleSort('amount')">Amount <span class="sort-icon">{{ getSortIcon('amount') }}</span></th>
               <th class="sortable" (click)="toggleSort('totalRepaid')">Repaid <span class="sort-icon">{{ getSortIcon('totalRepaid') }}</span></th>
@@ -100,6 +101,15 @@ import { DatePipe } from '@angular/common';
                 <td>
                   <span class="type-badge" [class]="loan.type">{{ loan.type === 'given' ? 'Lent' : 'Owed' }}</span>
                 </td>
+                <td>
+                  @if (loan.loanCategory === 'formal') {
+                    <span class="source-badge">{{ loan.loanSourceName || loan.loanSource }}</span>
+                  } @else if (loan.parentFormalLoanId) {
+                    <span class="from-loan-badge">From Loan</span>
+                  } @else {
+                    <span class="simple-badge">-</span>
+                  }
+                </td>
                 <td>{{ loan.personName }}</td>
                 <td class="amount">{{ loan.amount | currencyInr }}</td>
                 <td class="">{{ loan.totalRepaid | currencyInr }}</td>
@@ -114,7 +124,7 @@ import { DatePipe } from '@angular/common';
                   <button mat-icon-button (click)="viewDetail(loan.id)" title="View" aria-label="View details">
                     <mat-icon>visibility</mat-icon>
                   </button>
-                  @if (loan.repaymentStatus === 'pending') {
+                  @if (loan.repaymentStatus === 'pending' || loan.loanCategory === 'formal') {
                     <button mat-icon-button (click)="edit(loan.id)" title="Edit" aria-label="Edit entry">
                       <mat-icon>edit</mat-icon>
                     </button>
@@ -178,6 +188,9 @@ import { DatePipe } from '@angular/common';
     .balance { color: var(--color-expense); font-weight: 600; }
     .segment-tag { font-size: 0.8rem; }
     .segment-tag.personal { color: var(--color-purple); font-style: italic; }
+    .source-badge { background: #ede9fe; color: #7c3aed; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+    .from-loan-badge { background: #e0f2fe; color: #0284c7; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
+    .simple-badge { color: #94a3b8; }
     .load-more { text-align: center; padding: 1rem; }
     @media (max-width: 768px) {
       .filters mat-form-field { min-width: 0; flex-basis: 100%; }

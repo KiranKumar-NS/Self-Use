@@ -74,7 +74,12 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
               [totalGiven]="loanSummary().totalGiven"
               [totalReceived]="loanSummary().totalReceived"
               [pendingGiven]="loanSummary().pendingGiven"
-              [pendingReceived]="loanSummary().pendingReceived" />
+              [pendingReceived]="loanSummary().pendingReceived"
+              [totalSanctioned]="loanSummary().totalSanctioned"
+              [totalOutstanding]="loanSummary().totalOutstanding"
+              [upcomingEMICount]="loanSummary().upcomingEMICount"
+              [upcomingEMIAmount]="loanSummary().upcomingEMIAmount"
+              [totalInterestPaid]="loanSummary().totalInterestPaid" />
         </div>
 
         <hr class="section-divider" />
@@ -114,7 +119,7 @@ export class DashboardPageComponent implements OnInit {
   currentMonthSummaries = signal<MonthlySummary[]>([]);
   totals = signal({ totalIncome: 0, totalExpense: 0, netProfit: 0, pendingIncome: 0 });
   personBreakdown = signal<Record<string, Record<string, { income: number; expense: number }>>>({});
-  loanSummary = signal({ totalGiven: 0, totalReceived: 0, pendingGiven: 0, pendingReceived: 0 });
+  loanSummary = signal({ totalGiven: 0, totalReceived: 0, pendingGiven: 0, pendingReceived: 0, totalSanctioned: 0, totalOutstanding: 0, upcomingEMICount: 0, upcomingEMIAmount: 0, totalInterestPaid: 0 });
   totalDistributed = signal(0);
   segments = signal<Segment[]>([]);
   trendData = signal<{ month: string; income: number; expense: number }[]>([]);
@@ -241,10 +246,13 @@ export class DashboardPageComponent implements OnInit {
       budgetExpense: s.budgets?.monthlyExpenseLimit,
       budgetIncome: s.budgets?.monthlyIncomeTarget,
     }));
+    // Fetch loans for backup
+    const loanResult = await this.loanService.getAll({}, 200);
     await exportService.exportBackupExcel(
       this.analyticsTab.filtered(),
       this.analyticsTab.filteredIncome(),
       segs,
+      loanResult.loans,
       this.rangeLabel,
     );
   }

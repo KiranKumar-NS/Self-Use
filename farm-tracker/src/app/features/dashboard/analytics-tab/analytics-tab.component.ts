@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { DatePipe, UpperCasePipe } from '@angular/common';
 import { Transaction } from '../../../core/models/transaction.model';
 import { TransactionService } from '../../../core/services/transaction.service';
+import { LoanService } from '../../../core/services/loan.service';
 import { SummaryService } from '../../../core/services/summary.service';
 import { SegmentService } from '../../../core/services/segment.service';
 import { UserService } from '../../../core/services/user.service';
@@ -99,6 +100,36 @@ import { MatIconModule } from '@angular/material/icon';
                 <span class="invest-label">Income received</span>
                 <span class="invest-value income">-{{ p.incomeReceived | currencyInr }}</span>
               </div>
+              @if (p.holding > 0) {
+                <div class="invest-row">
+                  <span class="invest-label"><span class="holding-tag income-hold">Income</span> Undistributed</span>
+                  <span class="invest-value income-holding">{{ p.holding | currencyInr }}</span>
+                </div>
+              }
+              @if (p.loanHolds > 0) {
+                <div class="invest-row">
+                  <span class="invest-label"><span class="holding-tag loan-hold">Loan</span> Holds (custody)</span>
+                  <span class="invest-value loan-holds">{{ p.loanHolds | currencyInr }}</span>
+                </div>
+                @for (ld of p.loanHoldsDetails; track ld.loanId) {
+                  <div class="invest-row sub-row">
+                    <span class="invest-label sub-label">↳ {{ ld.label }}</span>
+                    <span class="invest-value loan-holds">{{ ld.amount | currencyInr }}</span>
+                  </div>
+                }
+              }
+              @if (p.loanOwes > 0) {
+                <div class="invest-row">
+                  <span class="invest-label"><span class="holding-tag loan-owes">Loan</span> Owes (personal use)</span>
+                  <span class="invest-value loan-owes-val">{{ p.loanOwes | currencyInr }}</span>
+                </div>
+                @for (ld of p.loanOwesDetails; track ld.loanId) {
+                  <div class="invest-row sub-row">
+                    <span class="invest-label sub-label">↳ {{ ld.label }}</span>
+                    <span class="invest-value loan-owes-val">{{ ld.amount | currencyInr }}</span>
+                  </div>
+                }
+              }
             </div>
           </mat-card>
         }
@@ -270,6 +301,15 @@ import { MatIconModule } from '@angular/material/icon';
     .invest-value { font-weight: 600; }
     .invest-value.expense { color: var(--color-expense); }
     .invest-value.income { color: var(--color-income); }
+    .invest-value.income-holding { color: #d97706; }
+    .invest-value.loan-holds { color: #7c3aed; }
+    .invest-value.loan-owes-val { color: #dc2626; }
+    .holding-tag { font-size: 0.6rem; padding: 1px 4px; border-radius: 3px; font-weight: 700; text-transform: uppercase; margin-right: 4px; vertical-align: middle; }
+    .holding-tag.income-hold { background: #fef3c7; color: #d97706; }
+    .holding-tag.loan-hold { background: #ede9fe; color: #7c3aed; }
+    .holding-tag.loan-owes { background: #fee2e2; color: #dc2626; }
+    .invest-row.sub-row { padding-left: 1rem; opacity: 0.85; }
+    .invest-label.sub-label { font-size: 0.7rem; color: #94a3b8; }
 
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
     .chart-card { padding: 1.25rem; }
@@ -302,6 +342,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   private summaryService = inject(SummaryService);
   private segmentService = inject(SegmentService);
   private userService = inject(UserService);
+  private loanService = inject(LoanService);
   private dialog = inject(MatDialog);
 
   loading = signal(true);
@@ -330,7 +371,17 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   totalExpense = signal(0);
   segmentTotals = signal<{ name: string; total: number; count: number }[]>([]);
   personTotals = signal<{ name: string; total: number; segments: { name: string; total: number }[] }[]>([]);
-  investmentSummary = signal<{ name: string; expensesPaid: number; incomeReceived: number; holding: number; net: number }[]>([]);
+  investmentSummary = signal<{
+    name: string;
+    expensesPaid: number;
+    incomeReceived: number;
+    holding: number;
+    loanHolds: number;
+    loanHoldsDetails: { loanId: string; label: string; amount: number }[];
+    loanOwes: number;
+    loanOwesDetails: { loanId: string; label: string; amount: number }[];
+    net: number;
+  }[]>([]);
   maxInvestment = signal(0);
   incomeTransactions = signal<Transaction[]>([]);
   segments = signal<Segment[]>([]);
@@ -406,14 +457,35 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   }
 
   private async buildInvestmentSummary(expenseTxns: Transaction[]): Promise<void> {
-    const personMap: Record<string, { expensesPaid: number; incomeReceived: number; holding: number }> = {};
+    const personMap: Record<string, {
+      expensesPaid: number;
+      incomeReceived: number;
+      holding: number;
+      loanHolds: number;
+      loanHoldsDetails: { loanId: string; label: string; amount: number }[];
+      loanOwes: number;
+      loanOwesDetails: { loanId: string; label: string; amount: number }[];
+    }> = {};
+
+    // Build UID→name lookup from active users for consistent keying
+    const users = await this.userService.getAll();
+    const uidToName: Record<string, string> = {};
+    for (const u of users) {
+      if (u.isActive) uidToName[u.uid] = normalizeName(u.displayName);
+    }
+
+    // Resolve a person to a consistent key (prefer UID-based name, fallback to normalized input)
+    const resolveKey = (uid: string | null | undefined, name: string | null | undefined): string => {
+      if (uid && uid !== 'other' && uidToName[uid]) return uidToName[uid];
+      return normalizeName(name || 'Unknown');
+    };
 
     const ensurePerson = (name: string) => {
-      if (!personMap[name]) personMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0 };
+      if (!personMap[name]) personMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0, loanHolds: 0, loanHoldsDetails: [], loanOwes: 0, loanOwesDetails: [] };
     };
 
     for (const txn of expenseTxns) {
-      const name = normalizeName(txn.paidByName || txn.createdByName || 'Unknown');
+      const name = resolveKey(txn.paidBy, txn.paidByName || txn.createdByName);
       ensurePerson(name);
       personMap[name].expensesPaid += txn.amount;
     }
@@ -450,13 +522,14 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
         // Only count person distributions as income (not reinvestment)
         for (const d of (txn.distributions || [])) {
           if (d.uid === 'reinvestment') continue;
-          ensurePerson(d.name);
-          personMap[d.name].incomeReceived += d.amount;
+          const dName = resolveKey(d.uid, d.name);
+          ensurePerson(dName);
+          personMap[dName].incomeReceived += d.amount;
           distributedTotal += d.amount;
         }
 
         // Undistributed = total income - everything allocated (including reinvestment)
-        const receiver = normalizeName(txn.paidByName || txn.createdByName || 'Unknown');
+        const receiver = resolveKey(txn.paidBy, txn.paidByName || txn.createdByName);
         const undistributed = txn.amount - totalAllocated;
         if (undistributed > 0) {
           ensurePerson(receiver);
@@ -468,6 +541,36 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       // Total Income = only distributed to persons (not undistributed, not reinvestment)
       this.totalIncomeAmount.set(distributedTotal);
       this.netProfit.set(distributedTotal - this.totalExpense());
+    } catch {}
+
+    // Loan tracking — separate "holds" (custody) from "owes" (personal debt)
+    try {
+      const loanResult = await this.loanService.getAll({}, 200);
+      for (const loan of loanResult.loans) {
+        // Personal withdrawals = OWES (person took money for personal use, must return)
+        if (loan.parentFormalLoanId && loan.balanceRemaining > 0) {
+          const name = resolveKey(loan.personUid, loan.personName);
+          ensurePerson(name);
+          personMap[name].loanOwes += loan.balanceRemaining;
+          personMap[name].loanOwesDetails.push({
+            loanId: loan.id,
+            label: loan.purpose || 'Personal use',
+            amount: loan.balanceRemaining,
+          });
+        }
+        // Formal loan fund holders = HOLDS (person manages business money, not personal debt)
+        if (loan.loanCategory === 'formal' && loan.heldByName && (loan.utilizationRemaining ?? 0) > 0 && loan.repaymentStatus !== 'completed') {
+          const name = resolveKey(loan.heldByUid, loan.heldByName);
+          ensurePerson(name);
+          const remaining = loan.utilizationRemaining ?? 0;
+          personMap[name].loanHolds += remaining;
+          personMap[name].loanHoldsDetails.push({
+            loanId: loan.id,
+            label: `${loan.loanSourceName ?? loan.personName}${loan.accountNumber ? ' (' + loan.accountNumber + ')' : ''}`,
+            amount: remaining,
+          });
+        }
+      }
     } catch {}
 
     const summary = Object.entries(personMap)
@@ -510,7 +613,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     this.setFilter('all', '');
   }
 
-  applyFilters(): void {
+  async applyFilters(): Promise<void> {
     this.currentPage = 1;
     let txns = [...this.allTransactions()];
 
@@ -569,43 +672,68 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     if (this.filterCategory) incomeForRange = incomeForRange.filter(t => t.categoryName === this.filterCategory);
     this.filteredIncome.set(incomeForRange);
 
-    // Rebuild person investment from filtered data
-    const investMap: Record<string, { expensesPaid: number; incomeReceived: number; holding: number }> = {};
-    const ensurePerson = (name: string) => {
-      if (!investMap[name]) investMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0 };
+    // Rebuild person investment from filtered data (reuse resolveKey from parent scope not available — inline)
+    const uidToName2: Record<string, string> = {};
+    for (const u of (await this.userService.getAll())) {
+      if (u.isActive) uidToName2[u.uid] = normalizeName(u.displayName);
+    }
+    const resolveKey2 = (uid: string | null | undefined, name: string | null | undefined): string => {
+      if (uid && uid !== 'other' && uidToName2[uid]) return uidToName2[uid];
+      return normalizeName(name || 'Unknown');
+    };
+    const investMap: Record<string, {
+      expensesPaid: number; incomeReceived: number; holding: number;
+      loanHolds: number; loanHoldsDetails: { loanId: string; label: string; amount: number }[];
+      loanOwes: number; loanOwesDetails: { loanId: string; label: string; amount: number }[];
+    }> = {};
+    const ensurePerson2 = (name: string) => {
+      if (!investMap[name]) investMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0, loanHolds: 0, loanHoldsDetails: [], loanOwes: 0, loanOwesDetails: [] };
     };
     let distributedTotal = 0;
     for (const t of txns) {
-      const name = normalizeName(t.paidByName || t.createdByName || 'Unknown');
-      ensurePerson(name);
+      const name = resolveKey2(t.paidBy, t.paidByName || t.createdByName);
+      ensurePerson2(name);
       investMap[name].expensesPaid += t.amount;
     }
     for (const t of incomeForRange) {
-      // Total allocated = all distributions including reinvestment
-      const totalAllocated = (t.distributions || [])
-        .reduce((s, d) => s + d.amount, 0);
-
-      // Only person distributions count as income received (not reinvestment)
+      const totalAllocated = (t.distributions || []).reduce((s, d) => s + d.amount, 0);
       for (const d of (t.distributions || [])) {
         if (d.uid === 'reinvestment') continue;
-        ensurePerson(d.name);
-        investMap[d.name].incomeReceived += d.amount;
+        const dName = resolveKey2(d.uid, d.name);
+        ensurePerson2(dName);
+        investMap[dName].incomeReceived += d.amount;
         distributedTotal += d.amount;
       }
-
-      // Undistributed = income - everything allocated (including reinvestment)
-      const receiver = normalizeName(t.paidByName || t.createdByName || 'Unknown');
+      const receiver = resolveKey2(t.paidBy, t.paidByName || t.createdByName);
       const undistributed = t.amount - totalAllocated;
       if (undistributed > 0) {
-        ensurePerson(receiver);
+        ensurePerson2(receiver);
         investMap[receiver].holding += undistributed;
       }
     }
-    // Total Income = only distributed to persons (not undistributed, not reinvestment)
+    // Loan tracking — holds vs owes (same logic as buildInvestmentSummary)
+    try {
+      const loanResult = await this.loanService.getAll({}, 200);
+      for (const loan of loanResult.loans) {
+        if (loan.parentFormalLoanId && loan.balanceRemaining > 0) {
+          const name = resolveKey2(loan.personUid, loan.personName);
+          ensurePerson2(name);
+          investMap[name].loanOwes += loan.balanceRemaining;
+          investMap[name].loanOwesDetails.push({ loanId: loan.id, label: loan.purpose || 'Personal use', amount: loan.balanceRemaining });
+        }
+        if (loan.loanCategory === 'formal' && loan.heldByName && (loan.utilizationRemaining ?? 0) > 0 && loan.repaymentStatus !== 'completed') {
+          const name = resolveKey2(loan.heldByUid, loan.heldByName);
+          ensurePerson2(name);
+          const remaining = loan.utilizationRemaining ?? 0;
+          investMap[name].loanHolds += remaining;
+          investMap[name].loanHoldsDetails.push({ loanId: loan.id, label: `${loan.loanSourceName ?? loan.personName}${loan.accountNumber ? ' (' + loan.accountNumber + ')' : ''}`, amount: remaining });
+        }
+      }
+    } catch {}
+
     this.totalIncomeAmount.set(distributedTotal);
     this.netProfit.set(distributedTotal - this.totalExpense());
 
-    // If person filter is active, keep only that person's investment data
     let summaryEntries = Object.entries(investMap);
     if (this.filterPaidBy) {
       summaryEntries = summaryEntries.filter(([name]) => name === this.filterPaidBy);
