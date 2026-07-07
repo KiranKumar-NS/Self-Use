@@ -2,6 +2,7 @@ import { Component, inject, signal, OnInit, ViewChild } from '@angular/core';
 import { SummaryService } from '../../../core/services/summary.service';
 import { UserService } from '../../../core/services/user.service';
 import { LoanService } from '../../../core/services/loan.service';
+import { InventoryService } from '../../../core/services/inventory.service';
 import { MonthlySummary } from '../../../core/models/monthly-summary.model';
 import { getMonthName, getLast6MonthsFrom, getMonthRange } from '../../../core/utils/date.utils';
 import { MatIconModule } from '@angular/material/icon';
@@ -113,6 +114,7 @@ export class DashboardPageComponent implements OnInit {
   private segmentService = inject(SegmentService);
   private userService = inject(UserService);
   private loanService = inject(LoanService);
+  private inventoryService = inject(InventoryService);
 
   initialLoading = signal(true);
   loading = signal(false);
@@ -239,23 +241,16 @@ export class DashboardPageComponent implements OnInit {
     if (!this.analyticsTab) return;
     const { ExportService } = await import('../../../core/services/export.service');
     const exportService = new ExportService();
-    const segs = this.segments().map(s => ({
-      name: s.name,
-      icon: s.icon,
-      type: s.segmentType,
-      unit: s.unit,
-      currentStock: s.currentStock,
-      breeds: s.breeds,
-      budgetExpense: s.budgets?.monthlyExpenseLimit,
-      budgetIncome: s.budgets?.monthlyIncomeTarget,
-    }));
-    // Fetch loans for backup
-    const loanResult = await this.loanService.getAll({}, 200);
+    // Fetch loans and inventory events for backup
+    const [loanResult, inventoryEvents] = await Promise.all([
+      this.loanService.getAll({}, 200),
+      this.inventoryService.getEvents(undefined, 500),
+    ]);
     await exportService.exportBackupExcel(
       this.analyticsTab.filtered(),
       this.analyticsTab.filteredIncome(),
-      segs,
       loanResult.loans,
+      inventoryEvents,
       this.rangeLabel,
     );
   }

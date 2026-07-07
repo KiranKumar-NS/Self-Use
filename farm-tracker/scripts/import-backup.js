@@ -106,7 +106,7 @@ function monthStr(date) {
 // ── Import Transaction Backup ──────────────────────────────
 
 async function importBackup(wb, dryRun) {
-  const stats = { expenses: 0, income: 0, loans: 0, skipped: 0 };
+  const stats = { expenses: 0, income: 0, loans: 0, inventoryEvents: 0, skipped: 0 };
   const batch = db.batch();
 
   // Expenses
@@ -268,6 +268,33 @@ async function importBackup(wb, dryRun) {
 
       batch.set(db.collection('loans').doc(id), loanDoc);
       stats.loans++;
+    }
+  }
+
+  // Inventory Events
+  if (wb.Sheets['Inventory Events']) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets['Inventory Events']);
+    console.log(`  Inventory Events sheet: ${rows.length} rows`);
+    for (const r of rows) {
+      const id = str(r['ID']) || db.collection('inventoryEvents').doc().id;
+      const eventDate = parseDate(str(r['Date'])) || new Date();
+      const month = str(r['Month']) || monthStr(eventDate);
+      batch.set(db.collection('inventoryEvents').doc(id), {
+        id,
+        date: admin.firestore.Timestamp.fromDate(eventDate),
+        segment: str(r['Segment']),
+        segmentName: str(r['Segment Name']) || str(r['Segment']),
+        eventType: str(r['Event Type']) || 'adjustment',
+        count: num(r['Count']),
+        breed: str(r['Breed']) || null,
+        note: str(r['Note']) || '',
+        month,
+        year: eventDate.getFullYear(),
+        createdBy: str(r['Created By']) || 'import',
+        createdByName: str(r['Created By Name']) || 'Import Script',
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      stats.inventoryEvents++;
     }
   }
 
@@ -553,6 +580,7 @@ async function main() {
     console.log(`  Expenses: ${stats.expenses}`);
     console.log(`  Income: ${stats.income}`);
     console.log(`  Loans: ${stats.loans}`);
+    console.log(`  Inventory Events: ${stats.inventoryEvents}`);
 
   } else {
     console.error(`ERROR: Unrecognized Excel format. Sheets: ${sheets.join(', ')}`);

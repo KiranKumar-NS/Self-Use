@@ -497,8 +497,8 @@ export class ExportService {
   async exportBackupExcel(
     expenses: Transaction[],
     income: Transaction[],
-    segments: { name: string; icon: string; type?: string; unit?: string; currentStock?: number; breeds?: string[]; budgetExpense?: number; budgetIncome?: number }[],
     loans: Loan[],
+    inventoryEvents: any[],
     period: string
   ): Promise<void> {
     const XLSX = await import('xlsx');
@@ -562,18 +562,23 @@ export class ExportService {
     });
     const incomeSheet = XLSX.utils.json_to_sheet(incomeRows);
 
-    // --- Stock Sheet ---
-    const stockRows = segments.map(s => ({
-      'Segment': s.name,
-      'Icon': s.icon,
-      'Type': s.type || '',
-      'Unit': s.unit || '',
-      'Current Stock': s.currentStock ?? '',
-      'Breeds': s.breeds?.join(', ') || '',
-      'Monthly Expense Budget': s.budgetExpense ?? '',
-      'Monthly Income Target': s.budgetIncome ?? '',
+    // --- Inventory Events Sheet (all fields for re-import) ---
+    const eventRows = inventoryEvents.map((e: any) => ({
+      'ID': e.id,
+      'Date': ts(e.date),
+      'Segment': e.segment,
+      'Segment Name': e.segmentName,
+      'Event Type': e.eventType,
+      'Count': e.count,
+      'Breed': e.breed ?? '',
+      'Note': e.note,
+      'Month': e.month,
+      'Year': e.year,
+      'Created By': e.createdBy,
+      'Created By Name': e.createdByName,
+      'Created At': ts(e.createdAt),
     }));
-    const stockSheet = XLSX.utils.json_to_sheet(stockRows);
+    const eventSheet = XLSX.utils.json_to_sheet(eventRows);
 
     // --- Loans Sheet (all fields for re-import) ---
     const loanRows = loans.map(l => ({
@@ -641,10 +646,12 @@ export class ExportService {
     XLSX.utils.book_append_sheet(wb, expenseSheet, 'Expenses');
     XLSX.utils.book_append_sheet(wb, incomeSheet, 'Income');
     XLSX.utils.book_append_sheet(wb, loanSheet, 'Loans');
-    XLSX.utils.book_append_sheet(wb, stockSheet, 'Stock');
+    if (eventRows.length > 0) {
+      XLSX.utils.book_append_sheet(wb, eventSheet, 'Inventory Events');
+    }
 
     // Auto-width columns
-    [expenseSheet, incomeSheet, loanSheet, stockSheet].forEach(ws => {
+    [expenseSheet, incomeSheet, loanSheet, ...(eventRows.length > 0 ? [eventSheet] : [])].forEach(ws => {
       const ref = ws['!ref'];
       if (!ref) return;
       const range = XLSX.utils.decode_range(ref);
