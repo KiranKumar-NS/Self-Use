@@ -23,13 +23,13 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
-import { DatePipe, TitleCasePipe } from '@angular/common';
+import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
 
 @Component({
   selector: 'app-loan-detail',
   standalone: true,
   imports: [
-    FormsModule, DatePipe, TitleCasePipe, RouterLink, CurrencyInrPipe, LoadingSpinnerComponent,
+    FormsModule, DatePipe, TitleCasePipe, DecimalPipe, RouterLink, CurrencyInrPipe, LoadingSpinnerComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatDatepickerModule, MatProgressBarModule, MatSelectModule, MatTabsModule,
   ],
@@ -204,31 +204,142 @@ import { DatePipe, TitleCasePipe } from '@angular/common';
           </mat-card>
         }
 
-        <!-- Collateral -->
+        <!-- Gold Valuation (gold loans only) -->
+        @if (isGoldLoan()) {
+          <h3 class="section-title">Gold Valuation</h3>
+          <mat-card>
+            <div class="detail-grid">
+              @if (loan()!.pledgeReceiptNumber) {
+                <div class="detail-item"><label>Pledge Receipt</label><span>{{ loan()!.pledgeReceiptNumber }}</span></div>
+              }
+              <div class="detail-item"><label>Total Gold Weight</label><span>{{ loan()!.totalGoldWeight | number:'1.1-1' }}g</span></div>
+              <div class="detail-item"><label>Gold Value (at pledge)</label><span>{{ loan()!.totalGoldValue | currencyInr }}</span></div>
+              <div class="detail-item"><label>LTV Ratio</label><span>{{ ((loan()!.ltvRatio ?? 0) * 100) | number:'1.0-0' }}%</span></div>
+              <div class="detail-item"><label>Eligible Amount</label><span>{{ loan()!.eligibleLoanAmount | currencyInr }}</span></div>
+            </div>
+
+            <!-- Margin Check -->
+            @if (loan()!.repaymentStatus !== 'completed') {
+              <div class="inline-form" style="border-top: 1px solid #f1f5f9; margin-top: 1rem; padding-top: 1rem;">
+                <div class="repayment-form">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Current Gold Rate (₹/g)</mat-label>
+                    <input matInput type="number" [(ngModel)]="marginCheckRate" min="0" />
+                  </mat-form-field>
+                  <button mat-stroked-button (click)="checkMargin()">Check Margin</button>
+                </div>
+                @if (marginStatus) {
+                  <div class="computed-info" [style.background]="marginStatus.isMarginBreached ? '#fef2f2' : '#ecfdf5'"
+                       [style.color]="marginStatus.isMarginBreached ? '#dc2626' : '#059669'">
+                    Current Value: {{ marginStatus.currentGoldValue | currencyInr }}
+                    &nbsp;|&nbsp; LTV: {{ (marginStatus.currentLtv * 100) | number:'1.1-1' }}% / {{ (marginStatus.maxLtv * 100) | number:'1.0-0' }}%
+                    &nbsp;|&nbsp; Headroom: {{ marginStatus.headroom | currencyInr }}
+                    @if (marginStatus.isMarginBreached) { &nbsp;|&nbsp; MARGIN BREACHED }
+                  </div>
+                }
+              </div>
+
+              <!-- Gold Loan Actions -->
+              <div class="interest-actions" style="margin-top: 1rem;">
+                <button mat-flat-button color="primary" (click)="showRenewalForm = !showRenewalForm">Renew / Repledge</button>
+                @if (marginStatus && marginStatus.headroom > 0) {
+                  <button mat-flat-button color="accent" (click)="showTopUpForm = !showTopUpForm">Top-Up ({{ marginStatus.headroom | currencyInr }})</button>
+                }
+              </div>
+
+              @if (showRenewalForm) {
+                <div class="inline-form">
+                  @if (goldError()) { <div class="error-message">{{ goldError() }}</div> }
+                  <div class="repayment-form">
+                    <mat-form-field appearance="outline">
+                      <mat-label>New Gold Rate (₹/g)</mat-label>
+                      <input matInput type="number" [(ngModel)]="renewalGoldRate" min="0" />
+                    </mat-form-field>
+                    <mat-form-field appearance="outline">
+                      <mat-label>New Interest Rate (optional)</mat-label>
+                      <input matInput type="number" [(ngModel)]="renewalInterestRate" min="0" step="0.01" />
+                    </mat-form-field>
+                    <button mat-flat-button color="primary" (click)="doRenewal()" [disabled]="savingGold()">
+                      {{ savingGold() ? 'Renewing...' : 'Renew' }}
+                    </button>
+                  </div>
+                </div>
+              }
+
+              @if (showTopUpForm) {
+                <div class="inline-form">
+                  @if (goldError()) { <div class="error-message">{{ goldError() }}</div> }
+                  <div class="repayment-form">
+                    <mat-form-field appearance="outline">
+                      <mat-label>Additional Amount</mat-label>
+                      <input matInput type="number" [(ngModel)]="topUpAmount" min="1" [max]="marginStatus?.headroom ?? 0" />
+                    </mat-form-field>
+                    <button mat-flat-button color="accent" (click)="doTopUp()" [disabled]="savingGold()">
+                      {{ savingGold() ? 'Processing...' : 'Top-Up' }}
+                    </button>
+                  </div>
+                </div>
+              }
+            }
+          </mat-card>
+        }
+
+        <!-- Collateral Items -->
         @if ((loan()!.collaterals?.length ?? 0) > 0) {
-          <h3 class="section-title">Collateral / Security</h3>
+          <h3 class="section-title">{{ isGoldLoan() ? 'Gold Items' : 'Collateral / Security' }}</h3>
           <mat-card>
             @for (c of loan()!.collaterals!; track c.id) {
               <div class="list-entry">
-                <div class="list-main">
-                  <strong>{{ c.description }}</strong>
-                  <span class="list-amount">{{ c.estimatedValue | currencyInr }}</span>
-                </div>
-                <div class="list-meta">
-                  {{ c.type | titlecase }}
-                  @if (c.weight) { &middot; {{ c.weight }}g {{ c.purity }} }
-                  @if (c.isReleased) {
-                    &middot; <span class="released-badge">Released {{ c.releasedDate?.toDate() | date:'dd MMM yyyy' }}</span>
-                  } @else {
-                    &middot; <span class="pledged-badge">Pledged</span>
-                    @if (loan()!.repaymentStatus === 'completed') {
-                      <button mat-button color="primary" (click)="releaseCollateral(c.id)">Release</button>
+                @if (isGoldLoan() && c.type === 'gold' && c.itemName) {
+                  <div class="list-main">
+                    <strong>{{ c.itemName }} {{ (c.quantity ?? 1) > 1 ? '×' + c.quantity : '' }}</strong>
+                    <span class="list-amount">{{ c.goldValue ?? c.estimatedValue | currencyInr }}</span>
+                  </div>
+                  <div class="list-meta">
+                    Gross: {{ c.grossWeight ?? c.weight }}g &middot; Net: {{ c.netWeight ?? c.grossWeight ?? c.weight }}g &middot; {{ c.purity }}
+                    @if (c.goldRatePerGram) { &middot; ₹{{ c.goldRatePerGram | number:'1.0-0' }}/g }
+                    @if (c.isReleased) {
+                      &middot; <span class="released-badge">Released {{ c.releasedDate?.toDate() | date:'dd MMM yyyy' }}</span>
+                    } @else {
+                      &middot; <span class="pledged-badge">Pledged</span>
+                      @if (loan()!.repaymentStatus === 'completed') {
+                        <button mat-button color="primary" (click)="releaseCollateral(c.id)">Release</button>
+                      }
                     }
-                  }
-                </div>
+                  </div>
+                } @else {
+                  <div class="list-main">
+                    <strong>{{ c.description }}</strong>
+                    <span class="list-amount">{{ c.estimatedValue | currencyInr }}</span>
+                  </div>
+                  <div class="list-meta">
+                    {{ c.type | titlecase }}
+                    @if (c.weight) { &middot; {{ c.weight }}g {{ c.purity }} }
+                    @if (c.isReleased) {
+                      &middot; <span class="released-badge">Released {{ c.releasedDate?.toDate() | date:'dd MMM yyyy' }}</span>
+                    } @else {
+                      &middot; <span class="pledged-badge">Pledged</span>
+                      @if (loan()!.repaymentStatus === 'completed') {
+                        <button mat-button color="primary" (click)="releaseCollateral(c.id)">Release</button>
+                      }
+                    }
+                  </div>
+                }
               </div>
             }
           </mat-card>
+        }
+
+        <!-- Renewal chain -->
+        @if (loan()!.renewedFromLoanId || loan()!.renewedByLoanId) {
+          <div class="detail-grid" style="margin-top: 1rem;">
+            @if (loan()!.renewedFromLoanId) {
+              <div class="detail-item"><label>Renewed From</label><span><a [routerLink]="['/loans', loan()!.renewedFromLoanId]">Previous Loan</a></span></div>
+            }
+            @if (loan()!.renewedByLoanId) {
+              <div class="detail-item"><label>Renewed By</label><span><a [routerLink]="['/loans', loan()!.renewedByLoanId]">New Loan</a></span></div>
+            }
+          </div>
         }
 
         <!-- Documents -->
@@ -762,6 +873,7 @@ export class LoanDetailComponent implements OnInit {
   loading = signal(true);
 
   isFormal = computed(() => this.loan()?.loanCategory === 'formal');
+  isGoldLoan = computed(() => this.loan()?.loanSource === 'gold_loan');
 
   // Simple loan forms
   repaymentAmount = 0; repaymentDate = new Date(); repaymentNote = ''; repaymentPaidBy = '';
@@ -795,6 +907,14 @@ export class LoanDetailComponent implements OnInit {
 
   // Personal withdrawal
   personalPersonUid = ''; personalCustomName = ''; personalAmount = 0; personalDate = new Date(); personalNote = '';
+
+  // Gold loan
+  marginCheckRate = 0;
+  marginStatus: { currentGoldValue: number; currentLtv: number; maxLtv: number; isMarginBreached: boolean; headroom: number } | null = null;
+  showRenewalForm = false; showTopUpForm = false;
+  renewalGoldRate = 0; renewalInterestRate: number | null = null;
+  topUpAmount = 0;
+  goldError = signal(''); savingGold = signal(false);
   personalError = signal(''); savingPersonal = signal(false);
 
   private loanId = '';
@@ -966,6 +1086,34 @@ export class LoanDetailComponent implements OnInit {
       this.personalPersonUid = ''; this.personalCustomName = ''; this.personalAmount = 0; this.personalNote = '';
       await this.loadData();
     } catch (err: any) { this.personalError.set(err.message); } finally { this.savingPersonal.set(false); }
+  }
+
+  // Gold loan actions
+  checkMargin(): void {
+    if (!this.marginCheckRate || !this.loan()) return;
+    this.marginStatus = this.loanService.getGoldLoanMarginStatus(this.loan()!, this.marginCheckRate);
+  }
+
+  async doRenewal(): Promise<void> {
+    if (this.renewalGoldRate <= 0) { this.goldError.set('Enter new gold rate'); return; }
+    this.goldError.set(''); this.savingGold.set(true);
+    try {
+      const newId = await this.loanService.renewGoldLoan(
+        this.loanId, this.renewalGoldRate,
+        undefined, this.renewalInterestRate ?? undefined,
+      );
+      this.router.navigate(['/loans', newId]);
+    } catch (err: any) { this.goldError.set(err.message); } finally { this.savingGold.set(false); }
+  }
+
+  async doTopUp(): Promise<void> {
+    if (this.topUpAmount <= 0) { this.goldError.set('Enter amount'); return; }
+    this.goldError.set(''); this.savingGold.set(true);
+    try {
+      await this.loanService.topUpGoldLoan(this.loanId, this.marginCheckRate, this.topUpAmount);
+      this.topUpAmount = 0; this.showTopUpForm = false;
+      await this.loadData();
+    } catch (err: any) { this.goldError.set(err.message); } finally { this.savingGold.set(false); }
   }
 
   async releaseCollateral(itemId: string): Promise<void> {

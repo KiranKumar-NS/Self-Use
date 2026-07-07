@@ -27,6 +27,37 @@ import { getMonthString, getYear } from '../utils/date.utils';
 
 // --- Pure computation helpers (no Firestore) ---
 
+// Gold loan helpers
+
+function purityFactor(purity: string): number {
+  switch (purity) {
+    case '24K': return 1.0;
+    case '22K': return 0.916;
+    case '18K': return 0.75;
+    default: return 0.916;
+  }
+}
+
+function computeGoldValue(netWeight: number, purity: string, ratePerGram: number): number {
+  return Math.round(netWeight * purityFactor(purity) * ratePerGram * 100) / 100;
+}
+
+function rbiLtvRatio(totalGoldValue: number): number {
+  if (totalGoldValue <= 250000) return 0.85;
+  if (totalGoldValue <= 500000) return 0.80;
+  return 0.75;
+}
+
+function computeGoldAggregates(collaterals: any[]): { totalGoldWeight: number; totalGoldValue: number } {
+  const goldItems = (collaterals ?? []).filter((c: any) => c.type === 'gold' && !c.isReleased);
+  return {
+    totalGoldWeight: goldItems.reduce((sum: number, c: any) => sum + (c.netWeight ?? c.grossWeight ?? c.weight ?? 0), 0),
+    totalGoldValue: goldItems.reduce((sum: number, c: any) => sum + (c.goldValue ?? c.estimatedValue ?? 0), 0),
+  };
+}
+
+// Interest rate helpers
+
 /** Convert interest rate to annual based on frequency */
 function toAnnualRate(rate: number, frequency: InterestFrequency): number {
   switch (frequency) {
@@ -284,6 +315,10 @@ export class LoanService {
   generateEMISchedule = generateEMISchedule;
   buildLiveEMISchedule = buildLiveEMISchedule;
   toAnnualRate = toAnnualRate;
+  purityFactor = purityFactor;
+  computeGoldValue = computeGoldValue;
+  rbiLtvRatio = rbiLtvRatio;
+  computeGoldAggregates = computeGoldAggregates;
 
   async create(data: LoanFormData): Promise<string> {
     const user = this.authService.userProfile()!;
@@ -797,11 +832,24 @@ export class LoanService {
     }
 
     // Build collateral items
-    const collaterals: CollateralItem[] = (data.collaterals ?? []).map((c, i) => ({
-      ...c,
-      id: `col_${Date.now()}_${i}`,
-    })) as CollateralItem[];
+    const collaterals: CollateralItem[] = (data.collaterals ?? []).map((c, i) => {
+      const item = { ...c, id: `col_${Date.now()}_${i}` } as CollateralItem;
+      // Auto-compute gold value if gold item with weight and rate
+      if (item.type === 'gold' && (item.netWeight ?? item.grossWeight ?? item.weight ?? 0) > 0 && (item.goldRatePerGram ?? 0) > 0) {
+        const nw = item.netWeight ?? item.grossWeight ?? item.weight ?? 0;
+        item.goldValue = computeGoldValue(nw, item.purity ?? '22K', item.goldRatePerGram!);
+        item.estimatedValue = item.goldValue;
+      }
+      return item;
+    }) as CollateralItem[];
     const totalCollateralValue = collaterals.reduce((sum, c) => sum + c.estimatedValue, 0);
+
+    // Gold loan aggregates
+    const goldAgg = computeGoldAggregates(collaterals);
+    const ltvRatio = data.loanSource === 'gold_loan'
+      ? (data.ltvRatio ?? rbiLtvRatio(goldAgg.totalGoldValue))
+      : undefined;
+    const eligibleLoanAmount = ltvRatio ? Math.round(goldAgg.totalGoldValue * ltvRatio) : undefined;
 
     // Build document items
     const documents: LoanDocument[] = (data.documents ?? []).map((d, i) => ({
@@ -909,6 +957,15 @@ export class LoanService {
       // Holder
       heldByUid: data.heldByUid ?? null,
       heldByName: data.heldByName ?? null,
+
+      // Gold loan
+      pledgeReceiptNumber: data.pledgeReceiptNumber ?? null,
+      ltvRatio: ltvRatio ?? null,
+      totalGoldWeight: goldAgg.totalGoldWeight > 0 ? goldAgg.totalGoldWeight : null,
+      totalGoldValue: goldAgg.totalGoldValue > 0 ? goldAgg.totalGoldValue : null,
+      eligibleLoanAmount: eligibleLoanAmount ?? null,
+      renewedFromLoanId: data.renewedFromLoanId ?? null,
+      isRenewal: !!data.renewedFromLoanId,
     });
 
     await batch.commit();
@@ -2162,6 +2219,188 @@ export class LoanService {
         timeline: arrayUnion({
           action: 'updated', by: user.uid, byName: user.displayName, at: Timestamp.now(),
           changes: `document removed`,
+        }),
+      });
+    });
+  }
+
+  // ==================== Gold Loan ====================
+
+  /** Get margin status for a gold loan (pure computation, no Firestore) */
+  getGoldLoanMarginStatus(loan: Loan, currentGoldRatePerGram: number): {
+    currentGoldValue: number; currentLtv: number; maxLtv: number;
+    isMarginBreached: boolean; headroom: number;
+  } {
+    const goldItems = (loan.collaterals ?? []).filter(c => c.type === 'gold' && !c.isReleased);
+    const currentGoldValue = goldItems.reduce((sum, c) => {
+      const nw = c.netWeight ?? c.grossWeight ?? c.weight ?? 0;
+      return sum + computeGoldValue(nw, c.purity ?? '22K', currentGoldRatePerGram);
+    }, 0);
+    const outstanding = loan.outstandingBalance ?? loan.balanceRemaining;
+    const maxLtv = loan.ltvRatio ?? rbiLtvRatio(currentGoldValue);
+    const currentLtv = currentGoldValue > 0 ? outstanding / currentGoldValue : 0;
+    return {
+      currentGoldValue,
+      currentLtv,
+      maxLtv,
+      isMarginBreached: currentLtv > maxLtv,
+      headroom: Math.max(0, Math.round(currentGoldValue * maxLtv - outstanding)),
+    };
+  }
+
+  /** Renew gold loan — close old, create new at current gold rate. 2 reads, 3 writes */
+  async renewGoldLoan(
+    oldLoanId: string,
+    newGoldRatePerGram: number,
+    newLtvRatio?: number,
+    newInterestRate?: number,
+    note?: string,
+  ): Promise<string> {
+    const user = this.authService.userProfile()!;
+    let newLoanId = '';
+
+    await runTransaction(this.firestore, async (transaction) => {
+      const oldLoanRef = doc(this.firestore, 'loans', oldLoanId);
+      const oldLoanSnap = await transaction.get(oldLoanRef);
+      const oldLoan = oldLoanSnap.data() as Loan;
+
+      if (oldLoan.loanSource !== 'gold_loan') throw new Error('Renewal is only for gold loans');
+
+      // Clone collateral items at new gold rate
+      const newCollaterals = (oldLoan.collaterals ?? []).map(c => {
+        if (c.type !== 'gold') return { ...c };
+        const nw = c.netWeight ?? c.grossWeight ?? c.weight ?? 0;
+        const newGoldValue = computeGoldValue(nw, c.purity ?? '22K', newGoldRatePerGram);
+        return { ...c, goldRatePerGram: newGoldRatePerGram, goldValue: newGoldValue, estimatedValue: newGoldValue, isReleased: false, releasedDate: null };
+      });
+
+      const goldAgg = computeGoldAggregates(newCollaterals);
+      const ltv = newLtvRatio ?? oldLoan.ltvRatio ?? rbiLtvRatio(goldAgg.totalGoldValue);
+      const eligibleAmount = Math.round(goldAgg.totalGoldValue * ltv);
+      const annualRate = newInterestRate ?? oldLoan.interestRate ?? 0;
+
+      // Create new loan
+      const newLoanRef = doc(collection(this.firestore, 'loans'));
+      newLoanId = newLoanRef.id;
+      const now = new Date();
+      const month = getMonthString(now);
+
+      transaction.set(newLoanRef, {
+        id: newLoanRef.id,
+        date: Timestamp.fromDate(now),
+        amount: eligibleAmount,
+        type: oldLoan.type,
+        personName: oldLoan.personName,
+        purpose: note || `Gold loan renewal from ${oldLoan.loanSourceName ?? 'previous loan'}`,
+        segment: oldLoan.segment,
+        segmentName: oldLoan.segmentName,
+        repaymentStatus: 'pending',
+        totalRepaid: 0,
+        balanceRemaining: eligibleAmount,
+        recordedBy: user.uid,
+        recordedByName: user.displayName,
+        createdAt: serverTimestamp(),
+        isDeleted: false,
+        timeline: [{ action: 'created', by: user.uid, byName: user.displayName, at: Timestamp.now(),
+          changes: `gold loan renewed at ₹${newGoldRatePerGram.toLocaleString('en-IN')}/g` }],
+        month, year: now.getFullYear(),
+        loanCategory: 'formal',
+        loanSource: 'gold_loan',
+        loanSourceName: oldLoan.loanSourceName,
+        accountNumber: oldLoan.accountNumber,
+        sanctionedAmount: eligibleAmount,
+        netDisbursedAmount: eligibleAmount,
+        totalDeductions: 0,
+        repaymentType: oldLoan.repaymentType ?? 'interest_only',
+        interestType: oldLoan.interestType ?? 'fixed',
+        interestFrequency: oldLoan.interestFrequency ?? 'monthly',
+        interestRateInput: oldLoan.interestRateInput,
+        interestRate: annualRate,
+        interestPaymentFrequency: oldLoan.interestPaymentFrequency ?? 'monthly',
+        interestAmountPerPeriod: oldLoan.repaymentType === 'interest_only'
+          ? Math.round(eligibleAmount * (annualRate / 12 / 100) * 100) / 100 : null,
+        totalInterestPaid: 0, totalPrincipalPaid: 0, outstandingBalance: eligibleAmount,
+        totalPartPayments: 0, totalPenaltyPaid: 0,
+        nextPaymentDueDate: Timestamp.fromDate(new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)),
+        nextPaymentNumber: 1,
+        collaterals: newCollaterals,
+        totalCollateralValue: newCollaterals.reduce((s: number, c: any) => s + c.estimatedValue, 0),
+        pledgeReceiptNumber: oldLoan.pledgeReceiptNumber,
+        ltvRatio: ltv,
+        totalGoldWeight: goldAgg.totalGoldWeight,
+        totalGoldValue: goldAgg.totalGoldValue,
+        eligibleLoanAmount: eligibleAmount,
+        renewedFromLoanId: oldLoanId,
+        isRenewal: true,
+        utilizationTotal: 0, utilizationRemaining: eligibleAmount,
+        heldByUid: oldLoan.heldByUid ?? null, heldByName: oldLoan.heldByName ?? null,
+        segments: oldLoan.segments ?? [oldLoan.segment],
+        segmentNames: oldLoan.segmentNames ?? [oldLoan.segmentName],
+        isSubsidized: oldLoan.isSubsidized ?? false,
+        subsidyDetails: oldLoan.subsidyDetails ?? null,
+        effectiveRate: oldLoan.effectiveRate ?? null,
+      });
+
+      // Close old loan
+      transaction.update(oldLoanRef, {
+        repaymentStatus: 'completed',
+        closureReason: 'renewed',
+        loanClosureDate: Timestamp.fromDate(now),
+        renewedByLoanId: newLoanId,
+        nextPaymentDueDate: null, nextPaymentNumber: null,
+        timeline: arrayUnion({
+          action: 'updated', by: user.uid, byName: user.displayName, at: Timestamp.now(),
+          changes: `renewed — gold revalued at ₹${newGoldRatePerGram.toLocaleString('en-IN')}/g → new loan ₹${eligibleAmount.toLocaleString('en-IN')}`,
+        }),
+      });
+    });
+
+    return newLoanId;
+  }
+
+  /** Top-up gold loan — increase amount based on current gold value headroom. 1 read, 1 write */
+  async topUpGoldLoan(
+    loanId: string,
+    currentGoldRatePerGram: number,
+    additionalAmount: number,
+    note?: string,
+  ): Promise<void> {
+    const user = this.authService.userProfile()!;
+
+    await runTransaction(this.firestore, async (transaction) => {
+      const loanRef = doc(this.firestore, 'loans', loanId);
+      const loanSnap = await transaction.get(loanRef);
+      const loan = loanSnap.data() as Loan;
+
+      if (loan.loanSource !== 'gold_loan') throw new Error('Top-up is only for gold loans');
+
+      // Revalue gold at current rate
+      const goldItems = (loan.collaterals ?? []).filter(c => c.type === 'gold' && !c.isReleased);
+      const currentGoldValue = goldItems.reduce((sum, c) => {
+        const nw = c.netWeight ?? c.grossWeight ?? c.weight ?? 0;
+        return sum + computeGoldValue(nw, c.purity ?? '22K', currentGoldRatePerGram);
+      }, 0);
+
+      const maxLtv = loan.ltvRatio ?? rbiLtvRatio(currentGoldValue);
+      const outstanding = loan.outstandingBalance ?? loan.balanceRemaining;
+      const headroom = Math.round(currentGoldValue * maxLtv - outstanding);
+
+      if (additionalAmount > headroom) {
+        throw new Error(`Top-up ₹${additionalAmount.toLocaleString('en-IN')} exceeds headroom ₹${headroom.toLocaleString('en-IN')}`);
+      }
+
+      transaction.update(loanRef, {
+        sanctionedAmount: increment(additionalAmount),
+        amount: increment(additionalAmount),
+        outstandingBalance: increment(additionalAmount),
+        balanceRemaining: increment(additionalAmount),
+        netDisbursedAmount: increment(additionalAmount),
+        utilizationRemaining: increment(additionalAmount),
+        totalGoldValue: currentGoldValue,
+        eligibleLoanAmount: Math.round(currentGoldValue * maxLtv),
+        timeline: arrayUnion({
+          action: 'updated', by: user.uid, byName: user.displayName, at: Timestamp.now(),
+          changes: `gold loan top-up: +₹${additionalAmount.toLocaleString('en-IN')} (gold rate ₹${currentGoldRatePerGram.toLocaleString('en-IN')}/g, headroom ₹${headroom.toLocaleString('en-IN')})`,
         }),
       });
     });

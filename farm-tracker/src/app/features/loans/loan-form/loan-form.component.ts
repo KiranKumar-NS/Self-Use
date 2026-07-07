@@ -44,6 +44,13 @@ interface CollateralRow {
   purity: string;
   documentReference: string;
   note: string;
+  // Gold-specific
+  itemName: string;
+  quantity: number;
+  grossWeight: number | null;
+  netWeight: number | null;
+  goldRatePerGram: number | null;
+  goldValue: number | null;
 }
 
 interface DocRow {
@@ -404,59 +411,147 @@ interface DocRow {
             </div>
           }
 
+          <!-- Gold Loan: Rate & LTV (before collateral items) -->
+          @if (loanSource === 'gold_loan') {
+            <h3 class="section-title">Gold Valuation
+              <mat-icon class="info-icon" matTooltip="Enter the gold rate per gram (24K pure gold rate). LTV ratio is set by RBI: up to Rs.2.5L→85%, Rs.2.5L-5L→80%, above Rs.5L→75%. You can override if your lender uses a different ratio.">info</mat-icon>
+            </h3>
+            <div class="form-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Pledge Receipt Number</mat-label>
+                <input matInput [(ngModel)]="pledgeReceiptNumber" name="pledgeReceipt" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Gold Rate per Gram (₹)</mat-label>
+                <input matInput type="number" [(ngModel)]="globalGoldRate" name="goldRate" min="0"
+                  (ngModelChange)="onGlobalGoldRateChange()" />
+                <mat-icon matSuffix class="info-icon" matTooltip="Enter today's pure gold (24K) rate per gram. e.g. Rs.14,662. This auto-fills all gold items. You can override per item.">info</mat-icon>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>LTV Ratio</mat-label>
+                <mat-select [(ngModel)]="ltvRatio" name="ltvRatio" (ngModelChange)="goldTrigger.update(v => v + 1)">
+                  <mat-option [value]="null">Auto (RBI Tier)</mat-option>
+                  <mat-option [value]="0.85">85% (up to Rs.2.5L)</mat-option>
+                  <mat-option [value]="0.80">80% (Rs.2.5L - 5L)</mat-option>
+                  <mat-option [value]="0.75">75% (above Rs.5L)</mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
+          }
+
           <!-- Collateral -->
           <h3 class="section-title">
-            Collateral / Security
-            <mat-icon class="info-icon" matTooltip="What you pledged against the loan. e.g. Gold chain (30g, 22K, value Rs.1,50,000), Farm land, Fixed Deposit. Track release when loan is closed.">info</mat-icon>
+            {{ loanSource === 'gold_loan' ? 'Gold Items' : 'Collateral / Security' }}
+            <mat-icon class="info-icon" matTooltip="{{loanSource === 'gold_loan' ? 'List each gold item separately. Enter gross weight, deduct stones/making to get net weight. Gold value is auto-calculated from net weight × purity × rate.' : 'What you pledged against the loan. e.g. Gold chain, Farm land, Fixed Deposit.'}}">info</mat-icon>
             <button mat-icon-button type="button" (click)="addCollateralRow()"><mat-icon>add_circle</mat-icon></button>
           </h3>
           @for (col of collaterals; track $index) {
             <div class="collateral-row">
-              <div class="form-row">
-                <mat-form-field appearance="outline">
-                  <mat-label>Type</mat-label>
-                  <mat-select [(ngModel)]="col.type" [name]="'colType' + $index">
-                    <mat-option value="gold">Gold</mat-option>
-                    <mat-option value="property">Property</mat-option>
-                    <mat-option value="vehicle">Vehicle</mat-option>
-                    <mat-option value="fixed_deposit">Fixed Deposit</mat-option>
-                    <mat-option value="other">Other</mat-option>
-                  </mat-select>
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Description</mat-label>
-                  <input matInput [(ngModel)]="col.description" [name]="'colDesc' + $index" />
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Estimated Value</mat-label>
-                  <input matInput type="number" [(ngModel)]="col.estimatedValue" [name]="'colVal' + $index" min="0" />
-                </mat-form-field>
-              </div>
-              @if (col.type === 'gold') {
+              @if (loanSource === 'gold_loan' && col.type === 'gold') {
+                <!-- Enhanced gold item row -->
                 <div class="form-row">
                   <mat-form-field appearance="outline">
-                    <mat-label>Weight (grams)</mat-label>
-                    <input matInput type="number" [(ngModel)]="col.weight" [name]="'colWt' + $index" min="0" step="0.1" />
+                    <mat-label>Item Name</mat-label>
+                    <input matInput [(ngModel)]="col.itemName" [name]="'colItem' + $index" placeholder="e.g. Chain, Bangle, Ring" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Qty</mat-label>
+                    <input matInput type="number" [(ngModel)]="col.quantity" [name]="'colQty' + $index" min="1" style="max-width:80px" />
                   </mat-form-field>
                   <mat-form-field appearance="outline">
                     <mat-label>Purity</mat-label>
-                    <mat-select [(ngModel)]="col.purity" [name]="'colPur' + $index">
+                    <mat-select [(ngModel)]="col.purity" [name]="'colPur' + $index" (ngModelChange)="recalculateGold()">
                       <mat-option value="24K">24K</mat-option>
                       <mat-option value="22K">22K</mat-option>
                       <mat-option value="18K">18K</mat-option>
                     </mat-select>
                   </mat-form-field>
+                  <button mat-icon-button type="button" color="warn" (click)="removeCollateralRow($index); recalculateGold()">
+                    <mat-icon>remove_circle</mat-icon>
+                  </button>
+                </div>
+                <div class="form-row">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Gross Weight (g)</mat-label>
+                    <input matInput type="number" [(ngModel)]="col.grossWeight" [name]="'colGross' + $index" min="0" step="0.1"
+                      (ngModelChange)="recalculateGold()" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Net Weight (g)</mat-label>
+                    <input matInput type="number" [(ngModel)]="col.netWeight" [name]="'colNet' + $index" min="0" step="0.1"
+                      (ngModelChange)="recalculateGold()" />
+                    <mat-icon matSuffix class="info-icon" matTooltip="Weight after deducting stones, clasps, and making. This is what the lender values.">info</mat-icon>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Rate/g (₹)</mat-label>
+                    <input matInput type="number" [(ngModel)]="col.goldRatePerGram" [name]="'colRate' + $index" min="0"
+                      (ngModelChange)="recalculateGold()" />
+                  </mat-form-field>
+                </div>
+                @if (col.goldValue) {
+                  <div class="computed-info">Value: {{ col.goldValue | currencyInr }} ({{ col.netWeight ?? col.grossWeight }}g × {{ col.purity }})</div>
+                }
+              } @else {
+                <!-- Generic collateral row (non-gold or non-gold-loan) -->
+                <div class="form-row">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Type</mat-label>
+                    <mat-select [(ngModel)]="col.type" [name]="'colType' + $index">
+                      <mat-option value="gold">Gold</mat-option>
+                      <mat-option value="property">Property</mat-option>
+                      <mat-option value="vehicle">Vehicle</mat-option>
+                      <mat-option value="fixed_deposit">Fixed Deposit</mat-option>
+                      <mat-option value="other">Other</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Description</mat-label>
+                    <input matInput [(ngModel)]="col.description" [name]="'colDesc' + $index" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Estimated Value</mat-label>
+                    <input matInput type="number" [(ngModel)]="col.estimatedValue" [name]="'colVal' + $index" min="0" />
+                  </mat-form-field>
+                </div>
+                @if (col.type === 'gold') {
+                  <div class="form-row">
+                    <mat-form-field appearance="outline">
+                      <mat-label>Weight (grams)</mat-label>
+                      <input matInput type="number" [(ngModel)]="col.weight" [name]="'colWt' + $index" min="0" step="0.1" />
+                    </mat-form-field>
+                    <mat-form-field appearance="outline">
+                      <mat-label>Purity</mat-label>
+                      <mat-select [(ngModel)]="col.purity" [name]="'colPur' + $index">
+                        <mat-option value="24K">24K</mat-option>
+                        <mat-option value="22K">22K</mat-option>
+                        <mat-option value="18K">18K</mat-option>
+                      </mat-select>
+                    </mat-form-field>
+                  </div>
+                }
+                <div class="form-row">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Document Reference</mat-label>
+                    <input matInput [(ngModel)]="col.documentReference" [name]="'colRef' + $index" />
+                  </mat-form-field>
+                  <button mat-icon-button type="button" color="warn" (click)="removeCollateralRow($index)">
+                    <mat-icon>remove_circle</mat-icon>
+                  </button>
                 </div>
               }
-              <div class="form-row">
-                <mat-form-field appearance="outline">
-                  <mat-label>Document Reference</mat-label>
-                  <input matInput [(ngModel)]="col.documentReference" [name]="'colRef' + $index" />
-                </mat-form-field>
-                <button mat-icon-button type="button" color="warn" (click)="removeCollateralRow($index)">
-                  <mat-icon>remove_circle</mat-icon>
-                </button>
-              </div>
+            </div>
+          }
+
+          <!-- Gold summary -->
+          @if (loanSource === 'gold_loan' && totalGoldValue() > 0) {
+            <div class="computed-info highlight">
+              Total Gold: {{ totalGoldWeight() | number:'1.1-1' }}g
+              &nbsp;|&nbsp; Value: {{ totalGoldValue() | currencyInr }}
+              &nbsp;|&nbsp; LTV: {{ (effectiveLtv() * 100) | number:'1.0-0' }}%
+              &nbsp;|&nbsp; Eligible: {{ eligibleAmount() | currencyInr }}
+              @if (sanctionedAmount > eligibleAmount()) {
+                <span style="color:#dc2626"> (Sanctioned exceeds eligible!)</span>
+              }
             </div>
           }
 
@@ -578,6 +673,12 @@ export class LoanFormComponent implements OnInit {
   heldByName = '';
   activeUsers = signal<{ uid: string; displayName: string }[]>([]);
 
+  // Gold loan
+  globalGoldRate = 0;
+  pledgeReceiptNumber = '';
+  ltvRatio: number | null = null;
+  goldTrigger = signal(0);
+
   // Repayment
   repaymentType: RepaymentType = 'emi';
   interestType: InterestType = 'fixed';
@@ -616,6 +717,26 @@ export class LoanFormComponent implements OnInit {
   emiPreview = signal<EMIEntry[]>([]);
   totalDeductionsAmount = signal(0);
   netDisbursedAmount = signal(0);
+
+  // Gold computed
+  totalGoldWeight = computed(() => {
+    this.goldTrigger(); // force re-eval
+    return this.collaterals.filter(c => c.type === 'gold').reduce((sum, c) => sum + (c.netWeight ?? c.grossWeight ?? 0), 0);
+  });
+  totalGoldValue = computed(() => {
+    this.goldTrigger();
+    return this.collaterals.filter(c => c.type === 'gold').reduce((sum, c) => sum + (c.goldValue ?? 0), 0);
+  });
+  effectiveLtv = computed(() => {
+    const tv = this.totalGoldValue();
+    if (tv <= 0) return 0;
+    return this.ltvRatio ?? this.loanService.rbiLtvRatio(tv);
+  });
+  eligibleAmount = computed(() => {
+    const tv = this.totalGoldValue();
+    if (tv <= 0) return 0;
+    return Math.round(tv * this.effectiveLtv());
+  });
 
   async ngOnInit(): Promise<void> {
     const segs = await this.segmentService.getAll();
@@ -673,6 +794,31 @@ export class LoanFormComponent implements OnInit {
       this.repaymentType = (this.loanSource === 'individual' || this.loanSource === 'gold_loan') ? 'interest_only' : 'emi';
       this.interestFrequency = (this.loanSource === 'individual' || this.loanSource === 'gold_loan') ? 'monthly' : 'annual';
     }
+  }
+
+  recalculateGold(): void {
+    for (const col of this.collaterals) {
+      if (col.type !== 'gold') continue;
+      const rate = col.goldRatePerGram ?? this.globalGoldRate;
+      const nw = col.netWeight ?? col.grossWeight ?? col.weight ?? 0;
+      if (nw > 0 && rate > 0) {
+        col.goldValue = this.loanService.computeGoldValue(nw, col.purity, rate);
+        col.estimatedValue = col.goldValue;
+      } else {
+        col.goldValue = null;
+      }
+    }
+    this.goldTrigger.update(v => v + 1);
+    this.recalculate();
+  }
+
+  onGlobalGoldRateChange(): void {
+    for (const col of this.collaterals) {
+      if (col.type === 'gold' && !col.goldRatePerGram) {
+        col.goldRatePerGram = this.globalGoldRate;
+      }
+    }
+    this.recalculateGold();
   }
 
   onHeldByChange(): void {
@@ -751,6 +897,8 @@ export class LoanFormComponent implements OnInit {
     this.collaterals.push({
       type: 'gold', description: '', estimatedValue: 0,
       weight: null, purity: '22K', documentReference: '', note: '',
+      itemName: '', quantity: 1, grossWeight: null, netWeight: null,
+      goldRatePerGram: this.globalGoldRate || null, goldValue: null,
     });
   }
   removeCollateralRow(i: number): void { this.collaterals.splice(i, 1); }
@@ -865,14 +1013,20 @@ export class LoanFormComponent implements OnInit {
         isFinanced: d.isFinanced,
         note: d.note || undefined,
       })) as any[],
-      collaterals: this.collaterals.filter(c => c.description).map(c => ({
+      collaterals: this.collaterals.filter(c => c.description || c.itemName).map(c => ({
         type: c.type,
-        description: c.description,
+        description: c.description || c.itemName || '',
         estimatedValue: c.estimatedValue,
         weight: c.type === 'gold' ? (c.weight ?? undefined) : undefined,
         purity: c.type === 'gold' ? c.purity : undefined,
         documentReference: c.documentReference || undefined,
         note: c.note || undefined,
+        itemName: c.type === 'gold' ? (c.itemName || undefined) : undefined,
+        quantity: c.type === 'gold' ? (c.quantity || undefined) : undefined,
+        grossWeight: c.type === 'gold' ? (c.grossWeight ?? undefined) : undefined,
+        netWeight: c.type === 'gold' ? (c.netWeight ?? undefined) : undefined,
+        goldRatePerGram: c.type === 'gold' ? (c.goldRatePerGram ?? undefined) : undefined,
+        goldValue: c.type === 'gold' ? (c.goldValue ?? undefined) : undefined,
       })),
       documents: this.loanDocs.filter(d => d.referenceNumber || d.note).map(d => ({
         type: d.type,
@@ -886,7 +1040,10 @@ export class LoanFormComponent implements OnInit {
       effectiveRate: this.isSubsidized ? this.effectiveRate : undefined,
       heldByUid: this.heldByUid || undefined,
       heldByName: this.heldByName || undefined,
+      pledgeReceiptNumber: this.loanSource === 'gold_loan' ? (this.pledgeReceiptNumber || undefined) : undefined,
+      ltvRatio: this.loanSource === 'gold_loan' ? (this.ltvRatio ?? undefined) : undefined,
       replacesLoanId: this.route.snapshot.queryParams['transferFrom'] || undefined,
+      renewedFromLoanId: this.route.snapshot.queryParams['renewFrom'] || undefined,
     };
 
     // Use balance transfer if replacing an old loan

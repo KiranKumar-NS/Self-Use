@@ -19,7 +19,7 @@ export type DeductionType =
   | 'valuation_charges'
   | 'stamp_duty'
   | 'other';
-export type ClosureReason = 'fully_paid' | 'pre_closed' | 'balance_transfer';
+export type ClosureReason = 'fully_paid' | 'pre_closed' | 'balance_transfer' | 'renewed';
 export type CollateralType = 'gold' | 'property' | 'vehicle' | 'fixed_deposit' | 'other';
 export type LoanDocumentType = 'sanction_letter' | 'agreement' | 'insurance_policy' | 'noc' | 'other';
 
@@ -48,6 +48,14 @@ export interface CollateralItem {
   note?: string;
   isReleased?: boolean;
   releasedDate?: Timestamp;
+
+  // Gold-specific fields
+  itemName?: string;
+  quantity?: number;
+  grossWeight?: number;
+  netWeight?: number;
+  goldRatePerGram?: number;
+  goldValue?: number;
 }
 
 export interface RateChangeEntry {
@@ -168,6 +176,16 @@ export interface Loan {
   // Documents / References
   documents?: LoanDocument[];
 
+  // Gold loan fields
+  pledgeReceiptNumber?: string;
+  ltvRatio?: number;
+  totalGoldWeight?: number;
+  totalGoldValue?: number;
+  eligibleLoanAmount?: number;
+  renewedFromLoanId?: string;
+  renewedByLoanId?: string;
+  isRenewal?: boolean;
+
   // Government subsidy
   isSubsidized?: boolean;
   subsidyDetails?: string;
@@ -269,4 +287,9 @@ export interface LoanFormData {
   subsidyDetails?: string;
   effectiveRate?: number;
   replacesLoanId?: string;
+
+  // Gold loan
+  pledgeReceiptNumber?: string;
+  ltvRatio?: number;
+  renewedFromLoanId?: string;
 }
