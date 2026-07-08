@@ -308,7 +308,7 @@ export class AnimalFormComponent implements OnInit {
           year: getYear(this.originDate),
         });
       }
-      this.router.navigate(['/animals']);
+      this.router.navigate(['/stock']);
     } catch (err: any) {
       this.error.set(err.message || 'Failed to save');
     } finally {
@@ -317,6 +317,6 @@ export class AnimalFormComponent implements OnInit {
   }
 
   cancel(): void {
-    this.router.navigate(['/animals']);
+    this.router.navigate(['/stock']);
   }
 }

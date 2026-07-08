@@ -20,9 +20,9 @@ import { MatIconModule } from '@angular/material/icon';
         <mat-icon>account_balance</mat-icon>
         <span>Loans</span>
       </a>
-      <a routerLink="/animals" routerLinkActive="active" class="nav-item">
-        <mat-icon>pets</mat-icon>
-        <span>Animals</span>
+      <a routerLink="/stock" routerLinkActive="active" class="nav-item">
+        <mat-icon>inventory_2</mat-icon>
+        <span>Stock</span>
       </a>
       <button class="nav-item" (click)="moreClick.emit()">
         <mat-icon>more_horiz</mat-icon>

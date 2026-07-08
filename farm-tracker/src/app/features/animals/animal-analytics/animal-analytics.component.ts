@@ -682,7 +682,7 @@ export class AnimalAnalyticsComponent implements OnInit {
     return `${names[parseInt(m, 10) - 1]} ${year}`;
   }
 
-  viewAnimal(id: string): void { this.router.navigate(['/animals', id]); }
+  viewAnimal(id: string): void { this.router.navigate(['/stock', id]); }
   viewBuyer(id: string): void { this.router.navigate(['/buyers', id]); }
-  back(): void { this.router.navigate(['/animals']); }
+  back(): void { this.router.navigate(['/stock']); }
 }

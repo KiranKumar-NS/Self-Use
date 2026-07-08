@@ -112,7 +112,7 @@ import { DatePipe } from '@angular/common';
         <mat-card class="linked-card">
           <div class="linked-animals">
             @for (name of transaction()!.linkedAnimalNames || []; track $index) {
-              <a [routerLink]="['/animals', transaction()!.linkedAnimalIds![$index]]" class="animal-chip">
+              <a [routerLink]="['/stock', transaction()!.linkedAnimalIds![$index]]" class="animal-chip">
                 <mat-icon>pets</mat-icon> {{ name }}
               </a>
             }

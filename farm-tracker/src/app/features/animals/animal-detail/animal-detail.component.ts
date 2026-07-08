@@ -321,6 +321,6 @@ export class AnimalDetailComponent implements OnInit {
     });
   }
 
-  edit(): void { this.router.navigate(['/animals', this.animalId, 'edit']); }
-  back(): void { this.router.navigate(['/animals']); }
+  edit(): void { this.router.navigate(['/stock', this.animalId, 'edit']); }
+  back(): void { this.router.navigate(['/stock']); }
 }

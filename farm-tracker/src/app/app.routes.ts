@@ -26,15 +26,12 @@ export const routes: Routes = [
         canActivate: [roleGuard(['admin', 'manager'])],
       },
       {
-        path: 'inventory',
-        loadChildren: () => import('./features/inventory/inventory.routes').then(m => m.INVENTORY_ROUTES),
+        path: 'stock',
+        loadChildren: () => import('./features/stock/stock.routes').then(m => m.STOCK_ROUTES),
         canActivate: [roleGuard(['admin', 'manager'])],
       },
-      {
-        path: 'animals',
-        loadChildren: () => import('./features/animals/animals.routes').then(m => m.ANIMAL_ROUTES),
-        canActivate: [roleGuard(['admin', 'manager'])],
-      },
+      { path: 'animals', redirectTo: 'stock', pathMatch: 'prefix' as const },
+      { path: 'inventory', redirectTo: 'stock', pathMatch: 'full' as const },
       {
         path: 'buyers',
         loadChildren: () => import('./features/buyers/buyers.routes').then(m => m.BUYER_ROUTES),

@@ -35,14 +35,9 @@ import { MatIconModule } from '@angular/material/icon';
             <span>Owe & Lent</span>
           </a>
 
-          <a routerLink="/inventory" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
+          <a routerLink="/stock" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
             <mat-icon>inventory_2</mat-icon>
-            <span>Inventory</span>
-          </a>
-
-          <a routerLink="/animals" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
-            <mat-icon>pets</mat-icon>
-            <span>Animals</span>
+            <span>Stock</span>
           </a>
 
           <a routerLink="/buyers" routerLinkActive="active" class="nav-item" (click)="closed.emit()">

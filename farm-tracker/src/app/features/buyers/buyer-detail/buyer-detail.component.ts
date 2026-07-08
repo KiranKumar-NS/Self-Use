@@ -161,6 +161,6 @@ export class BuyerDetailComponent implements OnInit {
     });
   }
 
-  viewAnimal(id: string): void { this.router.navigate(['/animals', id]); }
+  viewAnimal(id: string): void { this.router.navigate(['/stock', id]); }
   back(): void { this.router.navigate(['/buyers']); }
 }

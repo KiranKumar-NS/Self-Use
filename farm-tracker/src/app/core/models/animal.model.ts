@@ -83,5 +83,6 @@ export interface AnimalFormData {
   origin: 'birth' | 'purchase';
   originDate: Date;
   purchasePrice?: number;
+  originInventoryEventId?: string;
   note?: string;
 }

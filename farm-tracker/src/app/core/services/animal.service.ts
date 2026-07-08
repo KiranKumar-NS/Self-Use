@@ -60,6 +60,7 @@ export class AnimalService {
     if (data.breed) animalDoc['breed'] = data.breed;
     if (data.gender) animalDoc['gender'] = data.gender;
     if (data.batchLabel) animalDoc['batchLabel'] = data.batchLabel;
+    if (data.originInventoryEventId) animalDoc['originInventoryEventId'] = data.originInventoryEventId;
     if (data.note) animalDoc['note'] = data.note;
 
     batch.set(animalRef, animalDoc);
