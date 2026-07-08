@@ -10,8 +10,11 @@ import { Category } from '../../../core/models/category.model';
 import { Segment } from '../../../core/models/segment.model';
 import { AppUser } from '../../../core/models/user.model';
 import { TransactionFormData, PaymentMethod, IncomePaymentStatus, ExpensePaymentStatus, SaleUnit } from '../../../core/models/transaction.model';
+import { AnimalService } from '../../../core/services/animal.service';
+import { Animal } from '../../../core/models/animal.model';
 
 import { MatIconModule } from '@angular/material/icon';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
 import { normalizeName, nameKey } from '../../../core/utils/name.utils';
 import { MatCardModule } from '@angular/material/card';
@@ -29,7 +32,7 @@ import { MatRadioModule } from '@angular/material/radio';
   imports: [
     FormsModule, MatCardModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatDatepickerModule, MatRadioModule,
-    MatIconModule,
+    MatIconModule, MatCheckboxModule,
   ],
   template: `
     <div class="page-header">
@@ -93,7 +96,7 @@ import { MatRadioModule } from '@angular/material/radio';
         <div class="form-row">
           <mat-form-field appearance="outline">
             <mat-label>Segment</mat-label>
-            <mat-select [(ngModel)]="segment" name="segment" required>
+            <mat-select [(ngModel)]="segment" name="segment" required (selectionChange)="loadActiveAnimals()">
               @for (seg of filteredSegments(); track seg.id) {
                 <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
               }
@@ -170,6 +173,48 @@ import { MatRadioModule } from '@angular/material/radio';
           }
         </div>
 
+        <!-- Link to Animals (expense + animal segment) -->
+        @if (type === 'expense' && isAnimalSegment()) {
+          <div class="animal-link-section">
+            <div class="section-header" (click)="animalSectionOpen = !animalSectionOpen">
+              <mat-icon>pets</mat-icon>
+              <span>Link to Animals (optional)</span>
+              @if (selectedAnimalIds.length > 0) {
+                <span class="link-count">{{ selectedAnimalIds.length }} linked</span>
+              }
+              <mat-icon class="toggle-icon" [class.expanded]="animalSectionOpen">expand_more</mat-icon>
+            </div>
+            @if (animalSectionOpen) {
+              <div class="split-row">
+                <label class="field-label">Split</label>
+                <mat-select [(ngModel)]="animalSplitMode" name="animalSplitMode" class="split-select">
+                  <mat-option value="equal">Equal</mat-option>
+                  <mat-option value="by_days">By days active</mat-option>
+                </mat-select>
+                @if (animalSplitMode === 'by_days') {
+                  <span class="split-hint">Older animals get bigger share</span>
+                }
+              </div>
+              <div class="animal-list">
+                @if (activeAnimals().length === 0) {
+                  <div class="no-animals">No active animals in this segment.</div>
+                } @else {
+                  @for (animal of activeAnimals(); track animal.id) {
+                    <div class="animal-row">
+                      <mat-checkbox [checked]="isAnimalSelected(animal.id)" (change)="toggleAnimalSelection(animal.id)">
+                        {{ animalService.getDisplayName(animal) }}
+                        @if (animal.breed) {
+                          <span class="breed-tag">({{ animal.breed }})</span>
+                        }
+                      </mat-checkbox>
+                    </div>
+                  }
+                }
+              </div>
+            }
+          </div>
+        }
+
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Description</mat-label>
           <textarea matInput [(ngModel)]="description" name="description" rows="3"></textarea>
@@ -205,6 +250,23 @@ import { MatRadioModule } from '@angular/material/radio';
       background: none; border: none; color: var(--color-primary); font-weight: 700;
       cursor: pointer; text-decoration: underline; padding: 0; font-size: 0.8rem;
     }
+    .animal-link-section {
+      border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 16px;
+    }
+    .section-header {
+      display: flex; align-items: center; gap: 8px; cursor: pointer;
+      font-size: 0.85rem; color: #475569; font-weight: 600;
+    }
+    .section-header .toggle-icon { margin-left: auto; transition: transform 0.2s; font-size: 20px; width: 20px; height: 20px; }
+    .section-header .toggle-icon.expanded { transform: rotate(180deg); }
+    .link-count { font-size: 0.7rem; background: var(--color-primary); color: white; padding: 1px 8px; border-radius: 10px; }
+    .split-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+    .split-select { width: 140px; }
+    .split-hint { font-size: 0.7rem; color: #64748b; font-style: italic; }
+    .animal-list { margin-top: 8px; max-height: 200px; overflow-y: auto; }
+    .animal-row { padding: 4px 0; border-bottom: 1px solid #f1f5f9; }
+    .breed-tag { color: #7c3aed; font-size: 0.8rem; }
+    .no-animals { color: #94a3b8; font-size: 0.85rem; padding: 8px 0; }
     @media (max-width: 640px) {
       .form-row { flex-direction: column; gap: 0.5rem; }
       .qty-row { flex-direction: row; flex-wrap: wrap; }
@@ -221,6 +283,7 @@ export class TransactionFormComponent implements OnInit {
   private categoryService = inject(CategoryService);
   private segmentService = inject(SegmentService);
   private userService = inject(UserService);
+  animalService = inject(AnimalService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
@@ -252,6 +315,13 @@ export class TransactionFormComponent implements OnInit {
   suggestedName = '';
   private knownNames: string[] = [];
   private editId = '';
+
+  // Animal linking
+  animalSectionOpen = false;
+  activeAnimals = signal<Animal[]>([]);
+  selectedAnimalIds: string[] = [];
+  oldLinkedAnimalIds: string[] = [];
+  animalSplitMode: 'equal' | 'by_days' = 'equal';
 
   async ngOnInit(): Promise<void> {
     const [categories, segments, users] = await Promise.all([
@@ -309,6 +379,13 @@ export class TransactionFormComponent implements OnInit {
         this.paymentStatus = txn.paymentStatus || 'received';
         this.expensePaymentStatus = txn.expensePaymentStatus || 'paid';
         this.onTypeChange();
+
+        // Load existing animal links
+        if (txn.linkedAnimalIds?.length) {
+          this.selectedAnimalIds = [...txn.linkedAnimalIds];
+          this.oldLinkedAnimalIds = [...txn.linkedAnimalIds];
+          await this.loadActiveAnimals();
+        }
       }
     }
   }
@@ -331,6 +408,31 @@ export class TransactionFormComponent implements OnInit {
   useSuggestedName(): void {
     this.customPaidByName = this.suggestedName;
     this.suggestedName = '';
+  }
+
+  isAnimalSegment(): boolean {
+    const seg = this.allSegments().find(s => s.id === this.segment);
+    return seg?.segmentType === 'animal';
+  }
+
+  isAnimalSelected(id: string): boolean {
+    return this.selectedAnimalIds.includes(id);
+  }
+
+  toggleAnimalSelection(id: string): void {
+    if (this.isAnimalSelected(id)) {
+      this.selectedAnimalIds = this.selectedAnimalIds.filter(i => i !== id);
+    } else {
+      this.selectedAnimalIds.push(id);
+    }
+  }
+
+  async loadActiveAnimals(): Promise<void> {
+    if (this.segment && this.isAnimalSegment()) {
+      this.activeAnimals.set(await this.animalService.getActiveBySegment(this.segment));
+    } else {
+      this.activeAnimals.set([]);
+    }
   }
 
   onQtyRateChange(): void {
@@ -383,10 +485,49 @@ export class TransactionFormComponent implements OnInit {
         year: getYear(this.date),
       };
 
+      // Add animal link data
+      if (this.selectedAnimalIds.length > 0) {
+        const animalNames = this.selectedAnimalIds.map(id => {
+          const a = this.activeAnimals().find(x => x.id === id);
+          return a ? this.animalService.getDisplayName(a) : id;
+        });
+        formData.linkedAnimalIds = this.selectedAnimalIds;
+        formData.linkedAnimalNames = animalNames;
+      }
+
       if (this.isEdit()) {
         await this.transactionService.update(this.editId, formData);
+
+        // Re-attribute animal costs if links or amount changed
+        if (this.type === 'expense') {
+          const linksChanged = JSON.stringify(this.oldLinkedAnimalIds.sort()) !== JSON.stringify(this.selectedAnimalIds.sort());
+          if (linksChanged || this.oldLinkedAnimalIds.length > 0) {
+            // Remove old attributions
+            for (const oldId of this.oldLinkedAnimalIds) {
+              await this.animalService.removeCost(oldId, this.editId);
+            }
+            // Apply new attributions
+            if (this.selectedAnimalIds.length > 0) {
+              await this.animalService.attributeCost(
+                this.selectedAnimalIds,
+                this.editId,
+                { category: this.category, categoryName: formData.categoryName, date: this.date, totalAmount: this.amount, description: this.description },
+                this.animalSplitMode
+              );
+            }
+          }
+        }
       } else {
-        await this.transactionService.create(formData);
+        const txnId = await this.transactionService.create(formData);
+        // Attribute costs to animals
+        if (this.selectedAnimalIds.length > 0 && this.type === 'expense') {
+          await this.animalService.attributeCost(
+            this.selectedAnimalIds,
+            txnId,
+            { category: this.category, categoryName: formData.categoryName, date: this.date, totalAmount: this.amount, description: this.description },
+            this.animalSplitMode
+          );
+        }
       }
       this.router.navigate(['/transactions']);
     } catch (err: any) {

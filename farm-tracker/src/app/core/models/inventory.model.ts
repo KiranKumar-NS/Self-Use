@@ -17,6 +17,7 @@ export interface InventoryEvent {
   month: string;
   year: number;
   isDeleted?: boolean;
+  linkedAnimalIds?: string[];
 }
 
 export interface InventoryEventFormData {

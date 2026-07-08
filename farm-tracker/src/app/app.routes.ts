@@ -31,6 +31,16 @@ export const routes: Routes = [
         canActivate: [roleGuard(['admin', 'manager'])],
       },
       {
+        path: 'animals',
+        loadChildren: () => import('./features/animals/animals.routes').then(m => m.ANIMAL_ROUTES),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
+        path: 'buyers',
+        loadChildren: () => import('./features/buyers/buyers.routes').then(m => m.BUYER_ROUTES),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
         path: 'tasks',
         loadChildren: () => import('./features/tasks/tasks.routes').then(m => m.TASK_ROUTES),
       },

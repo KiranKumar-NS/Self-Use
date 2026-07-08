@@ -3,6 +3,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Transaction } from '../models/transaction.model';
 import { Loan, Repayment } from '../models/loan.model';
+import { Animal } from '../models/animal.model';
+import { Buyer } from '../models/buyer.model';
 import { MonthlySummary } from '../models/monthly-summary.model';
 import { getMonthName } from '../utils/date.utils';
 
@@ -499,7 +501,9 @@ export class ExportService {
     income: Transaction[],
     loans: Loan[],
     inventoryEvents: any[],
-    period: string
+    period: string,
+    animals?: Animal[],
+    buyers?: Buyer[]
   ): Promise<void> {
     const XLSX = await import('xlsx');
 
@@ -641,6 +645,62 @@ export class ExportService {
     }));
     const loanSheet = XLSX.utils.json_to_sheet(loanRows);
 
+    // --- Animals Sheet ---
+    let animalSheet: any = null;
+    if (animals?.length) {
+      const animalRows = animals.map(a => ({
+        'ID': a.id,
+        'Segment': a.segment,
+        'Segment Name': a.segmentName,
+        'Tracking Mode': a.trackingMode,
+        'Tag': a.tag ?? '',
+        'Name': a.name ?? '',
+        'Breed': a.breed ?? '',
+        'Gender': a.gender ?? '',
+        'Batch Label': a.batchLabel ?? '',
+        'Batch Size': a.batchSize,
+        'Current Count': a.currentCount,
+        'Origin': a.origin,
+        'Origin Date': ts(a.originDate),
+        'Purchase Price': a.purchasePrice ?? '',
+        'Status': a.status,
+        'Total Costs': a.totalCosts,
+        'Total Invested': a.totalInvested,
+        'Sale Price': a.salePrice ?? '',
+        'Profit': a.profit ?? '',
+        'Profit Margin %': a.profitMargin ?? '',
+        'Buyer': a.buyerName ?? '',
+        'Buyer ID': a.buyerId ?? '',
+        'Exit Date': ts(a.exitDate),
+        'Exit Type': a.exitType ?? '',
+        'Sale Txn ID': a.saleTransactionId ?? '',
+        'Note': a.note ?? '',
+        'Cost Entries': a.costEntries?.length ?? 0,
+        'Created By': a.createdBy,
+        'Created By Name': a.createdByName,
+      }));
+      animalSheet = XLSX.utils.json_to_sheet(animalRows);
+    }
+
+    // --- Buyers Sheet ---
+    let buyerSheet: any = null;
+    if (buyers?.length) {
+      const buyerRows = buyers.map(b => ({
+        'ID': b.id,
+        'Name': b.name,
+        'Phone': b.phone ?? '',
+        'Location': b.location ?? '',
+        'Total Purchases': b.totalPurchases,
+        'Total Amount Paid': b.totalAmountPaid,
+        'Average Rate': b.averageRate ?? '',
+        'Last Purchase': ts(b.lastPurchaseDate),
+        'Note': b.note ?? '',
+        'Created By': b.createdBy,
+        'Created By Name': b.createdByName,
+      }));
+      buyerSheet = XLSX.utils.json_to_sheet(buyerRows);
+    }
+
     // Build workbook
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, expenseSheet, 'Expenses');
@@ -649,9 +709,19 @@ export class ExportService {
     if (eventRows.length > 0) {
       XLSX.utils.book_append_sheet(wb, eventSheet, 'Inventory Events');
     }
+    if (animalSheet) {
+      XLSX.utils.book_append_sheet(wb, animalSheet, 'Animals');
+    }
+    if (buyerSheet) {
+      XLSX.utils.book_append_sheet(wb, buyerSheet, 'Buyers');
+    }
 
     // Auto-width columns
-    [expenseSheet, incomeSheet, loanSheet, ...(eventRows.length > 0 ? [eventSheet] : [])].forEach(ws => {
+    const allSheets = [expenseSheet, incomeSheet, loanSheet,
+      ...(eventRows.length > 0 ? [eventSheet] : []),
+      ...(animalSheet ? [animalSheet] : []),
+      ...(buyerSheet ? [buyerSheet] : [])];
+    allSheets.forEach(ws => {
       const ref = ws['!ref'];
       if (!ref) return;
       const range = XLSX.utils.decode_range(ref);

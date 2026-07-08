@@ -20,9 +20,9 @@ import { MatIconModule } from '@angular/material/icon';
         <mat-icon>view_kanban</mat-icon>
         <span>Tasks</span>
       </a>
-      <a routerLink="/inventory" routerLinkActive="active" class="nav-item">
-        <mat-icon>inventory_2</mat-icon>
-        <span>Stock</span>
+      <a routerLink="/animals" routerLinkActive="active" class="nav-item">
+        <mat-icon>pets</mat-icon>
+        <span>Animals</span>
       </a>
       <button class="nav-item" (click)="moreClick.emit()">
         <mat-icon>more_horiz</mat-icon>

@@ -78,6 +78,15 @@ export class TransactionService {
     if (data.unit) txnDoc['unit'] = data.unit;
     if (data.ratePerUnit) txnDoc['ratePerUnit'] = data.ratePerUnit;
 
+    // Animal & buyer links
+    if (data.linkedAnimalIds?.length) {
+      txnDoc['linkedAnimalIds'] = data.linkedAnimalIds;
+      txnDoc['linkedAnimalNames'] = data.linkedAnimalNames || [];
+    }
+    if (data.animalCostSplit) txnDoc['animalCostSplit'] = data.animalCostSplit;
+    if (data.linkedBuyerId) txnDoc['linkedBuyerId'] = data.linkedBuyerId;
+    if (data.linkedBuyerName) txnDoc['linkedBuyerName'] = data.linkedBuyerName;
+
     if (data.type === 'income') {
       txnDoc['paymentStatus'] = data.paymentStatus || 'received';
     }

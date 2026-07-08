@@ -53,6 +53,15 @@ export interface Transaction {
   // Loan linkage (auto-created transactions from loan operations)
   linkedLoanId?: string;
 
+  // Animal cost tracking (optional)
+  linkedAnimalIds?: string[];
+  linkedAnimalNames?: string[];
+  animalCostSplit?: Record<string, number>;
+
+  // Buyer linkage (optional, for sale income)
+  linkedBuyerId?: string;
+  linkedBuyerName?: string;
+
   // For queries
   month: string;
   year: number;
@@ -81,6 +90,11 @@ export interface TransactionFormData {
   paidByName?: string;
   paymentStatus?: IncomePaymentStatus;
   expensePaymentStatus?: ExpensePaymentStatus;
+  linkedAnimalIds?: string[];
+  linkedAnimalNames?: string[];
+  animalCostSplit?: Record<string, number>;
+  linkedBuyerId?: string;
+  linkedBuyerName?: string;
   month: string;
   year: number;
 }

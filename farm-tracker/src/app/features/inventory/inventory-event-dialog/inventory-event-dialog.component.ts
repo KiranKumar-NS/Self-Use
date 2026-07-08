@@ -10,7 +10,11 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
 
 import { InventoryService } from '../../../core/services/inventory.service';
 import { SegmentService } from '../../../core/services/segment.service';
+import { AnimalService } from '../../../core/services/animal.service';
+import { BuyerService } from '../../../core/services/buyer.service';
 import { Segment } from '../../../core/models/segment.model';
+import { Animal } from '../../../core/models/animal.model';
+import { Buyer } from '../../../core/models/buyer.model';
 import { InventoryEvent, InventoryEventType } from '../../../core/models/inventory.model';
 import { ANIMAL_EVENT_TYPES } from '../../../core/models/segment.model';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
@@ -75,6 +79,37 @@ export interface InventoryEventDialogData {
           <mat-label>Note</mat-label>
           <input matInput [(ngModel)]="note" />
         </mat-form-field>
+
+        <!-- Link to Animal (sale/death) -->
+        @if (eventType === 'sale' || eventType === 'death') {
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Link to Animal (optional)</mat-label>
+            <mat-select [(ngModel)]="linkedAnimalId">
+              <mat-option value="">None</mat-option>
+              @for (animal of activeAnimals(); track animal.id) {
+                <mat-option [value]="animal.id">{{ animalService.getDisplayName(animal) }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+
+        <!-- Buyer (sale only) -->
+        @if (eventType === 'sale') {
+          <mat-form-field appearance="outline">
+            <mat-label>Buyer (optional)</mat-label>
+            <mat-select [(ngModel)]="buyerId">
+              <mat-option value="">None</mat-option>
+              @for (b of buyers(); track b.id) {
+                <mat-option [value]="b.id">{{ b.name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Sale Price (optional)</mat-label>
+            <input matInput type="number" [(ngModel)]="salePrice" min="0" />
+          </mat-form-field>
+        }
       </div>
 
       @if (error()) {
@@ -105,8 +140,12 @@ export class InventoryEventDialogComponent implements OnInit {
   dialogRef = inject(MatDialogRef<InventoryEventDialogComponent>);
   private inventoryService = inject(InventoryService);
   private segmentService = inject(SegmentService);
+  animalService = inject(AnimalService);
+  private buyerService = inject(BuyerService);
 
   segments = signal<Segment[]>([]);
+  activeAnimals = signal<Animal[]>([]);
+  buyers = signal<Buyer[]>([]);
   saving = signal(false);
   error = signal('');
 
@@ -117,11 +156,16 @@ export class InventoryEventDialogComponent implements OnInit {
   breed = '';
   date = new Date();
   note = '';
+  linkedAnimalId = '';
+  buyerId = '';
+  salePrice: number | null = null;
   eventTypeOptions = ANIMAL_EVENT_TYPES;
   private allBreeds: string[] = [];
 
   async ngOnInit(): Promise<void> {
-    this.segments.set(await this.segmentService.getAll());
+    const [segs, buyers] = await Promise.all([this.segmentService.getAll(), this.buyerService.getAll()]);
+    this.segments.set(segs);
+    this.buyers.set(buyers);
 
     // Pre-fill if editing
     if (this.data?.event) {
@@ -143,7 +187,15 @@ export class InventoryEventDialogComponent implements OnInit {
 
   onSegmentChange(): void {
     this.breed = '';
-    if (this.segment) this.loadBreeds(this.segment);
+    this.linkedAnimalId = '';
+    if (this.segment) {
+      this.loadBreeds(this.segment);
+      this.loadAnimals(this.segment);
+    }
+  }
+
+  private async loadAnimals(segmentId: string): Promise<void> {
+    this.activeAnimals.set(await this.animalService.getActiveBySegment(segmentId));
   }
 
   private loadBreeds(segmentId: string): void {
@@ -177,7 +229,27 @@ export class InventoryEventDialogComponent implements OnInit {
       if (this.isEdit && this.data.event) {
         await this.inventoryService.updateEvent(this.data.event.id, this.data.event, formData);
       } else {
-        await this.inventoryService.recordEvent(formData);
+        const eventId = await this.inventoryService.recordEvent(formData);
+
+        // Update linked animal on sale/death
+        if (this.linkedAnimalId) {
+          if (this.eventType === 'sale') {
+            const buyer = this.buyerId ? this.buyers().find(b => b.id === this.buyerId) : null;
+            await this.animalService.recordSale(this.linkedAnimalId, {
+              salePrice: this.salePrice || 0,
+              buyerId: this.buyerId || undefined,
+              buyerName: buyer?.name || undefined,
+              saleInventoryEventId: eventId,
+              date: this.date,
+              countSold: this.count,
+            });
+            if (this.buyerId && this.salePrice) {
+              await this.buyerService.updateStats(this.buyerId, this.salePrice, this.count, this.date);
+            }
+          } else if (this.eventType === 'death') {
+            await this.animalService.recordDeath(this.linkedAnimalId, this.date, this.note, this.count);
+          }
+        }
       }
       this.dialogRef.close(true);
     } catch (err: any) {

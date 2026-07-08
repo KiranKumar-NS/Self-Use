@@ -29,10 +29,12 @@
  * ────────────────────────────────────────────────────────────
  *
  * Transaction backup (has "Expenses" sheet):
- *   Sheet 1: Expenses — all expense transactions
- *   Sheet 2: Income   — all income transactions with distributions
- *   Sheet 3: Loans    — all loans (simple + formal) with all fields
- *   Sheet 4: Stock    — segment info (read-only, not imported)
+ *   Sheet 1: Expenses         — all expense transactions
+ *   Sheet 2: Income           — all income transactions with distributions
+ *   Sheet 3: Loans            — all loans (simple + formal) with all fields
+ *   Sheet 4: Inventory Events — stock change events
+ *   Sheet 5: Animals          — animal/batch registry with cost tracking
+ *   Sheet 6: Buyers           — buyer/customer registry with stats
  *
  * Loan detail backup (has "Overview" sheet):
  *   Sheet 1: Overview      — loan document (47 fields)
@@ -106,7 +108,7 @@ function monthStr(date) {
 // ── Import Transaction Backup ──────────────────────────────
 
 async function importBackup(wb, dryRun) {
-  const stats = { expenses: 0, income: 0, loans: 0, inventoryEvents: 0, skipped: 0 };
+  const stats = { expenses: 0, income: 0, loans: 0, inventoryEvents: 0, animals: 0, buyers: 0, skipped: 0 };
   const batch = db.batch();
 
   // Expenses
@@ -295,6 +297,81 @@ async function importBackup(wb, dryRun) {
         createdAt: FieldValue.serverTimestamp(),
       });
       stats.inventoryEvents++;
+    }
+  }
+
+  // Animals
+  if (wb.Sheets['Animals']) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets['Animals']);
+    console.log(`  Animals sheet: ${rows.length} rows`);
+    for (const r of rows) {
+      const id = str(r['ID']) || db.collection('animals').doc().id;
+      const originDate = parseDate(str(r['Origin Date'])) || new Date();
+      const month = monthStr(originDate);
+
+      const animalDoc = {
+        id,
+        segment: str(r['Segment']),
+        segmentName: str(r['Segment Name']) || str(r['Segment']),
+        trackingMode: str(r['Tracking Mode']) || 'individual',
+        tag: str(r['Tag']) || null,
+        name: str(r['Name']) || null,
+        breed: str(r['Breed']) || null,
+        gender: str(r['Gender']) || null,
+        batchLabel: str(r['Batch Label']) || null,
+        batchSize: num(r['Batch Size']) || 1,
+        currentCount: num(r['Current Count']) || num(r['Batch Size']) || 1,
+        origin: str(r['Origin']) || 'purchase',
+        originDate: admin.firestore.Timestamp.fromDate(originDate),
+        purchasePrice: num(r['Purchase Price']),
+        status: str(r['Status']) || 'active',
+        totalCosts: num(r['Total Costs']),
+        totalInvested: num(r['Total Invested']),
+        costEntries: [], // Cost entries are not exported in detail, will be empty
+        salePrice: num(r['Sale Price']) || null,
+        profit: num(r['Profit']) || null,
+        profitMargin: num(r['Profit Margin %']) || null,
+        buyerId: str(r['Buyer ID']) || null,
+        buyerName: str(r['Buyer']) || null,
+        exitDate: toTimestamp(str(r['Exit Date'])),
+        exitType: str(r['Exit Type']) || null,
+        saleTransactionId: str(r['Sale Txn ID']) || null,
+        note: str(r['Note']) || null,
+        createdBy: str(r['Created By']) || 'import',
+        createdByName: str(r['Created By Name']) || 'Import Script',
+        createdAt: FieldValue.serverTimestamp(),
+        isDeleted: false,
+        month,
+        year: originDate.getFullYear(),
+      };
+
+      batch.set(db.collection('animals').doc(id), animalDoc);
+      stats.animals++;
+    }
+  }
+
+  // Buyers
+  if (wb.Sheets['Buyers']) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets['Buyers']);
+    console.log(`  Buyers sheet: ${rows.length} rows`);
+    for (const r of rows) {
+      const id = str(r['ID']) || db.collection('buyers').doc().id;
+      batch.set(db.collection('buyers').doc(id), {
+        id,
+        name: str(r['Name']),
+        phone: str(r['Phone']) || '',
+        location: str(r['Location']) || '',
+        note: str(r['Note']) || '',
+        totalPurchases: num(r['Total Purchases']),
+        totalAmountPaid: num(r['Total Amount Paid']),
+        averageRate: num(r['Average Rate']) || null,
+        lastPurchaseDate: toTimestamp(str(r['Last Purchase'])),
+        createdBy: str(r['Created By']) || 'import',
+        createdByName: str(r['Created By Name']) || 'Import Script',
+        createdAt: FieldValue.serverTimestamp(),
+        isDeleted: false,
+      });
+      stats.buyers++;
     }
   }
 
@@ -581,6 +658,8 @@ async function main() {
     console.log(`  Income: ${stats.income}`);
     console.log(`  Loans: ${stats.loans}`);
     console.log(`  Inventory Events: ${stats.inventoryEvents}`);
+    console.log(`  Animals: ${stats.animals}`);
+    console.log(`  Buyers: ${stats.buyers}`);
 
   } else {
     console.error(`ERROR: Unrecognized Excel format. Sheets: ${sheets.join(', ')}`);

@@ -1,8 +1,9 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { Transaction } from '../../../core/models/transaction.model';
+import { CostAttributionDialogComponent } from '../../animals/cost-attribution-dialog/cost-attribution-dialog.component';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { RelativeTimePipe } from '../../../shared/pipes/relative-time.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
@@ -17,7 +18,7 @@ import { DatePipe } from '@angular/common';
 @Component({
   selector: 'app-transaction-detail',
   standalone: true,
-  imports: [DatePipe, CurrencyInrPipe, RelativeTimePipe, LoadingSpinnerComponent, MatCardModule, MatButtonModule, MatIconModule, MatChipsModule],
+  imports: [DatePipe, CurrencyInrPipe, RelativeTimePipe, LoadingSpinnerComponent, RouterLink, MatCardModule, MatButtonModule, MatIconModule, MatChipsModule],
   template: `
     @if (loading()) {
       <app-loading-spinner />
@@ -104,6 +105,42 @@ import { DatePipe } from '@angular/common';
           </div>
         </div>
       </mat-card>
+
+      <!-- Linked Animals -->
+      @if (transaction()!.linkedAnimalIds?.length) {
+        <h3 class="section-title">Linked Animals</h3>
+        <mat-card class="linked-card">
+          <div class="linked-animals">
+            @for (name of transaction()!.linkedAnimalNames || []; track $index) {
+              <a [routerLink]="['/animals', transaction()!.linkedAnimalIds![$index]]" class="animal-chip">
+                <mat-icon>pets</mat-icon> {{ name }}
+              </a>
+            }
+          </div>
+        </mat-card>
+      }
+
+      @if (transaction()!.linkedBuyerName) {
+        <h3 class="section-title">Buyer</h3>
+        <mat-card class="linked-card">
+          @if (transaction()!.linkedBuyerId) {
+            <a [routerLink]="['/buyers', transaction()!.linkedBuyerId]" class="buyer-link">
+              <mat-icon>person</mat-icon> {{ transaction()!.linkedBuyerName }}
+            </a>
+          } @else {
+            <span><mat-icon>person</mat-icon> {{ transaction()!.linkedBuyerName }}</span>
+          }
+        </mat-card>
+      }
+
+      <!-- Link to Animals button (expense, no linked animals yet) -->
+      @if (transaction()!.type === 'expense' && !transaction()!.linkedAnimalIds?.length && !auth.isViewer()) {
+        <div class="link-action">
+          <button mat-stroked-button (click)="openCostAttribution()">
+            <mat-icon>pets</mat-icon> Link to Animals
+          </button>
+        </div>
+      }
 
       <!-- Distribution Section (income only) -->
       @if (transaction()!.type === 'income') {
@@ -214,6 +251,12 @@ import { DatePipe } from '@angular/common';
     .dist-amount { font-weight: 600; min-width: 100px; text-align: right; }
     .dist-pct { color: #64748b; font-size: 0.8rem; min-width: 50px; text-align: right; }
     .dist-empty { display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 0.9rem; padding: 8px 0; }
+    .linked-card { padding: 1rem; margin-top: 0.5rem; }
+    .linked-animals { display: flex; flex-wrap: wrap; gap: 8px; }
+    .animal-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; background: #f0fdf4; color: #16a34a; border-radius: 20px; font-size: 0.85rem; font-weight: 600; text-decoration: none; }
+    .animal-chip mat-icon { font-size: 16px; width: 16px; height: 16px; }
+    .buyer-link { display: inline-flex; align-items: center; gap: 6px; color: var(--color-primary); font-weight: 600; text-decoration: none; }
+    .link-action { margin-top: 1rem; }
     .audit-entry { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.875rem; }
     .audit-time { color: #94a3b8; margin-left: 8px; }
     .changes { margin: 4px 0 0 1rem; font-size: 0.8rem; color: #64748b; }
@@ -297,6 +340,19 @@ export class TransactionDetailComponent implements OnInit {
     } finally {
       this.marking.set(false);
     }
+  }
+
+  openCostAttribution(): void {
+    const txn = this.transaction();
+    if (!txn) return;
+    const ref = this.dialog.open(CostAttributionDialogComponent, {
+      width: '90vw',
+      maxWidth: '500px',
+      data: { transaction: txn, segment: txn.segment },
+    });
+    ref.afterClosed().subscribe(async (result) => {
+      if (result) await this.loadTransaction();
+    });
   }
 
   edit(): void {
