@@ -58,11 +58,13 @@ import { MatRadioModule } from '@angular/material/radio';
             <input matInput [matDatepicker]="picker" [(ngModel)]="date" name="date" required />
             <mat-datepicker-toggle matIconSuffix [for]="picker" />
             <mat-datepicker #picker />
+            <mat-error>Required</mat-error>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
             <mat-label>Amount (INR)</mat-label>
             <input matInput type="number" [(ngModel)]="amount" name="amount" required min="1" />
+            <mat-error>Required</mat-error>
           </mat-form-field>
         </div>
 
@@ -101,6 +103,7 @@ import { MatRadioModule } from '@angular/material/radio';
                 <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
               }
             </mat-select>
+            <mat-error>Required</mat-error>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
@@ -110,6 +113,7 @@ import { MatRadioModule } from '@angular/material/radio';
                 <mat-option [value]="cat.id">{{ cat.name }}</mat-option>
               }
             </mat-select>
+            <mat-error>Required</mat-error>
           </mat-form-field>
         </div>
 
@@ -220,6 +224,13 @@ import { MatRadioModule } from '@angular/material/radio';
           <textarea matInput [(ngModel)]="description" name="description" rows="3"></textarea>
         </mat-form-field>
 
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Tags (optional, comma-separated)</mat-label>
+          <input matInput [(ngModel)]="tagsInput" name="tags"
+            placeholder="e.g. vaccination-drive, eid-season" />
+          <mat-hint>Group transactions for ad-hoc analysis</mat-hint>
+        </mat-form-field>
+
         <div class="form-actions">
           <button mat-button type="button" (click)="cancel()">Cancel</button>
           <button mat-flat-button color="primary" type="submit" [disabled]="saving()">
@@ -231,19 +242,19 @@ import { MatRadioModule } from '@angular/material/radio';
   `,
   styles: [`
     .page-header { margin-bottom: 1rem; }
-    .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; }
-    .form-card { max-width: 700px; padding: 1.5rem; }
+    .page-header h1 { margin: 0; font-size: 1.5rem; color: var(--color-text); }
+    .form-card { max-width: 700px; padding: 1.5rem; margin: 0 auto; }
     .form-row { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
     .form-row mat-form-field { flex: 1; }
     .full-width { width: 100%; }
     .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
-    .error-message { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .error-message { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
     mat-radio-group { display: flex; gap: 1rem; }
     .payment-method-group {
       display: flex; flex-direction: column; gap: 6px; margin-bottom: 0.5rem;
     }
     .field-label {
-      font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600;
+      font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600;
     }
     .name-hint { color: var(--color-primary); font-size: 0.8rem; }
     .hint-btn {
@@ -251,22 +262,22 @@ import { MatRadioModule } from '@angular/material/radio';
       cursor: pointer; text-decoration: underline; padding: 0; font-size: 0.8rem;
     }
     .animal-link-section {
-      border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 16px;
+      border: 1px solid var(--color-border); border-radius: 8px; padding: 12px; margin-bottom: 16px;
     }
     .section-header {
       display: flex; align-items: center; gap: 8px; cursor: pointer;
-      font-size: 0.85rem; color: #475569; font-weight: 600;
+      font-size: 0.85rem; color: var(--color-text-subtle); font-weight: 600;
     }
     .section-header .toggle-icon { margin-left: auto; transition: transform 0.2s; font-size: 20px; width: 20px; height: 20px; }
     .section-header .toggle-icon.expanded { transform: rotate(180deg); }
     .link-count { font-size: 0.7rem; background: var(--color-primary); color: white; padding: 1px 8px; border-radius: 10px; }
     .split-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
     .split-select { width: 140px; }
-    .split-hint { font-size: 0.7rem; color: #64748b; font-style: italic; }
+    .split-hint { font-size: 0.7rem; color: var(--color-text-secondary); font-style: italic; }
     .animal-list { margin-top: 8px; max-height: 200px; overflow-y: auto; }
-    .animal-row { padding: 4px 0; border-bottom: 1px solid #f1f5f9; }
-    .breed-tag { color: #7c3aed; font-size: 0.8rem; }
-    .no-animals { color: #94a3b8; font-size: 0.85rem; padding: 8px 0; }
+    .animal-row { padding: 4px 0; border-bottom: 1px solid var(--color-bg-alt); }
+    .breed-tag { color: var(--color-purple); font-size: 0.8rem; }
+    .no-animals { color: var(--color-text-muted); font-size: 0.85rem; padding: 8px 0; }
     @media (max-width: 640px) {
       .form-row { flex-direction: column; gap: 0.5rem; }
       .qty-row { flex-direction: row; flex-wrap: wrap; }
@@ -300,6 +311,7 @@ export class TransactionFormComponent implements OnInit {
   segment = '';
   category = '';
   description = '';
+  tagsInput = '';
   paidBy = '';
   customPaidByName = '';
   paymentMethod: PaymentMethod = 'upi';
@@ -378,6 +390,7 @@ export class TransactionFormComponent implements OnInit {
         this.paymentMethod = txn.paymentMethod || 'cash';
         this.paymentStatus = txn.paymentStatus || 'received';
         this.expensePaymentStatus = txn.expensePaymentStatus || 'paid';
+        this.tagsInput = txn.tags?.join(', ') || '';
         this.onTypeChange();
 
         // Load existing animal links
@@ -481,6 +494,9 @@ export class TransactionFormComponent implements OnInit {
         expensePaymentStatus: this.type === 'expense' ? this.expensePaymentStatus : undefined,
         paidBy: resolvedPaidBy,
         paidByName: resolvedPaidByName,
+        tags: this.tagsInput.trim()
+          ? this.tagsInput.split(',').map(t => t.trim().toLowerCase()).filter(t => t)
+          : undefined,
         month: getMonthString(this.date),
         year: getYear(this.date),
       };

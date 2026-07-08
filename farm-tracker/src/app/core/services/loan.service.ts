@@ -1095,11 +1095,23 @@ export class LoanService {
         totalExpense: increment(data.amount),
         netProfit: increment(-data.amount),
         [`expenseByCategory.${data.category}`]: increment(data.amount),
+        [`expenseByCategoryId.${data.category}`]: increment(data.amount),
         [`expenseByPerson.${personKey}`]: increment(data.amount),
         month,
         year,
         segment: data.segment,
         updatedAt: serverTimestamp(),
+      }, { merge: true });
+
+      // Update yearly summary
+      const yearlySummaryRef = doc(this.firestore, 'yearlySummaries', `${year}-${data.segment}`);
+      transaction.set(yearlySummaryRef, {
+        totalExpense: increment(data.amount),
+        netProfit: increment(-data.amount),
+        [`expenseByCategory.${data.category}`]: increment(data.amount),
+        [`expenseByCategoryId.${data.category}`]: increment(data.amount),
+        [`expenseByPerson.${personKey}`]: increment(data.amount),
+        year, segment: data.segment, updatedAt: serverTimestamp(),
       }, { merge: true });
 
       // Update loan utilization
@@ -1284,6 +1296,7 @@ export class LoanService {
         recordedBy: user.uid,
         recordedByName: user.displayName,
         createdAt: serverTimestamp(),
+        scheduledDueDate: loan.nextPaymentDueDate ?? null,
         isEMIPayment: true,
         emiNumber: data.emiNumber,
         principalPortion: data.principalPortion,
@@ -1320,12 +1333,25 @@ export class LoanService {
       // Update monthly summary
       const summaryRef = doc(this.firestore, 'monthlySummaries', `${month}-${loan.segment}`);
       const personKey = data.paidByUid ?? user.uid;
-      transaction.set(summaryRef, {
+      const summaryData = {
         totalExpense: increment(data.amount),
         netProfit: increment(-data.amount),
         [`expenseByCategory.loan-repayment`]: increment(data.amount),
+        [`expenseByCategoryId.loan-repayment`]: increment(data.amount),
         [`expenseByPerson.${personKey}`]: increment(data.amount),
         month, year, segment: loan.segment, updatedAt: serverTimestamp(),
+      };
+      transaction.set(summaryRef, summaryData, { merge: true });
+
+      // Update yearly summary
+      const yearlySummaryRef = doc(this.firestore, 'yearlySummaries', `${year}-${loan.segment}`);
+      transaction.set(yearlySummaryRef, {
+        totalExpense: increment(data.amount),
+        netProfit: increment(-data.amount),
+        [`expenseByCategory.loan-repayment`]: increment(data.amount),
+        [`expenseByCategoryId.loan-repayment`]: increment(data.amount),
+        [`expenseByPerson.${personKey}`]: increment(data.amount),
+        year, segment: loan.segment, updatedAt: serverTimestamp(),
       }, { merge: true });
 
       // Update loan counters
@@ -1444,8 +1470,17 @@ export class LoanService {
         totalExpense: increment(amount),
         netProfit: increment(-amount),
         [`expenseByCategory.loan-repayment`]: increment(amount),
+        [`expenseByCategoryId.loan-repayment`]: increment(amount),
         [`expenseByPerson.${paidByUid ?? user.uid}`]: increment(amount),
         month, year, segment: loan.segment, updatedAt: serverTimestamp(),
+      }, { merge: true });
+      transaction.set(doc(this.firestore, 'yearlySummaries', `${year}-${loan.segment}`), {
+        totalExpense: increment(amount),
+        netProfit: increment(-amount),
+        [`expenseByCategory.loan-repayment`]: increment(amount),
+        [`expenseByCategoryId.loan-repayment`]: increment(amount),
+        [`expenseByPerson.${paidByUid ?? user.uid}`]: increment(amount),
+        year, segment: loan.segment, updatedAt: serverTimestamp(),
       }, { merge: true });
 
       // Update loan — only interest counters, NOT totalRepaid/balanceRemaining
@@ -1540,14 +1575,23 @@ export class LoanService {
         month, year,
       });
 
-      // Update monthly summary
+      // Update monthly + yearly summaries
       const summaryRef = doc(this.firestore, 'monthlySummaries', `${month}-${loan.segment}`);
       transaction.set(summaryRef, {
         totalExpense: increment(amount),
         netProfit: increment(-amount),
         [`expenseByCategory.loan-repayment`]: increment(amount),
+        [`expenseByCategoryId.loan-repayment`]: increment(amount),
         [`expenseByPerson.${user.uid}`]: increment(amount),
         month, year, segment: loan.segment, updatedAt: serverTimestamp(),
+      }, { merge: true });
+      transaction.set(doc(this.firestore, 'yearlySummaries', `${year}-${loan.segment}`), {
+        totalExpense: increment(amount),
+        netProfit: increment(-amount),
+        [`expenseByCategory.loan-repayment`]: increment(amount),
+        [`expenseByCategoryId.loan-repayment`]: increment(amount),
+        [`expenseByPerson.${user.uid}`]: increment(amount),
+        year, segment: loan.segment, updatedAt: serverTimestamp(),
       }, { merge: true });
 
       // Update loan — close it
@@ -1642,14 +1686,23 @@ export class LoanService {
         month, year,
       });
 
-      // Update monthly summary
+      // Update monthly + yearly summaries
       const summaryRef = doc(this.firestore, 'monthlySummaries', `${month}-${loan.segment}`);
       transaction.set(summaryRef, {
         totalExpense: increment(amount),
         netProfit: increment(-amount),
         [`expenseByCategory.loan-repayment`]: increment(amount),
+        [`expenseByCategoryId.loan-repayment`]: increment(amount),
         [`expenseByPerson.${user.uid}`]: increment(amount),
         month, year, segment: loan.segment, updatedAt: serverTimestamp(),
+      }, { merge: true });
+      transaction.set(doc(this.firestore, 'yearlySummaries', `${year}-${loan.segment}`), {
+        totalExpense: increment(amount),
+        netProfit: increment(-amount),
+        [`expenseByCategory.loan-repayment`]: increment(amount),
+        [`expenseByCategoryId.loan-repayment`]: increment(amount),
+        [`expenseByPerson.${user.uid}`]: increment(amount),
+        year, segment: loan.segment, updatedAt: serverTimestamp(),
       }, { merge: true });
 
       // Update loan — principal only, NOT emisPaid
@@ -1744,14 +1797,23 @@ export class LoanService {
         month, year,
       });
 
-      // Update monthly summary
+      // Update monthly + yearly summaries
       const summaryRef = doc(this.firestore, 'monthlySummaries', `${month}-${loan.segment}`);
       transaction.set(summaryRef, {
         totalExpense: increment(penaltyAmount),
         netProfit: increment(-penaltyAmount),
         [`expenseByCategory.loan-repayment`]: increment(penaltyAmount),
+        [`expenseByCategoryId.loan-repayment`]: increment(penaltyAmount),
         [`expenseByPerson.${user.uid}`]: increment(penaltyAmount),
         month, year, segment: loan.segment, updatedAt: serverTimestamp(),
+      }, { merge: true });
+      transaction.set(doc(this.firestore, 'yearlySummaries', `${year}-${loan.segment}`), {
+        totalExpense: increment(penaltyAmount),
+        netProfit: increment(-penaltyAmount),
+        [`expenseByCategory.loan-repayment`]: increment(penaltyAmount),
+        [`expenseByCategoryId.loan-repayment`]: increment(penaltyAmount),
+        [`expenseByPerson.${user.uid}`]: increment(penaltyAmount),
+        year, segment: loan.segment, updatedAt: serverTimestamp(),
       }, { merge: true });
 
       // Update loan — only penalty counter
@@ -1900,14 +1962,23 @@ export class LoanService {
         month, year,
       });
 
-      // Update monthly summary
+      // Update monthly + yearly summaries
       const summaryRef = doc(this.firestore, 'monthlySummaries', `${month}-${loan.segment}`);
       transaction.set(summaryRef, {
         totalExpense: increment(totalPayment),
         netProfit: increment(-totalPayment),
         [`expenseByCategory.loan-repayment`]: increment(totalPayment),
+        [`expenseByCategoryId.loan-repayment`]: increment(totalPayment),
         [`expenseByPerson.${user.uid}`]: increment(totalPayment),
         month, year, segment: loan.segment, updatedAt: serverTimestamp(),
+      }, { merge: true });
+      transaction.set(doc(this.firestore, 'yearlySummaries', `${year}-${loan.segment}`), {
+        totalExpense: increment(totalPayment),
+        netProfit: increment(-totalPayment),
+        [`expenseByCategory.loan-repayment`]: increment(totalPayment),
+        [`expenseByCategoryId.loan-repayment`]: increment(totalPayment),
+        [`expenseByPerson.${user.uid}`]: increment(totalPayment),
+        year, segment: loan.segment, updatedAt: serverTimestamp(),
       }, { merge: true });
 
       // Close loan
@@ -1995,14 +2066,23 @@ export class LoanService {
         month, year,
       });
 
-      // Update monthly summary
+      // Update monthly + yearly summaries
       const summaryRef = doc(this.firestore, 'monthlySummaries', `${month}-${oldLoan.segment}`);
       transaction.set(summaryRef, {
         totalExpense: increment(outstanding),
         netProfit: increment(-outstanding),
         [`expenseByCategory.loan-repayment`]: increment(outstanding),
+        [`expenseByCategoryId.loan-repayment`]: increment(outstanding),
         [`expenseByPerson.${user.uid}`]: increment(outstanding),
         month, year, segment: oldLoan.segment, updatedAt: serverTimestamp(),
+      }, { merge: true });
+      transaction.set(doc(this.firestore, 'yearlySummaries', `${year}-${oldLoan.segment}`), {
+        totalExpense: increment(outstanding),
+        netProfit: increment(-outstanding),
+        [`expenseByCategory.loan-repayment`]: increment(outstanding),
+        [`expenseByCategoryId.loan-repayment`]: increment(outstanding),
+        [`expenseByPerson.${user.uid}`]: increment(outstanding),
+        year, segment: oldLoan.segment, updatedAt: serverTimestamp(),
       }, { merge: true });
 
       // Create new formal loan doc

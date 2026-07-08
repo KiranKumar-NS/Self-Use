@@ -38,7 +38,7 @@ export class InventoryService {
         ? Math.abs(data.count)
         : -Math.abs(data.count);
 
-    batch.set(eventRef, {
+    const eventDoc: Record<string, any> = {
       id: eventRef.id,
       segment: data.segment,
       segmentName: data.segmentName,
@@ -52,7 +52,9 @@ export class InventoryService {
       createdAt: serverTimestamp(),
       month: data.month,
       year: data.year,
-    });
+    };
+    if (data.estimatedValue) eventDoc['estimatedValue'] = data.estimatedValue;
+    batch.set(eventRef, eventDoc);
 
     // Update segment's currentStock + add breed if new
     const segRef = doc(this.firestore, 'segments', data.segment);
@@ -110,7 +112,7 @@ export class InventoryService {
         : -Math.abs(data.count);
 
     // Update the event document
-    batch.update(doc(this.firestore, 'inventoryEvents', eventId), {
+    const updateData: Record<string, any> = {
       segment: data.segment,
       segmentName: data.segmentName,
       eventType: data.eventType,
@@ -120,7 +122,9 @@ export class InventoryService {
       date: Timestamp.fromDate(data.date),
       month: data.month,
       year: data.year,
-    });
+      estimatedValue: data.estimatedValue || null,
+    };
+    batch.update(doc(this.firestore, 'inventoryEvents', eventId), updateData);
 
     // Reverse old stock, apply new
     if (oldEvent.segment === data.segment) {

@@ -62,6 +62,9 @@ export interface Transaction {
   linkedBuyerId?: string;
   linkedBuyerName?: string;
 
+  // Freeform tags for ad-hoc grouping (e.g. "vaccination-drive", "eid-season")
+  tags?: string[];
+
   // For queries
   month: string;
   year: number;
@@ -95,6 +98,7 @@ export interface TransactionFormData {
   animalCostSplit?: Record<string, number>;
   linkedBuyerId?: string;
   linkedBuyerName?: string;
+  tags?: string[];
   month: string;
   year: number;
 }

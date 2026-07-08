@@ -231,6 +231,9 @@ export interface Repayment {
   recordedByName: string;
   createdAt: Timestamp;
 
+  // Scheduled due date for delay/discipline analysis
+  scheduledDueDate?: Timestamp;
+
   // Formal loan fields (all optional)
   isEMIPayment?: boolean;
   emiNumber?: number;

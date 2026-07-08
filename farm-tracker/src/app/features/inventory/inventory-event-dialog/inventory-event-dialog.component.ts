@@ -110,6 +110,15 @@ export interface InventoryEventDialogData {
             <input matInput type="number" [(ngModel)]="salePrice" min="0" />
           </mat-form-field>
         }
+
+        <!-- Estimated value (death only - for mortality loss tracking) -->
+        @if (eventType === 'death') {
+          <mat-form-field appearance="outline">
+            <mat-label>Estimated Value (optional)</mat-label>
+            <input matInput type="number" [(ngModel)]="estimatedValue" min="0"
+              placeholder="Estimated market value of lost animal(s)" />
+          </mat-form-field>
+        }
       </div>
 
       @if (error()) {
@@ -129,7 +138,7 @@ export interface InventoryEventDialogData {
   styles: [`
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
     .full-width { grid-column: 1 / -1; }
-    .error-msg { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
+    .error-msg { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
     @media (max-width: 480px) {
       .form-grid { grid-template-columns: 1fr; }
     }
@@ -159,6 +168,7 @@ export class InventoryEventDialogComponent implements OnInit {
   linkedAnimalId = '';
   buyerId = '';
   salePrice: number | null = null;
+  estimatedValue: number | null = null;
   eventTypeOptions = ANIMAL_EVENT_TYPES;
   private allBreeds: string[] = [];
 
@@ -224,6 +234,7 @@ export class InventoryEventDialogComponent implements OnInit {
         date: this.date,
         month: getMonthString(this.date),
         year: getYear(this.date),
+        estimatedValue: this.eventType === 'death' && this.estimatedValue ? this.estimatedValue : undefined,
       };
 
       if (this.isEdit && this.data.event) {
@@ -244,7 +255,7 @@ export class InventoryEventDialogComponent implements OnInit {
               countSold: this.count,
             });
             if (this.buyerId && this.salePrice) {
-              await this.buyerService.updateStats(this.buyerId, this.salePrice, this.count, this.date);
+              await this.buyerService.updateStats(this.buyerId, this.salePrice, this.count, this.date, this.segment);
             }
           } else if (this.eventType === 'death') {
             await this.animalService.recordDeath(this.linkedAnimalId, this.date, this.note, this.count);

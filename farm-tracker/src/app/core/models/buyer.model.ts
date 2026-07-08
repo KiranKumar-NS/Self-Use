@@ -13,6 +13,10 @@ export interface Buyer {
   averageRate?: number;
   lastPurchaseDate?: Timestamp;
 
+  // Segment-level breakdown for deeper analytics
+  purchasesBySegment?: Record<string, number>;   // segmentId → purchase count
+  amountBySegment?: Record<string, number>;       // segmentId → total amount paid
+
   createdBy: string;
   createdByName: string;
   createdAt: Timestamp;

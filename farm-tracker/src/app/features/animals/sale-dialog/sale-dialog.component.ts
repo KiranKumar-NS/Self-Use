@@ -112,12 +112,12 @@ export interface SaleDialogData {
   `,
   styles: [`
     .animal-info { margin-bottom: 16px; font-size: 0.95rem; }
-    .batch-note { color: #64748b; margin-left: 4px; }
+    .batch-note { color: var(--color-text-secondary); margin-left: 4px; }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
     .full-width { grid-column: 1 / -1; }
     .payment-row { grid-column: 1 / -1; display: flex; gap: 16px; }
     .payment-row mat-form-field { flex: 1; }
-    .error-msg { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
+    .error-msg { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
     @media (max-width: 480px) {
       .form-grid { grid-template-columns: 1fr; }
       .payment-row { flex-direction: column; gap: 0; }
@@ -225,7 +225,7 @@ export class SaleDialogComponent implements OnInit {
 
       // 4. Update buyer stats
       if (resolvedBuyerId && resolvedBuyerId !== '__new__') {
-        await this.buyerService.updateStats(resolvedBuyerId, this.salePrice, this.countSold, this.saleDate);
+        await this.buyerService.updateStats(resolvedBuyerId, this.salePrice, this.countSold, this.saleDate, this.data.animal.segment);
       }
 
       this.segmentService.clearCache();

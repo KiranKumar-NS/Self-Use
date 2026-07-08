@@ -75,15 +75,23 @@ export class BuyerService {
     return data.isDeleted ? null : data;
   }
 
-  async updateStats(buyerId: string, saleAmount: number, count: number, date: Date): Promise<void> {
+  async updateStats(buyerId: string, saleAmount: number, count: number, date: Date, segmentId?: string): Promise<void> {
     const batch = writeBatch(this.firestore);
     const buyerRef = doc(this.firestore, 'buyers', buyerId);
 
-    batch.update(buyerRef, {
+    const updates: Record<string, any> = {
       totalPurchases: increment(count),
       totalAmountPaid: increment(saleAmount),
       lastPurchaseDate: Timestamp.fromDate(date),
-    });
+    };
+
+    // Track per-segment breakdown
+    if (segmentId) {
+      updates[`purchasesBySegment.${segmentId}`] = increment(count);
+      updates[`amountBySegment.${segmentId}`] = increment(saleAmount);
+    }
+
+    batch.update(buyerRef, updates);
 
     // Recalculate averageRate after increment
     const snap = await getDoc(buyerRef);

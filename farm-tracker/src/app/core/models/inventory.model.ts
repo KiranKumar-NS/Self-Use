@@ -18,6 +18,9 @@ export interface InventoryEvent {
   year: number;
   isDeleted?: boolean;
   linkedAnimalIds?: string[];
+
+  // Financial context for mortality/loss tracking
+  estimatedValue?: number;  // estimated value of died/lost animals for loss analysis
 }
 
 export interface InventoryEventFormData {
@@ -30,4 +33,5 @@ export interface InventoryEventFormData {
   date: Date;
   month: string;
   year: number;
+  estimatedValue?: number;
 }

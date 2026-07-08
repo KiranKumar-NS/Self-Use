@@ -8,7 +8,7 @@ import {
   query,
   where,
 } from '@angular/fire/firestore';
-import { MonthlySummary } from '../models/monthly-summary.model';
+import { MonthlySummary, YearlySummary } from '../models/monthly-summary.model';
 
 @Injectable({ providedIn: 'root' })
 export class SummaryService {
@@ -53,6 +53,21 @@ export class SummaryService {
   async getAll(): Promise<MonthlySummary[]> {
     const snapshot = await getDocs(collection(this.firestore, 'monthlySummaries'));
     return snapshot.docs.map((d) => d.data() as MonthlySummary);
+  }
+
+  async getForYear(year: number): Promise<YearlySummary[]> {
+    const q = query(
+      collection(this.firestore, 'yearlySummaries'),
+      where('year', '==', year)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => d.data() as YearlySummary);
+  }
+
+  async getForYearAndSegment(year: number, segment: string): Promise<YearlySummary | null> {
+    const docId = `${year}-${segment}`;
+    const docSnap = await getDoc(doc(this.firestore, 'yearlySummaries', docId));
+    return docSnap.exists() ? (docSnap.data() as YearlySummary) : null;
   }
 
   aggregateSummaries(summaries: MonthlySummary[]): {
