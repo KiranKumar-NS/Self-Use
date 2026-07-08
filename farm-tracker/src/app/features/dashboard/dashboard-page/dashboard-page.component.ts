@@ -19,6 +19,7 @@ import { AnalyticsTabComponent } from '../analytics-tab/analytics-tab.component'
 import { SegmentService } from '../../../core/services/segment.service';
 import { Segment } from '../../../core/models/segment.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
+import { LoadingSkeletonComponent } from '../../../shared/components/loading-skeleton/loading-skeleton.component';
 import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/components/date-range-filter/date-range-filter.component';
 @Component({
   selector: 'app-dashboard-page',
@@ -27,12 +28,16 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
     SummaryCardsComponent, SegmentBreakdownChartComponent, MonthlyTrendChartComponent,
     LoanSummaryWidgetComponent, BudgetWidgetComponent, StockWidgetComponent,
     AnalyticsTabComponent,
-    LoadingSpinnerComponent, DateRangeFilterComponent,
+    LoadingSpinnerComponent, LoadingSkeletonComponent, DateRangeFilterComponent,
     MatIconModule, MatButtonModule,
   ],
   template: `
     @if (initialLoading()) {
-      <app-loading-spinner />
+      <app-loading-skeleton type="cards" [count]="6" />
+      <div class="charts-grid">
+        <app-loading-skeleton type="chart" />
+        <app-loading-skeleton type="chart" />
+      </div>
     } @else {
       <div class="page-header">
         <h1 class="page-title">Dashboard</h1>

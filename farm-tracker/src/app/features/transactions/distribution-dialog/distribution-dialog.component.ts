@@ -93,10 +93,10 @@ interface DistributionRow {
   styles: [`
     .title-icon { vertical-align: middle; margin-right: 8px; }
     .total-amount {
-      background: #f0f9ff; padding: 12px 16px; border-radius: 8px;
-      font-size: 1.1rem; margin-bottom: 16px; color: #0369a1;
+      background: var(--color-info-light); padding: 12px 16px; border-radius: 8px;
+      font-size: 1.1rem; margin-bottom: 16px; color: var(--color-info);
     }
-    .loading-text { text-align: center; color: #64748b; padding: 2rem; }
+    .loading-text { text-align: center; color: var(--color-text-secondary); padding: 2rem; }
     .dist-rows { display: flex; flex-direction: column; gap: 8px; }
     .dist-row {
       display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -104,21 +104,21 @@ interface DistributionRow {
     }
     .person-name {
       display: flex; align-items: center; gap: 8px;
-      font-size: 0.95rem; color: #1e293b; min-width: 140px;
+      font-size: 0.95rem; color: var(--color-text); min-width: 140px;
     }
-    .person-name.reinvestment { color: #7c3aed; font-weight: 600; }
-    .row-icon { font-size: 20px; width: 20px; height: 20px; color: #64748b; }
-    .person-name.reinvestment .row-icon { color: #7c3aed; }
+    .person-name.reinvestment { color: var(--color-purple); font-weight: 600; }
+    .row-icon { font-size: 20px; width: 20px; height: 20px; color: var(--color-text-secondary); }
+    .person-name.reinvestment .row-icon { color: var(--color-purple); }
     .amount-field { width: 160px; }
     .summary-bar {
       display: flex; justify-content: space-between; padding: 12px 16px;
       border-radius: 8px; margin-top: 16px; font-weight: 500;
-      background: #fef3c7; color: #92400e;
+      background: var(--color-warning-light); color: var(--color-warning);
     }
-    .summary-bar.exact { background: #f0fdf4; color: #16a34a; }
-    .summary-bar.over { background: #fef2f2; color: #dc2626; }
+    .summary-bar.exact { background: var(--color-income-bg); color: var(--color-income); }
+    .summary-bar.over { background: var(--color-expense-bg); color: var(--color-expense); }
     .error-msg {
-      background: #fef2f2; color: #dc2626; padding: 8px 16px;
+      background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px;
       border-radius: 6px; margin-top: 12px;
     }
     @media (max-width: 480px) {

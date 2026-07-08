@@ -7,7 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
   standalone: true,
   imports: [RouterLink, RouterLinkActive, MatIconModule],
   template: `
-    <nav class="bottom-nav">
+    <nav class="bottom-nav" aria-label="Mobile navigation">
       <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">
         <mat-icon>dashboard</mat-icon>
         <span>Home</span>
@@ -16,9 +16,9 @@ import { MatIconModule } from '@angular/material/icon';
         <mat-icon>receipt_long</mat-icon>
         <span>Txns</span>
       </a>
-      <a routerLink="/tasks" routerLinkActive="active" class="nav-item">
-        <mat-icon>view_kanban</mat-icon>
-        <span>Tasks</span>
+      <a routerLink="/loans" routerLinkActive="active" class="nav-item">
+        <mat-icon>account_balance</mat-icon>
+        <span>Loans</span>
       </a>
       <a routerLink="/animals" routerLinkActive="active" class="nav-item">
         <mat-icon>pets</mat-icon>
@@ -42,7 +42,7 @@ import { MatIconModule } from '@angular/material/icon';
         left: 0;
         right: 0;
         background: white;
-        border-top: 1px solid #e2e8f0;
+        border-top: 1px solid var(--color-border);
         box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
         z-index: 90;
         padding: 4px 0;
@@ -55,7 +55,7 @@ import { MatIconModule } from '@angular/material/icon';
         align-items: center;
         gap: 2px;
         padding: 6px 0;
-        color: #94a3b8;
+        color: var(--color-sidebar-text);
         text-decoration: none;
         font-size: 0.65rem;
         font-weight: 600;
@@ -72,10 +72,10 @@ import { MatIconModule } from '@angular/material/icon';
         height: 22px;
       }
       .nav-item.active {
-        color: #4f46e5;
+        color: var(--color-primary);
       }
       .nav-item:hover {
-        color: #4f46e5;
+        color: var(--color-primary);
       }
     }
   `],

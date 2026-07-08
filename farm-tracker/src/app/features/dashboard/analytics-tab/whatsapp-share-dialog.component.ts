@@ -54,7 +54,7 @@ export interface WhatsappShareData {
     </mat-dialog-actions>
   `,
   styles: [`
-    .hint { color: #64748b; font-size: 0.85rem; margin: 0 0 12px; }
+    .hint { color: var(--color-text-secondary); font-size: 0.85rem; margin: 0 0 12px; }
     .options { display: flex; flex-direction: column; gap: 12px; }
     .wa-btn { background: #25D366 !important; color: #fff !important; }
   `],

@@ -229,8 +229,8 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
     .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .detail-card { padding: 1.5rem; margin-bottom: 0; }
     .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
-    .detail-item label { display: block; font-size: 0.75rem; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
-    .detail-item span { font-size: 1rem; color: #1e293b; }
+    .detail-item label { display: block; font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; }
+    .detail-item span { font-size: 1rem; color: var(--color-text); }
     .detail-item.full { grid-column: 1 / -1; }
     .breed-text { color: var(--color-purple); font-weight: 500; }
 
@@ -239,11 +239,11 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
     .status-badge.sold { background: var(--color-info-light); color: var(--color-info); }
     .status-badge.dead { background: var(--color-expense-bg); color: var(--color-expense); }
 
-    .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: #1e293b; }
+    .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: var(--color-text); }
 
     .profit-card { padding: 1.5rem; }
     .profit-grid { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-end; }
-    .profit-item label { display: block; font-size: 0.75rem; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
+    .profit-item label { display: block; font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; }
     .profit-item span { font-size: 1.1rem; font-weight: 600; }
     .profit-item.highlight { border-left: 3px solid var(--color-primary); padding-left: 1rem; }
     .invested { color: var(--color-text); }
@@ -252,7 +252,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
     .profit-value.negative { color: var(--color-expense); }
     .profit-value small { font-size: 0.8rem; font-weight: 500; }
 
-    .empty-costs { display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 0.9rem; padding: 1.5rem; }
+    .empty-costs { display: flex; align-items: center; gap: 8px; color: var(--color-text-secondary); font-size: 0.9rem; padding: 1.5rem; }
 
     .amount-cell.expense { color: var(--color-expense); font-weight: 600; }
     .desc-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

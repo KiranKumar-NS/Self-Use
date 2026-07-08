@@ -73,15 +73,15 @@ import { MatButtonModule } from '@angular/material/button';
   `,
   styles: [`
     .page-header { margin-bottom: 1rem; }
-    .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; }
-    .form-card { width: 100%; max-width: 500px; padding: 1.5rem; }
+    .page-header h1 { margin: 0; font-size: 1.5rem; color: var(--color-text); }
+    .form-card { width: 100%; max-width: 500px; padding: 1.5rem; margin: 0 auto; }
     @media (max-width: 480px) {
       .form-card { padding: 1rem; }
     }
     .full-width { width: 100%; }
     .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
-    .error-message { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
-    .success-message { background: #f0fdf4; color: #16a34a; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .error-message { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .success-message { background: var(--color-income-bg); color: var(--color-income); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
   `],
 })
 export class UserFormComponent implements OnInit {

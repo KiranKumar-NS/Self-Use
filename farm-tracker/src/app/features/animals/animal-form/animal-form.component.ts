@@ -45,6 +45,7 @@ import { getMonthString, getYear } from '../../../core/utils/date.utils';
                 <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
               }
             </mat-select>
+            <mat-error>Required</mat-error>
           </mat-form-field>
         </div>
 
@@ -107,6 +108,7 @@ import { getMonthString, getYear } from '../../../core/utils/date.utils';
             <mat-form-field appearance="outline">
               <mat-label>Batch Size (count)</mat-label>
               <input matInput type="number" [(ngModel)]="batchSize" name="batchSize" min="1" required />
+              <mat-error>Required</mat-error>
             </mat-form-field>
           </div>
 
@@ -140,6 +142,7 @@ import { getMonthString, getYear } from '../../../core/utils/date.utils';
             <input matInput [matDatepicker]="picker" [(ngModel)]="originDate" name="originDate" required />
             <mat-datepicker-toggle matIconSuffix [for]="picker" />
             <mat-datepicker #picker />
+            <mat-error>Required</mat-error>
           </mat-form-field>
 
           @if (origin === 'purchase') {
@@ -167,15 +170,15 @@ import { getMonthString, getYear } from '../../../core/utils/date.utils';
   `,
   styles: [`
     .page-header { margin-bottom: 1rem; }
-    .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; }
-    .form-card { max-width: 700px; padding: 1.5rem; }
+    .page-header h1 { margin: 0; font-size: 1.5rem; color: var(--color-text); }
+    .form-card { max-width: 700px; padding: 1.5rem; margin: 0 auto; }
     .form-row { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
     .form-row mat-form-field { flex: 1; }
     .full-width { width: 100%; }
     .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
-    .error-message { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .error-message { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
     .radio-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 0.5rem; }
-    .field-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600; }
+    .field-label { font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600; }
     mat-radio-group { display: flex; gap: 1rem; }
     @media (max-width: 640px) {
       .form-row { flex-direction: column; gap: 0.5rem; }

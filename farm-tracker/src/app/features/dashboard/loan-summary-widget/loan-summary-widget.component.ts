@@ -60,18 +60,18 @@ import { MatButtonModule } from '@angular/material/button';
   styles: [`
     .loan-card { padding: 1.5rem; }
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-    h3 { margin: 0; font-size: 1rem; color: #1e293b; }
+    h3 { margin: 0; font-size: 1rem; color: var(--color-text); }
     .loan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .loan-item { display: flex; flex-direction: column; }
-    .loan-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; }
+    .loan-label { font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; }
     .loan-value { font-size: 1.25rem; font-weight: 700; }
-    .loan-value.given { color: #d97706; }
-    .loan-value.received { color: #2563eb; }
-    .loan-value.pending { color: #dc2626; }
-    .loan-value.formal { color: #7c3aed; }
-    .loan-value.upcoming { color: #0284c7; font-size: 1rem; }
-    .formal-divider { border-top: 1px solid #e2e8f0; margin: 1rem 0; }
-    .formal-header { font-size: 0.8rem; color: #7c3aed; font-weight: 600; text-transform: uppercase; margin-bottom: 0.75rem; }
+    .loan-value.given { color: var(--color-warning); }
+    .loan-value.received { color: var(--color-info); }
+    .loan-value.pending { color: var(--color-danger); }
+    .loan-value.formal { color: var(--color-purple); }
+    .loan-value.upcoming { color: var(--color-info); font-size: 1rem; }
+    .formal-divider { border-top: 1px solid var(--color-border); margin: 1rem 0; }
+    .formal-header { font-size: 0.8rem; color: var(--color-purple); font-weight: 600; text-transform: uppercase; margin-bottom: 0.75rem; }
     @media (max-width: 480px) {
       .loan-card { padding: 1rem; }
       .loan-grid { gap: 0.75rem; }

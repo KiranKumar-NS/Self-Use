@@ -10,15 +10,15 @@ import { MatIconModule } from '@angular/material/icon';
   imports: [RouterLink, RouterLinkActive, MatListModule, MatIconModule],
   template: `
     @if (open()) {
-      <div class="overlay" (click)="closed.emit()"></div>
+      <div class="overlay" (click)="closed.emit()" aria-label="Close navigation menu"></div>
     }
-    <div class="sidebar" [class.open]="open()">
+    <div class="sidebar" [class.open]="open()" [attr.role]="open() ? 'dialog' : null" [attr.aria-modal]="open() ? 'true' : null" aria-label="Navigation menu">
       <div class="logo">
         <h2>Farm Tracker</h2>
-        <p class="text-sm text-gray-400">Financial Management</p>
+        <p class="logo-subtitle">Financial Management</p>
       </div>
 
-      <nav class="nav-links">
+      <nav class="nav-links" role="navigation" aria-label="Main navigation">
         <a routerLink="/dashboard" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
           <mat-icon>dashboard</mat-icon>
           <span>Dashboard</span>
@@ -77,7 +77,7 @@ import { MatIconModule } from '@angular/material/icon';
     .sidebar {
       width: 250px;
       min-height: 100vh;
-      background: #1e293b;
+      background: var(--color-sidebar-bg);
       color: white;
       padding: 1rem 0;
       position: fixed;
@@ -91,13 +91,17 @@ import { MatIconModule } from '@angular/material/icon';
     }
     .logo {
       padding: 1rem 1.5rem;
-      border-bottom: 1px solid #334155;
+      border-bottom: 1px solid var(--color-sidebar-border);
       margin-bottom: 1rem;
     }
     .logo h2 {
       margin: 0;
       font-size: 1.25rem;
       font-weight: 700;
+    }
+    .logo-subtitle {
+      font-size: var(--font-sm);
+      color: var(--color-sidebar-text);
     }
     .nav-links {
       display: flex;
@@ -110,18 +114,18 @@ import { MatIconModule } from '@angular/material/icon';
       align-items: center;
       gap: 12px;
       padding: 10px 16px;
-      color: #94a3b8;
+      color: var(--color-sidebar-text);
       text-decoration: none;
       border-radius: 8px;
       transition: all 0.2s;
       font-size: 0.9rem;
     }
     .nav-item:hover {
-      background: #334155;
+      background: var(--color-sidebar-hover);
       color: white;
     }
     .nav-item.active {
-      background: #4f46e5;
+      background: var(--color-primary);
       color: white;
     }
     .nav-item mat-icon {
@@ -135,9 +139,9 @@ import { MatIconModule } from '@angular/material/icon';
     .nav-section-label {
       font-size: 0.65rem;
       text-transform: uppercase;
-      color: #64748b;
+      color: var(--color-text-secondary);
       font-weight: 700;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.05em;
     }
     @media (max-width: 768px) {
       .sidebar {

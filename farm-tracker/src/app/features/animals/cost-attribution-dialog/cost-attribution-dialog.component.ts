@@ -111,20 +111,20 @@ export interface CostAttributionDialogData {
   styles: [`
     .txn-info { margin-bottom: 16px; font-size: 0.95rem; }
     .split-mode { margin-bottom: 16px; }
-    .field-label { display: block; font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600; margin-bottom: 4px; }
+    .field-label { display: block; font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600; margin-bottom: 4px; }
     .animal-list { max-height: 300px; overflow-y: auto; }
-    .split-hint { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #64748b; margin-bottom: 12px; background: #f8fafc; padding: 8px 12px; border-radius: 6px; }
+    .split-hint { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--color-text-secondary); margin-bottom: 12px; background: var(--color-bg); padding: 8px 12px; border-radius: 6px; }
     .split-hint mat-icon { font-size: 18px; width: 18px; height: 18px; flex-shrink: 0; }
-    .animal-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f1f5f9; }
-    .animal-row.selected { background: #f0fdf4; }
+    .animal-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--color-bg-alt); }
+    .animal-row.selected { background: var(--color-income-bg); }
     .animal-info { display: flex; align-items: center; gap: 8px; flex: 1; }
-    .breed { color: #7c3aed; font-size: 0.8rem; }
-    .days-info { font-size: 0.7rem; color: #64748b; background: #f1f5f9; padding: 1px 6px; border-radius: 8px; }
+    .breed { color: var(--color-purple); font-size: 0.8rem; }
+    .days-info { font-size: 0.7rem; color: var(--color-text-secondary); background: var(--color-bg-alt); padding: 1px 6px; border-radius: 8px; }
     .computed-amount { font-size: 0.85rem; font-weight: 600; color: var(--color-expense); min-width: 70px; text-align: right; }
     .amount-field { width: 100px; margin-left: 8px; }
-    .summary { display: flex; justify-content: space-between; padding: 12px 0; font-weight: 600; color: var(--color-text-subtle); border-top: 2px solid #e2e8f0; margin-top: 8px; }
-    .empty { color: #64748b; padding: 1rem 0; }
-    .error-msg { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
+    .summary { display: flex; justify-content: space-between; padding: 12px 0; font-weight: 600; color: var(--color-text-subtle); border-top: 2px solid var(--color-border); margin-top: 8px; }
+    .empty { color: var(--color-text-secondary); padding: 1rem 0; }
+    .error-msg { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
   `],
 })
 export class CostAttributionDialogComponent implements OnInit {

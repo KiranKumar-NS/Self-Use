@@ -11,6 +11,7 @@ import { Transaction } from '../../../core/models/transaction.model';
 import { Segment } from '../../../core/models/segment.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
+import { LoadingSkeletonComponent } from '../../../shared/components/loading-skeleton/loading-skeleton.component';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -44,7 +45,7 @@ interface CategorySales {
 @Component({
   selector: 'app-animal-analytics',
   standalone: true,
-  imports: [DatePipe, CurrencyInrPipe, LoadingSpinnerComponent, MatCardModule, MatButtonModule, MatIconModule, MatTabsModule],
+  imports: [DatePipe, CurrencyInrPipe, LoadingSpinnerComponent, LoadingSkeletonComponent, MatCardModule, MatButtonModule, MatIconModule, MatTabsModule],
   template: `
     <div class="page-header">
       <h1>Sales & Cost Analytics</h1>
@@ -54,7 +55,8 @@ interface CategorySales {
     </div>
 
     @if (loading()) {
-      <app-loading-spinner />
+      <app-loading-skeleton type="cards" [count]="5" />
+      <app-loading-skeleton type="table" [count]="5" />
     } @else {
       <!-- Overall Summary Cards -->
       <div class="stats-grid">
@@ -393,15 +395,15 @@ interface CategorySales {
 
     .tab-card { margin-top: 16px; padding: 1rem; }
     .tab-title { margin: 0 0 1rem; font-size: 1rem; color: var(--color-text); }
-    .empty { padding: 1rem; color: #64748b; }
+    .empty { padding: 1rem; color: var(--color-text-secondary); }
     .breed-cell { color: var(--color-purple); font-weight: 500; font-size: 0.85rem; }
 
     /* Trend bars */
     .trend-bars { margin-top: 1.5rem; }
     .trend-row { display: grid; grid-template-columns: 80px 1fr 100px; gap: 12px; align-items: center; padding: 6px 0; }
     .trend-label { font-size: 0.8rem; color: var(--color-text-subtle); font-weight: 600; }
-    .trend-bar-container { height: 20px; background: #f1f5f9; border-radius: 4px; overflow: hidden; }
-    .trend-bar-fill { height: 100%; background: linear-gradient(90deg, #16a34a, #22c55e); border-radius: 4px; transition: width 0.3s; min-width: 2px; }
+    .trend-bar-container { height: 20px; background: var(--color-bg-alt); border-radius: 4px; overflow: hidden; }
+    .trend-bar-fill { height: 100%; background: linear-gradient(90deg, var(--color-income), var(--color-accent)); border-radius: 4px; transition: width 0.3s; min-width: 2px; }
     .trend-amount { font-size: 0.8rem; font-weight: 600; color: var(--color-income); text-align: right; }
 
     /* Segment cards */
@@ -418,7 +420,7 @@ interface CategorySales {
     .breakdown-item { display: grid; grid-template-columns: 150px 100px 1fr 50px; gap: 12px; align-items: center; }
     .breakdown-label { font-weight: 600; font-size: 0.9rem; }
     .breakdown-value { font-weight: 600; }
-    .breakdown-bar { height: 8px; background: #f1f5f9; border-radius: 4px; overflow: hidden; }
+    .breakdown-bar { height: 8px; background: var(--color-bg-alt); border-radius: 4px; overflow: hidden; }
     .bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
     .income-bar { background: var(--color-income); }
     .expense-bar { background: var(--color-expense); }
@@ -426,14 +428,14 @@ interface CategorySales {
 
     /* Economics */
     .economics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
-    .econ-card { text-align: center; padding: 1.5rem; border: 1px solid #e2e8f0; border-radius: 12px; }
-    .econ-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
+    .econ-card { text-align: center; padding: 1.5rem; border: 1px solid var(--color-border); border-radius: 12px; }
+    .econ-label { font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
     .econ-value { font-size: 1.5rem; font-weight: 700; }
-    .econ-sub { font-size: 0.7rem; color: #94a3b8; margin-top: 4px; }
+    .econ-sub { font-size: 0.7rem; color: var(--color-text-muted); margin-top: 4px; }
 
     /* Seasonal */
     .seasonal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; }
-    .seasonal-card { padding: 1rem; border: 1px solid #e2e8f0; border-radius: 10px; position: relative; }
+    .seasonal-card { padding: 1rem; border: 1px solid var(--color-border); border-radius: 10px; position: relative; }
     .seasonal-card.best-month { border-color: var(--color-income); background: var(--color-income-bg); }
     .seasonal-card.worst-month { border-color: var(--color-expense); background: var(--color-expense-bg); }
     .seasonal-month { font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; color: var(--color-text); }
@@ -444,6 +446,10 @@ interface CategorySales {
     .seasonal-badge.best { background: var(--color-income); color: white; }
     .seasonal-badge.worst { background: var(--color-expense); color: white; }
 
+    .form-card { margin: 0 auto; }
+    @media (max-width: 1024px) {
+      .stats-grid { grid-template-columns: repeat(3, 1fr); }
+    }
     @media (max-width: 768px) {
       .stats-grid { grid-template-columns: repeat(3, 1fr); }
       .economics-grid { grid-template-columns: 1fr 1fr; }

@@ -13,7 +13,7 @@ import { NotificationBellComponent } from '../notification-bell/notification-bel
   imports: [MatToolbarModule, MatButtonModule, MatIconModule, MatMenuModule, NotificationBellComponent],
   template: `
     <mat-toolbar class="header">
-      <button mat-icon-button class="menu-btn" (click)="menuToggle.emit()">
+      <button mat-icon-button class="menu-btn" (click)="menuToggle.emit()" aria-label="Toggle navigation menu">
         <mat-icon>menu</mat-icon>
       </button>
       <span class="spacer"></span>

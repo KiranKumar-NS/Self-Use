@@ -128,16 +128,16 @@ import { normalizeName } from '../../../core/utils/name.utils';
       <!-- Table -->
       <mat-card class="table-card">
         <div class="table-container">
-          <table class="data-table">
+          <table class="data-table data-table--wide">
             <thead>
               <tr>
-                <th class="sortable" (click)="toggleSort('date')">Date</th>
-                <th class="sortable" (click)="toggleSort('type')">Type</th>
-                <th class="sortable" (click)="toggleSort('segmentName')">Segment</th>
-                <th class="sortable" (click)="toggleSort('categoryName')">Category</th>
-                <th class="sortable" (click)="toggleSort('amount')">Amount</th>
+                <th class="sortable" (click)="toggleSort('date')" [attr.aria-sort]="sortColumn === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : null">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
+                <th class="sortable" (click)="toggleSort('type')" [attr.aria-sort]="sortColumn === 'type' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : null">Type <span class="sort-icon">{{ getSortIcon('type') }}</span></th>
+                <th class="sortable" (click)="toggleSort('segmentName')" [attr.aria-sort]="sortColumn === 'segmentName' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : null">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('categoryName')" [attr.aria-sort]="sortColumn === 'categoryName' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : null">Category <span class="sort-icon">{{ getSortIcon('categoryName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('amount')" [attr.aria-sort]="sortColumn === 'amount' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : null">Amount <span class="sort-icon">{{ getSortIcon('amount') }}</span></th>
                 <th>Paid Via</th>
-                <th class="sortable" (click)="toggleSort('paidByName')">By</th>
+                <th class="sortable" (click)="toggleSort('paidByName')" [attr.aria-sort]="sortColumn === 'paidByName' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : null">By <span class="sort-icon">{{ getSortIcon('paidByName') }}</span></th>
                 <th>Description</th>
                 <th class="actions-th">Actions</th>
               </tr>
@@ -280,7 +280,7 @@ import { normalizeName } from '../../../core/utils/name.utils';
       text-transform: uppercase; vertical-align: middle;
     }
     .pay-status-chip.pending { background: var(--color-expense-bg); color: var(--color-expense); }
-    .pay-status-chip.credit { background: #fef3c7; color: #d97706; }
+    .pay-status-chip.credit { background: var(--color-warning-light); color: var(--color-warning); }
 
     .load-more { text-align: center; padding: 1.5rem; }
     .load-more button { padding: 8px 24px; }

@@ -7,6 +7,7 @@ import { provideAuth, getAuth } from '@angular/fire/auth';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 import { DateAdapter, provideNativeDateAdapter } from '@angular/material/core';
+import { MAT_SNACK_BAR_DEFAULT_OPTIONS } from '@angular/material/snack-bar';
 import { CustomDateAdapter } from './core/utils/custom-date-adapter';
 import { routes } from './app.routes';
 import { environment } from './environments/environment';
@@ -26,5 +27,6 @@ export const appConfig: ApplicationConfig = {
     provideCharts(withDefaultRegisterables()),
     provideNativeDateAdapter(),
     { provide: DateAdapter, useClass: CustomDateAdapter },
+    { provide: MAT_SNACK_BAR_DEFAULT_OPTIONS, useValue: { duration: 3000, horizontalPosition: 'center', verticalPosition: 'top' } },
   ],
 };

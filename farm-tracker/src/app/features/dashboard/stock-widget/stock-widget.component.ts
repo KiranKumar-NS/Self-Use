@@ -28,14 +28,14 @@ import { MatIconModule } from '@angular/material/icon';
   `,
   styles: [`
     .stock-card { padding: 1.25rem; }
-    h3 { margin: 0 0 1rem; font-size: 1rem; color: #1e293b; display: flex; align-items: center; gap: 8px; }
-    .title-icon { font-size: 20px; width: 20px; height: 20px; color: #64748b; }
+    h3 { margin: 0 0 1rem; font-size: 1rem; color: var(--color-text); display: flex; align-items: center; gap: 8px; }
+    .title-icon { font-size: 20px; width: 20px; height: 20px; color: var(--color-text-secondary); }
     .stock-items { display: flex; gap: 1.5rem; flex-wrap: wrap; }
     .stock-item { display: flex; align-items: center; gap: 8px; }
     .seg-icon { font-size: 1.5rem; }
-    .seg-name { font-size: 0.85rem; color: #64748b; }
-    .seg-count { font-size: 1.5rem; font-weight: 700; color: #1e293b; }
-    .no-data { color: #94a3b8; font-size: 0.85rem; margin: 0; }
+    .seg-name { font-size: 0.85rem; color: var(--color-text-secondary); }
+    .seg-count { font-size: 1.5rem; font-weight: 700; color: var(--color-text); }
+    .no-data { color: var(--color-text-muted); font-size: 0.85rem; margin: 0; }
   `],
 })
 export class StockWidgetComponent {

@@ -221,45 +221,45 @@ import { DatePipe } from '@angular/common';
     .page-header h1 { margin: 0; font-size: 1.5rem; }
     .detail-card { padding: 1.5rem; }
     .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
-    .detail-item label { display: block; font-size: 0.75rem; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
-    .detail-item span { font-size: 1rem; color: #1e293b; }
+    .detail-item label { display: block; font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; }
+    .detail-item span { font-size: 1rem; color: var(--color-text); }
     .detail-item.full { grid-column: 1 / -1; }
     .type-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
-    .type-badge.expense { background: #fef2f2; color: #dc2626; }
-    .type-badge.income { background: #f0fdf4; color: #16a34a; }
-    .amount.expense { color: #dc2626; font-weight: 700; font-size: 1.25rem !important; }
-    .amount.income { color: #16a34a; font-weight: 700; font-size: 1.25rem !important; }
+    .type-badge.expense { background: var(--color-expense-bg); color: var(--color-expense); }
+    .type-badge.income { background: var(--color-income-bg); color: var(--color-income); }
+    .amount.expense { color: var(--color-expense); font-weight: 700; font-size: 1.25rem !important; }
+    .amount.income { color: var(--color-income); font-weight: 700; font-size: 1.25rem !important; }
     .payment-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
-    .payment-badge.cash { background: #fef3c7; color: #d97706; }
-    .payment-badge.upi { background: #dbeafe; color: #2563eb; }
+    .payment-badge.cash { background: var(--color-warning-light); color: var(--color-warning); }
+    .payment-badge.upi { background: var(--color-info-light); color: var(--color-info); }
     .pay-status-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
-    .pay-status-badge.pending { background: #fef2f2; color: #dc2626; }
-    .pay-status-badge.received, .pay-status-badge.paid { background: #f0fdf4; color: #16a34a; }
+    .pay-status-badge.pending { background: var(--color-expense-bg); color: var(--color-expense); }
+    .pay-status-badge.received, .pay-status-badge.paid { background: var(--color-income-bg); color: var(--color-income); }
     .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: #1e293b; }
+    .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: var(--color-text); }
     .dist-header { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; }
     .dist-header .section-title { margin: 0; }
     .dist-card { padding: 1rem; margin-top: 0.5rem; }
     .dist-table { display: flex; flex-direction: column; }
-    .dist-row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+    .dist-row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--color-bg-alt); }
     .dist-row:last-child { border-bottom: none; }
     .dist-row.undistributed { opacity: 0.6; font-style: italic; }
     .dist-name { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 0.95rem; }
-    .dist-name.reinvestment { color: #7c3aed; font-weight: 600; }
-    .dist-icon { font-size: 20px; width: 20px; height: 20px; color: #64748b; }
-    .dist-name.reinvestment .dist-icon { color: #7c3aed; }
+    .dist-name.reinvestment { color: var(--color-purple); font-weight: 600; }
+    .dist-icon { font-size: 20px; width: 20px; height: 20px; color: var(--color-text-secondary); }
+    .dist-name.reinvestment .dist-icon { color: var(--color-purple); }
     .dist-amount { font-weight: 600; min-width: 100px; text-align: right; }
-    .dist-pct { color: #64748b; font-size: 0.8rem; min-width: 50px; text-align: right; }
-    .dist-empty { display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 0.9rem; padding: 8px 0; }
+    .dist-pct { color: var(--color-text-secondary); font-size: 0.8rem; min-width: 50px; text-align: right; }
+    .dist-empty { display: flex; align-items: center; gap: 8px; color: var(--color-text-secondary); font-size: 0.9rem; padding: 8px 0; }
     .linked-card { padding: 1rem; margin-top: 0.5rem; }
     .linked-animals { display: flex; flex-wrap: wrap; gap: 8px; }
-    .animal-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; background: #f0fdf4; color: #16a34a; border-radius: 20px; font-size: 0.85rem; font-weight: 600; text-decoration: none; }
+    .animal-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; background: var(--color-income-bg); color: var(--color-income); border-radius: 20px; font-size: 0.85rem; font-weight: 600; text-decoration: none; }
     .animal-chip mat-icon { font-size: 16px; width: 16px; height: 16px; }
     .buyer-link { display: inline-flex; align-items: center; gap: 6px; color: var(--color-primary); font-weight: 600; text-decoration: none; }
     .link-action { margin-top: 1rem; }
-    .audit-entry { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.875rem; }
-    .audit-time { color: #94a3b8; margin-left: 8px; }
-    .changes { margin: 4px 0 0 1rem; font-size: 0.8rem; color: #64748b; }
+    .audit-entry { padding: 12px 16px; border-bottom: 1px solid var(--color-bg-alt); font-size: 0.875rem; }
+    .audit-time { color: var(--color-text-muted); margin-left: 8px; }
+    .changes { margin: 4px 0 0 1rem; font-size: 0.8rem; color: var(--color-text-secondary); }
     @media (max-width: 768px) {
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .header-actions { flex-wrap: wrap; }

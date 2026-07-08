@@ -34,20 +34,20 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
   `,
   styles: [`
     .budget-card { padding: 1.25rem; margin-bottom: 1rem; }
-    h3 { margin: 0 0 1rem; font-size: 1rem; color: #1e293b; display: flex; align-items: center; gap: 8px; }
-    .title-icon { font-size: 20px; width: 20px; height: 20px; color: #64748b; }
+    h3 { margin: 0 0 1rem; font-size: 1rem; color: var(--color-text); display: flex; align-items: center; gap: 8px; }
+    .title-icon { font-size: 20px; width: 20px; height: 20px; color: var(--color-text-secondary); }
     .budget-row { margin-bottom: 14px; }
     .budget-row:last-child { margin-bottom: 0; }
     .budget-info { display: flex; justify-content: space-between; margin-bottom: 6px; }
-    .seg-name { font-weight: 600; font-size: 0.9rem; color: #1e293b; }
-    .budget-text { font-size: 0.8rem; color: #64748b; }
+    .seg-name { font-weight: 600; font-size: 0.9rem; color: var(--color-text); }
+    .budget-text { font-size: 0.8rem; color: var(--color-text-secondary); }
     .pct { font-weight: 700; margin-left: 4px; }
-    .pct.safe { color: #16a34a; }
-    .pct.warning { color: #d97706; }
-    .pct.exceeded { color: #dc2626; }
-    mat-progress-bar.safe { --mdc-linear-progress-active-indicator-color: #16a34a; }
-    mat-progress-bar.warning { --mdc-linear-progress-active-indicator-color: #d97706; }
-    mat-progress-bar.exceeded { --mdc-linear-progress-active-indicator-color: #dc2626; }
+    .pct.safe { color: var(--color-accent); }
+    .pct.warning { color: var(--color-warning); }
+    .pct.exceeded { color: var(--color-danger); }
+    mat-progress-bar.safe { --mdc-linear-progress-active-indicator-color: var(--color-accent); }
+    mat-progress-bar.warning { --mdc-linear-progress-active-indicator-color: var(--color-warning); }
+    mat-progress-bar.exceeded { --mdc-linear-progress-active-indicator-color: var(--color-danger); }
     @media (max-width: 480px) {
       .budget-info { flex-direction: column; gap: 2px; }
       .budget-text { font-size: 0.75rem; }

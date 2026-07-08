@@ -56,7 +56,7 @@ import { MatIconModule } from '@angular/material/icon';
       align-items: center;
       justify-content: center;
       min-height: 100vh;
-      background: linear-gradient(135deg, #f0fdf4 0%, #f1f5f9 50%, #ede9fe 100%);
+      background: linear-gradient(135deg, var(--color-income-bg) 0%, var(--color-bg-alt) 50%, var(--color-purple-light) 100%);
     }
     .login-card {
       width: 100%;

@@ -105,14 +105,14 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
     .header-actions { display: flex; gap: 8px; }
     .detail-card { padding: 1.5rem; }
     .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
-    .detail-item label { display: block; font-size: 0.75rem; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
-    .detail-item span { font-size: 1rem; color: #1e293b; }
+    .detail-item label { display: block; font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; }
+    .detail-item span { font-size: 1rem; color: var(--color-text); }
     .detail-item.full { grid-column: 1 / -1; }
     .stat-value { font-weight: 700; font-size: 1.25rem !important; }
     .stat-value.income { color: var(--color-income); }
     .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; }
     .amount-cell.income { color: var(--color-income); font-weight: 600; }
-    .empty { padding: 1.5rem; color: #64748b; }
+    .empty { padding: 1.5rem; color: var(--color-text-secondary); }
     @media (max-width: 768px) {
       .detail-grid { grid-template-columns: 1fr 1fr; }
       .page-header { flex-direction: column; align-items: flex-start; }

@@ -44,17 +44,17 @@ import { MatButtonModule } from '@angular/material/button';
   styles: [`
     .forgot-container {
       display: flex; align-items: center; justify-content: center;
-      min-height: 100vh; background: #f1f5f9;
+      min-height: 100vh; background: var(--color-bg-alt);
     }
     .forgot-card { width: 100%; max-width: 400px; padding: 2rem; margin: 0 1rem; }
     @media (max-width: 480px) {
       .forgot-card { padding: 1rem; }
     }
     .full-width { width: 100%; }
-    .error-message { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
-    .success-message { background: #f0fdf4; color: #16a34a; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .error-message { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .success-message { background: var(--color-income-bg); color: var(--color-income); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
     .back-link { text-align: center; margin-top: 1rem; }
-    .back-link a { color: #4f46e5; text-decoration: none; }
+    .back-link a { color: var(--color-primary); text-decoration: none; }
   `],
 })
 export class ForgotPasswordComponent {

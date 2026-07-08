@@ -220,7 +220,7 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
 
             <!-- Margin Check -->
             @if (loan()!.repaymentStatus !== 'completed') {
-              <div class="inline-form" style="border-top: 1px solid #f1f5f9; margin-top: 1rem; padding-top: 1rem;">
+              <div class="inline-form" style="border-top: 1px solid var(--color-bg-alt); margin-top: 1rem; padding-top: 1rem;">
                 <div class="repayment-form">
                   <mat-form-field appearance="outline">
                     <mat-label>Current Gold Rate (₹/g)</mat-label>
@@ -229,8 +229,8 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                   <button mat-stroked-button (click)="checkMargin()">Check Margin</button>
                 </div>
                 @if (marginStatus) {
-                  <div class="computed-info" [style.background]="marginStatus.isMarginBreached ? '#fef2f2' : '#ecfdf5'"
-                       [style.color]="marginStatus.isMarginBreached ? '#dc2626' : '#059669'">
+                  <div class="computed-info" [style.background]="marginStatus.isMarginBreached ? 'var(--color-expense-bg)' : 'var(--color-income-bg)'"
+                       [style.color]="marginStatus.isMarginBreached ? 'var(--color-danger)' : 'var(--color-income)'">
                     Current Value: {{ marginStatus.currentGoldValue | currencyInr }}
                     &nbsp;|&nbsp; LTV: {{ (marginStatus.currentLtv * 100) | number:'1.1-1' }}% / {{ (marginStatus.maxLtv * 100) | number:'1.0-0' }}%
                     &nbsp;|&nbsp; Headroom: {{ marginStatus.headroom | currencyInr }}
@@ -771,62 +771,62 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
     .header-actions { display: flex; gap: 4px; flex-wrap: wrap; }
     .detail-card { padding: 1.5rem; }
     .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
-    .detail-item label { display: block; font-size: 0.75rem; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
-    .detail-item span { font-size: 1rem; color: #1e293b; }
+    .detail-item label { display: block; font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; }
+    .detail-item span { font-size: 1rem; color: var(--color-text); }
     .detail-item.full { grid-column: 1 / -1; }
-    .amount-total { font-size: 1.1rem !important; font-weight: 600; color: #64748b !important; }
-    .amount-large { font-size: 1.5rem !important; font-weight: 700; color: #dc2626 !important; }
-    .amount-repaid { font-size: 1.1rem !important; font-weight: 600; color: #16a34a !important; }
-    .amount-penalty { color: #dc2626; font-weight: 600; }
+    .amount-total { font-size: 1.1rem !important; font-weight: 600; color: var(--color-text-secondary) !important; }
+    .amount-large { font-size: 1.5rem !important; font-weight: 700; color: var(--color-danger) !important; }
+    .amount-repaid { font-size: 1.1rem !important; font-weight: 600; color: var(--color-income) !important; }
+    .amount-penalty { color: var(--color-danger); font-weight: 600; }
     .type-badge, .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
-    .type-badge.given { background: #fef3c7; color: #d97706; }
-    .type-badge.received { background: #dbeafe; color: #2563eb; }
-    .status-badge.pending { background: #fef2f2; color: #dc2626; }
-    .status-badge.partial { background: #fef3c7; color: #d97706; }
-    .status-badge.completed { background: #f0fdf4; color: #16a34a; }
-    .subsidy-badge { background: #ecfdf5; color: #059669; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; }
-    .pledged-badge { color: #dc2626; font-weight: 600; }
-    .holder-badge { background: #ede9fe; color: #7c3aed; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
-    .released-badge { color: #16a34a; font-weight: 600; }
+    .type-badge.given { background: var(--color-warning-light); color: var(--color-warning); }
+    .type-badge.received { background: var(--color-info-light); color: var(--color-info); }
+    .status-badge.pending { background: var(--color-expense-bg); color: var(--color-expense); }
+    .status-badge.partial { background: var(--color-warning-light); color: var(--color-warning); }
+    .status-badge.completed { background: var(--color-income-bg); color: var(--color-income); }
+    .subsidy-badge { background: var(--color-income-bg); color: var(--color-income); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; }
+    .pledged-badge { color: var(--color-danger); font-weight: 600; }
+    .holder-badge { background: var(--color-purple-light); color: var(--color-purple); padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+    .released-badge { color: var(--color-income); font-weight: 600; }
     .repayment-progress { margin-top: 1.5rem; }
-    .progress-info { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.875rem; color: #64748b; }
-    .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: #1e293b; }
+    .progress-info { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.875rem; color: var(--color-text-secondary); }
+    .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: var(--color-text); }
     .repayment-form-card { padding: 1rem; }
     .repayment-form { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
     .repayment-form mat-form-field { flex: 1; min-width: 140px; }
-    .inline-form { padding: 1rem 0; border-top: 1px solid #f1f5f9; margin-top: 0.5rem; }
-    .repayment-entry { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; }
+    .inline-form { padding: 1rem 0; border-top: 1px solid var(--color-bg-alt); margin-top: 0.5rem; }
+    .repayment-entry { padding: 12px 16px; border-bottom: 1px solid var(--color-bg-alt); }
     .repayment-info { display: flex; justify-content: space-between; align-items: center; }
-    .repayment-date { color: #94a3b8; }
-    .repayment-meta { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
-    .emi-split { font-size: 0.75rem; color: #64748b; margin-left: 8px; }
-    .error-message { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
-    .disbursement { background: #fefce8; }
-    .disbursement-amount { color: #d97706; }
-    .repayment-amount { color: #16a34a; }
-    .list-entry { padding: 10px 16px; border-bottom: 1px solid #f1f5f9; }
-    .list-entry.clickable { cursor: pointer; } .list-entry.clickable:hover { background: #f8fafc; }
+    .repayment-date { color: var(--color-text-muted); }
+    .repayment-meta { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 4px; }
+    .emi-split { font-size: 0.75rem; color: var(--color-text-secondary); margin-left: 8px; }
+    .error-message { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .disbursement { background: var(--color-warning-light); }
+    .disbursement-amount { color: var(--color-warning); }
+    .repayment-amount { color: var(--color-income); }
+    .list-entry { padding: 10px 16px; border-bottom: 1px solid var(--color-bg-alt); }
+    .list-entry.clickable { cursor: pointer; } .list-entry.clickable:hover { background: var(--color-bg); }
     .list-main { display: flex; justify-content: space-between; align-items: center; }
-    .list-amount { font-weight: 600; color: #1e293b; }
-    .list-meta { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
-    .total-row { font-weight: 600; background: #f8fafc; display: flex; justify-content: space-between; }
-    .empty-text { padding: 1rem; color: #94a3b8; text-align: center; }
-    .utilization-bar { display: flex; gap: 1rem; font-size: 0.875rem; color: #64748b; margin-bottom: 8px; }
+    .list-amount { font-weight: 600; color: var(--color-text); }
+    .list-meta { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 2px; }
+    .total-row { font-weight: 600; background: var(--color-bg); display: flex; justify-content: space-between; }
+    .empty-text { padding: 1rem; color: var(--color-text-muted); text-align: center; }
+    .utilization-bar { display: flex; gap: 1rem; font-size: 0.875rem; color: var(--color-text-secondary); margin-bottom: 8px; }
     .interest-summary { display: flex; flex-wrap: wrap; gap: 1.5rem; padding: 1rem 0; font-size: 0.9rem; }
     .interest-actions, .emi-actions { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
     .emi-card { padding: 1rem; }
     .emi-table-wrap { overflow-x: auto; }
     .emi-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-    .emi-table th { background: #f8fafc; padding: 8px; text-align: left; border-bottom: 2px solid #e2e8f0; }
-    .emi-table td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; }
-    .emi-table tr.paid { background: #f0fdf4; }
-    .emi-table tr.overdue { background: #fef2f2; }
-    .emi-table tr.moratorium { background: #f5f3ff; }
+    .emi-table th { background: var(--color-bg); padding: 8px; text-align: left; border-bottom: 2px solid var(--color-border); }
+    .emi-table td { padding: 6px 8px; border-bottom: 1px solid var(--color-bg-alt); }
+    .emi-table tr.paid { background: var(--color-income-bg); }
+    .emi-table tr.overdue { background: var(--color-expense-bg); }
+    .emi-table tr.moratorium { background: var(--color-purple-light); }
     .emi-status { padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
-    .emi-status.paid { background: #dcfce7; color: #16a34a; }
-    .emi-status.upcoming { background: #e0f2fe; color: #0284c7; }
-    .emi-status.overdue { background: #fee2e2; color: #dc2626; }
-    .emi-status.moratorium { background: #ede9fe; color: #7c3aed; }
+    .emi-status.paid { background: var(--color-income-bg); color: var(--color-income); }
+    .emi-status.upcoming { background: var(--color-info-light); color: var(--color-info); }
+    .emi-status.overdue { background: var(--color-expense-bg); color: var(--color-danger); }
+    .emi-status.moratorium { background: var(--color-purple-light); color: var(--color-purple); }
     @media (max-width: 768px) {
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .detail-grid { grid-template-columns: 1fr 1fr; gap: 1rem; }

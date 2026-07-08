@@ -106,11 +106,13 @@ interface DocRow {
               <input matInput [matDatepicker]="picker" [(ngModel)]="date" name="date" required />
               <mat-datepicker-toggle matIconSuffix [for]="picker" />
               <mat-datepicker #picker />
+              <mat-error>Required</mat-error>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
               <mat-label>Amount (INR)</mat-label>
               <input matInput type="number" [(ngModel)]="amount" name="amount" required min="1" />
+              <mat-error>Required</mat-error>
             </mat-form-field>
           </div>
 
@@ -118,6 +120,7 @@ interface DocRow {
             <mat-form-field appearance="outline">
               <mat-label>Person Name</mat-label>
               <input matInput [(ngModel)]="personName" name="personName" required />
+              <mat-error>Required</mat-error>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
@@ -134,6 +137,7 @@ interface DocRow {
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Purpose / Reason</mat-label>
             <input matInput [(ngModel)]="purpose" name="purpose" required placeholder="e.g. Personal need, Goat feed" />
+            <mat-error>Required</mat-error>
           </mat-form-field>
         }
 
@@ -152,11 +156,13 @@ interface DocRow {
                 <mat-option value="individual">Individual Lender</mat-option>
                 <mat-option value="gold_loan">Gold Loan</mat-option>
               </mat-select>
+              <mat-error>Required</mat-error>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
               <mat-label>{{ loanSource === 'individual' ? 'Lender Name' : 'Source Name' }}</mat-label>
               <input matInput [(ngModel)]="loanSourceName" name="loanSourceName" required placeholder="e.g. SBI, Muthoot Finance" />
+              <mat-error>Required</mat-error>
             </mat-form-field>
           </div>
 
@@ -169,6 +175,7 @@ interface DocRow {
             <mat-form-field appearance="outline">
               <mat-label>Lender / Borrower Name</mat-label>
               <input matInput [(ngModel)]="personName" name="formalPersonName" required />
+              <mat-error>Required</mat-error>
             </mat-form-field>
           </div>
 
@@ -178,6 +185,7 @@ interface DocRow {
               <input matInput type="number" [(ngModel)]="sanctionedAmount" name="sanctionedAmount" required min="1"
                 (ngModelChange)="recalculate()" />
               <mat-icon matSuffix class="info-icon" matTooltip="Total loan amount approved by the lender. e.g. Bank sanctions Rs.5,00,000">info</mat-icon>
+              <mat-error>Required</mat-error>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
@@ -185,12 +193,14 @@ interface DocRow {
               <input matInput [matDatepicker]="disPicker" [(ngModel)]="disbursementDate" name="disbursementDate" required />
               <mat-datepicker-toggle matIconSuffix [for]="disPicker" />
               <mat-datepicker #disPicker />
+              <mat-error>Required</mat-error>
             </mat-form-field>
           </div>
 
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Purpose / Reason</mat-label>
             <input matInput [(ngModel)]="purpose" name="formalPurpose" required placeholder="e.g. Farm expansion, Working capital" />
+            <mat-error>Required</mat-error>
           </mat-form-field>
 
           <!-- Held By -->
@@ -262,6 +272,7 @@ interface DocRow {
               <mat-label>Interest Rate ({{ frequencyLabel() }})</mat-label>
               <input matInput type="number" [(ngModel)]="interestRateInput" name="interestRateInput" required min="0" step="0.01"
                 (ngModelChange)="recalculate()" />
+              <mat-error>Required</mat-error>
             </mat-form-field>
           </div>
 
@@ -297,6 +308,7 @@ interface DocRow {
                 <mat-label>Tenure (months)</mat-label>
                 <input matInput type="number" [(ngModel)]="tenure" name="tenure" required min="1"
                   (ngModelChange)="recalculate()" />
+                <mat-error>Required</mat-error>
               </mat-form-field>
 
               <mat-form-field appearance="outline">
@@ -550,7 +562,7 @@ interface DocRow {
               &nbsp;|&nbsp; LTV: {{ (effectiveLtv() * 100) | number:'1.0-0' }}%
               &nbsp;|&nbsp; Eligible: {{ eligibleAmount() | currencyInr }}
               @if (sanctionedAmount > eligibleAmount()) {
-                <span style="color:#dc2626"> (Sanctioned exceeds eligible!)</span>
+                <span style="color:var(--color-danger)"> (Sanctioned exceeds eligible!)</span>
               }
             </div>
           }
@@ -600,26 +612,26 @@ interface DocRow {
   `,
   styles: [`
     .page-header { margin-bottom: 1rem; }
-    .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; }
-    .form-card { max-width: 800px; padding: 1.5rem; }
+    .page-header h1 { margin: 0; font-size: 1.5rem; color: var(--color-text); }
+    .form-card { max-width: 800px; padding: 1.5rem; margin: 0 auto; }
     .form-row { display: flex; gap: 1rem; margin-bottom: 0.5rem; align-items: center; }
     .form-row mat-form-field { flex: 1; }
     .full-width { width: 100%; }
     .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem; }
-    .error-message { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
-    .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: #1e293b; display: flex; align-items: center; gap: 4px; }
-    .computed-info { font-size: 0.875rem; color: #6366f1; margin-bottom: 1rem; padding: 8px 12px; background: #eef2ff; border-radius: 6px; }
-    .computed-info.highlight { color: #059669; background: #ecfdf5; font-weight: 600; }
-    .info-icon { font-size: 16px; width: 16px; height: 16px; color: #94a3b8; cursor: help; vertical-align: middle; margin-left: 4px; }
-    .field-hint { font-size: 0.7rem; color: #94a3b8; margin-top: -8px; margin-bottom: 8px; padding-left: 4px; }
-    .deduction-row, .collateral-row { border-left: 3px solid #e2e8f0; padding-left: 12px; margin-bottom: 0.75rem; }
+    .error-message { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: var(--color-text); display: flex; align-items: center; gap: 4px; }
+    .computed-info { font-size: 0.875rem; color: var(--color-primary); margin-bottom: 1rem; padding: 8px 12px; background: var(--color-primary-light); border-radius: 6px; }
+    .computed-info.highlight { color: var(--color-income); background: var(--color-income-bg); font-weight: 600; }
+    .info-icon { font-size: 16px; width: 16px; height: 16px; color: var(--color-text-muted); cursor: help; vertical-align: middle; margin-left: 4px; }
+    .field-hint { font-size: 0.7rem; color: var(--color-text-muted); margin-top: -8px; margin-bottom: 8px; padding-left: 4px; }
+    .deduction-row, .collateral-row { border-left: 3px solid var(--color-border); padding-left: 12px; margin-bottom: 0.75rem; }
     mat-radio-group { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
     mat-slide-toggle { margin-bottom: 0.5rem; }
     .emi-preview { margin-bottom: 1rem; }
-    .emi-preview h4 { margin: 0 0 0.5rem; font-size: 0.875rem; color: #64748b; }
+    .emi-preview h4 { margin: 0 0 0.5rem; font-size: 0.875rem; color: var(--color-text-secondary); }
     .preview-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-    .preview-table th { background: #f8fafc; padding: 6px 8px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-    .preview-table td { padding: 4px 8px; border-bottom: 1px solid #f1f5f9; }
+    .preview-table th { background: var(--color-bg); padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--color-border); }
+    .preview-table td { padding: 4px 8px; border-bottom: 1px solid var(--color-bg-alt); }
     .preview-table-wrap { overflow-x: auto; }
     @media (max-width: 640px) {
       .form-row { flex-direction: column; gap: 0; }

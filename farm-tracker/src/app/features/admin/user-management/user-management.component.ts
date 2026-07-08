@@ -96,7 +96,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
     .role-badge.admin { background: var(--color-warning-light); color: var(--color-warning); }
     .role-badge.manager { background: var(--color-info-light); color: var(--color-info); }
     .role-badge.viewer { background: var(--color-bg-alt); color: var(--color-text-secondary); }
-    .segment-chip { background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: var(--radius-sm); font-size: 0.7rem; margin-right: 4px; }
+    .segment-chip { background: var(--color-primary-light); color: var(--color-primary); padding: 2px 6px; border-radius: var(--radius-sm); font-size: 0.7rem; margin-right: 4px; }
   `],
 })
 export class UserManagementComponent implements OnInit {

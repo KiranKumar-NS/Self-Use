@@ -83,11 +83,11 @@ import { MatChipsModule } from '@angular/material/chips';
     }
     .full-width { width: 100%; }
     .error-message {
-      background: #fef2f2; color: #dc2626;
+      background: var(--color-expense-bg); color: var(--color-danger);
       padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; font-size: 0.875rem;
     }
     .success-message {
-      background: #f0fdf4; color: #16a34a;
+      background: var(--color-income-bg); color: var(--color-income);
       padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; font-size: 0.875rem;
     }
   `],

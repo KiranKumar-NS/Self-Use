@@ -188,9 +188,9 @@ import { DatePipe } from '@angular/common';
     .balance { color: var(--color-expense); font-weight: 600; }
     .segment-tag { font-size: 0.8rem; }
     .segment-tag.personal { color: var(--color-purple); font-style: italic; }
-    .source-badge { background: #ede9fe; color: #7c3aed; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
-    .from-loan-badge { background: #e0f2fe; color: #0284c7; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
-    .simple-badge { color: #94a3b8; }
+    .source-badge { background: var(--color-purple-light); color: var(--color-purple); padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+    .from-loan-badge { background: var(--color-info-light); color: var(--color-info); padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
+    .simple-badge { color: var(--color-text-muted); }
     .load-more { text-align: center; padding: 1rem; }
     @media (max-width: 768px) {
       .filters mat-form-field { min-width: 0; flex-basis: 100%; }

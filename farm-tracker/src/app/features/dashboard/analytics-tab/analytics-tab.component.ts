@@ -273,14 +273,14 @@ import { MatIconModule } from '@angular/material/icon';
 
     .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
     .stat-card { padding: 1.25rem; display: flex; flex-direction: column; border-left: 4px solid var(--color-border); min-width: 0; overflow: hidden; }
-    .stat-card.total { border-color: var(--color-primary); background: #f5f3ff; }
+    .stat-card.total { border-color: var(--color-primary); background: var(--color-primary-light); }
     .stat-card.income-card { border-color: var(--color-income); background: var(--color-income-bg); }
     .stat-card.profit { border-color: var(--color-income); background: var(--color-income-bg); }
     .stat-card.loss { border-color: var(--color-expense); background: var(--color-expense-bg); }
     .expense-text { color: var(--color-expense); }
     .income-text { color: var(--color-income); }
-    .holding-text { color: var(--color-warning, #d97706); }
-    .undistributed-card { border-color: var(--color-warning, #d97706); background: #fffbeb; }
+    .holding-text { color: var(--color-warning); }
+    .undistributed-card { border-color: var(--color-warning); background: var(--color-warning-light); }
     .stat-label { font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
     .stat-value {
       font-size: var(--font-2xl); font-weight: 700; color: var(--color-text); margin: 4px 0;
@@ -302,15 +302,15 @@ import { MatIconModule } from '@angular/material/icon';
     .invest-value { font-weight: 600; }
     .invest-value.expense { color: var(--color-expense); }
     .invest-value.income { color: var(--color-income); }
-    .invest-value.income-holding { color: #d97706; }
-    .invest-value.loan-holds { color: #7c3aed; }
-    .invest-value.loan-owes-val { color: #dc2626; }
+    .invest-value.income-holding { color: var(--color-warning); }
+    .invest-value.loan-holds { color: var(--color-purple); }
+    .invest-value.loan-owes-val { color: var(--color-danger); }
     .holding-tag { font-size: 0.6rem; padding: 1px 4px; border-radius: 3px; font-weight: 700; text-transform: uppercase; margin-right: 4px; vertical-align: middle; }
-    .holding-tag.income-hold { background: #fef3c7; color: #d97706; }
-    .holding-tag.loan-hold { background: #ede9fe; color: #7c3aed; }
-    .holding-tag.loan-owes { background: #fee2e2; color: #dc2626; }
+    .holding-tag.income-hold { background: var(--color-warning-light); color: var(--color-warning); }
+    .holding-tag.loan-hold { background: var(--color-purple-light); color: var(--color-purple); }
+    .holding-tag.loan-owes { background: var(--color-danger-light); color: var(--color-danger); }
     .invest-row.sub-row { padding-left: 1rem; opacity: 0.85; }
-    .invest-label.sub-label { font-size: 0.7rem; color: #94a3b8; }
+    .invest-label.sub-label { font-size: 0.7rem; color: var(--color-text-muted); }
 
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
     .chart-card { padding: 1.25rem; }

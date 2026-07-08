@@ -1,21 +1,25 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { ChildrenOutletContexts, RouterOutlet } from '@angular/router';
 import { SidebarComponent } from '../sidebar/sidebar.component';
 import { HeaderComponent } from '../header/header.component';
 import { BottomNavComponent } from '../bottom-nav/bottom-nav.component';
 import { NotificationService } from '../../core/services/notification.service';
+import { routeAnimation } from '../../core/utils/route-animations';
 
 @Component({
   selector: 'app-shell',
   standalone: true,
   imports: [RouterOutlet, SidebarComponent, HeaderComponent, BottomNavComponent],
+  animations: [routeAnimation],
   template: `
     <div class="app-layout">
       <app-sidebar [open]="sidebarOpen()" (closed)="sidebarOpen.set(false)" />
       <div class="main-area">
         <app-header (menuToggle)="sidebarOpen.set(!sidebarOpen())" />
         <main class="content">
-          <router-outlet />
+          <div [@routeAnimation]="getRouteAnimationData()">
+            <router-outlet />
+          </div>
         </main>
       </div>
       <app-bottom-nav (moreClick)="sidebarOpen.set(!sidebarOpen())" />
@@ -37,7 +41,7 @@ import { NotificationService } from '../../core/services/notification.service';
       flex: 1;
       min-width: 0;
       padding: 24px;
-      background: #f8fafc;
+      background: var(--color-bg);
     }
     @media (max-width: 768px) {
       .main-area { margin-left: 0; }
@@ -47,7 +51,12 @@ import { NotificationService } from '../../core/services/notification.service';
 })
 export class ShellComponent implements OnInit {
   private notificationService = inject(NotificationService);
+  private contexts = inject(ChildrenOutletContexts);
   sidebarOpen = signal(false);
+
+  getRouteAnimationData() {
+    return this.contexts.getContext('primary')?.route?.snapshot?.url;
+  }
 
   ngOnInit(): void {
     this.notificationService.refresh().catch(() => {});

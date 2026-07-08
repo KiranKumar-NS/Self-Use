@@ -21,7 +21,7 @@ import { formatCurrency } from '../../../core/utils/firestore.utils';
   `,
   styles: [`
     .chart-card { padding: 1.5rem; }
-    h3 { margin: 0 0 1rem; font-size: 1rem; color: #1e293b; }
+    h3 { margin: 0 0 1rem; font-size: 1rem; color: var(--color-text); }
   `],
 })
 export class SegmentBreakdownChartComponent implements OnChanges {

@@ -47,7 +47,7 @@ import { DatePipe } from '@angular/common';
             [id]="col.id" [cdkDropListConnectedTo]="connectedLists(col.id)"
             (cdkDropListDropped)="drop($event, col.id)">
             @for (task of getColumn(col.id); track task.id) {
-              <mat-card class="task-card" [class.done-card]="col.id === 'done'" [class.personal-card]="task.visibility === 'personal'" cdkDrag (click)="openTask(task.id)">
+              <mat-card class="task-card" [class.done-card]="col.id === 'done'" [class.personal-card]="task.visibility === 'personal'" cdkDrag tabindex="0" (click)="openTask(task.id)" (keydown.enter)="openTask(task.id)" (keydown.space)="openTask(task.id); $event.preventDefault()">
                 <div class="task-top">
                   <span class="priority-dot" [class]="task.priority"></span>
                   @if (task.visibility === 'personal') {
@@ -134,8 +134,8 @@ import { DatePipe } from '@angular/common';
   `,
   styles: [`
     .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
-    .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; }
-    .subtitle { margin: 4px 0 0; color: #94a3b8; font-size: 0.8rem; }
+    .page-header h1 { margin: 0; font-size: 1.5rem; color: var(--color-text); }
+    .subtitle { margin: 4px 0 0; color: var(--color-text-muted); font-size: 0.8rem; }
     .header-actions { display: flex; gap: 12px; align-items: center; }
     .kanban-container { display: flex; gap: 1rem; overflow-x: auto; min-height: 70vh; padding-bottom: 1rem; }
     .kanban-column { flex: 1; min-width: 240px; max-width: 300px; }
@@ -143,36 +143,36 @@ import { DatePipe } from '@angular/common';
       display: flex; align-items: center; gap: 8px; padding: 10px 14px;
       border-radius: 8px 8px 0 0; font-weight: 700; font-size: 0.85rem;
     }
-    .column-header.backlog { background: #f1f5f9; color: #64748b; }
-    .column-header.todo { background: #dbeafe; color: #1d4ed8; }
-    .column-header.in_progress { background: #fef3c7; color: #d97706; }
-    .column-header.done { background: #dcfce7; color: #16a34a; }
+    .column-header.backlog { background: var(--color-bg-alt); color: var(--color-text-secondary); }
+    .column-header.todo { background: var(--color-info-light); color: var(--color-info); }
+    .column-header.in_progress { background: var(--color-warning-light); color: var(--color-warning); }
+    .column-header.done { background: var(--color-income-bg); color: var(--color-income); }
     .count { background: rgba(0,0,0,0.1); padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; }
     .card-list {
-      min-height: 200px; background: #f8fafc; border-radius: 0 0 8px 8px;
+      min-height: 200px; background: var(--color-bg); border-radius: 0 0 8px 8px;
       padding: 8px; display: flex; flex-direction: column; gap: 8px;
     }
     .task-card { padding: 12px; cursor: grab; transition: box-shadow 0.2s; }
     .task-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     .task-card.done-card { opacity: 0.6; }
-    .task-card.personal-card { border-left: 3px solid #7c3aed; }
+    .task-card.personal-card { border-left: 3px solid var(--color-purple); }
     .task-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
     .spacer { flex: 1; }
-    .personal-badge { font-size: 0.6rem; font-weight: 700; color: #7c3aed; background: #ede9fe; padding: 1px 6px; border-radius: 4px; }
-    .task-title { font-size: 0.85rem; font-weight: 600; color: #1e293b; margin-bottom: 8px; }
-    .task-meta { display: flex; align-items: center; gap: 10px; font-size: 0.75rem; color: #64748b; }
+    .personal-badge { font-size: 0.6rem; font-weight: 700; color: var(--color-purple); background: var(--color-purple-light); padding: 1px 6px; border-radius: 4px; }
+    .task-title { font-size: 0.85rem; font-weight: 600; color: var(--color-text); margin-bottom: 8px; }
+    .task-meta { display: flex; align-items: center; gap: 10px; font-size: 0.75rem; color: var(--color-text-secondary); }
     .meta-icon { font-size: 14px; width: 14px; height: 14px; vertical-align: middle; margin-right: 2px; }
     .priority-dot { width: 8px; height: 8px; border-radius: 50%; }
-    .priority-dot.low { background: #94a3b8; }
-    .priority-dot.medium { background: #3b82f6; }
-    .priority-dot.high { background: #f59e0b; }
-    .priority-dot.urgent { background: #dc2626; }
+    .priority-dot.low { background: var(--color-text-muted); }
+    .priority-dot.medium { background: var(--color-info); }
+    .priority-dot.high { background: var(--color-warning); }
+    .priority-dot.urgent { background: var(--color-danger); }
     .due-date { display: flex; align-items: center; }
-    .subtask-count { display: flex; align-items: center; color: #4f46e5; font-weight: 600; }
-    .assignee { font-size: 0.7rem; color: #94a3b8; margin-top: 6px; display: block; }
-    .assignee-inline { font-size: 0.7rem; color: #94a3b8; margin-left: auto; }
+    .subtask-count { display: flex; align-items: center; color: var(--color-primary); font-weight: 600; }
+    .assignee { font-size: 0.7rem; color: var(--color-text-muted); margin-top: 6px; display: block; }
+    .assignee-inline { font-size: 0.7rem; color: var(--color-text-muted); margin-left: auto; }
     .cdk-drag-preview { box-shadow: 0 8px 24px rgba(0,0,0,0.15); border-radius: 8px; }
-    .cdk-drag-placeholder { opacity: 0.3; border: 2px dashed #94a3b8; border-radius: 8px; }
+    .cdk-drag-placeholder { background: var(--color-primary-light); border: 2px dashed var(--color-primary); border-radius: var(--radius-md); opacity: 1; }
 
     /* Mobile tab view */
     .mobile-only { display: none; }
@@ -180,7 +180,7 @@ import { DatePipe } from '@angular/common';
     .tab-label { font-size: 0.8rem; }
     .tab-count { background: rgba(0,0,0,0.08); padding: 1px 6px; border-radius: 10px; font-size: 0.7rem; margin-left: 6px; }
     .status-select { width: 110px; font-size: 0.7rem; }
-    .empty-column { text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.85rem; }
+    .empty-column { text-align: center; color: var(--color-text-muted); padding: 2rem; font-size: 0.85rem; }
 
     @media (max-width: 768px) {
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }

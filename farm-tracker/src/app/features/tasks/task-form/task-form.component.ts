@@ -131,21 +131,21 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
   `,
   styles: [`
     .page-header { margin-bottom: 1rem; }
-    .page-header h1 { margin: 0; font-size: 1.5rem; color: #1e293b; }
-    .form-card { max-width: 700px; padding: 1.5rem; }
+    .page-header h1 { margin: 0; font-size: 1.5rem; color: var(--color-text); }
+    .form-card { max-width: 700px; padding: 1.5rem; margin: 0 auto; }
     .form-row { display: flex; gap: 1rem; }
     .form-row mat-form-field { flex: 1; }
     .full-width { width: 100%; }
     .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
-    .error-msg { background: #fef2f2; color: #dc2626; padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .error-msg { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
     .subtasks-section { margin: 1rem 0; }
-    .subtasks-section h3 { font-size: 0.9rem; color: #475569; margin-bottom: 8px; }
+    .subtasks-section h3 { font-size: 0.9rem; color: var(--color-text-subtle); margin-bottom: 8px; }
     .subtask-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-    .subtask-input { flex: 1; min-width: 0; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; }
-    .subtask-input:focus { outline: none; border-color: #4f46e5; }
-    .subtask-date { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font-size: 0.8rem; color: #475569; width: 140px; }
-    .subtask-date:focus { outline: none; border-color: #4f46e5; }
-    .add-btn { color: #4f46e5; font-size: 0.85rem; }
+    .subtask-input { flex: 1; min-width: 0; border: 1px solid var(--color-border); border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; }
+    .subtask-input:focus { outline: none; border-color: var(--color-primary); }
+    .subtask-date { border: 1px solid var(--color-border); border-radius: 6px; padding: 6px 10px; font-size: 0.8rem; color: var(--color-text-subtle); width: 140px; }
+    .subtask-date:focus { outline: none; border-color: var(--color-primary); }
+    .add-btn { color: var(--color-primary); font-size: 0.85rem; }
     @media (max-width: 640px) {
       .form-row { flex-direction: column; gap: 0; }
       .form-card { padding: 1rem; }
