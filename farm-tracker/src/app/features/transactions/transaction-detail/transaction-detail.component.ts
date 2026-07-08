@@ -95,6 +95,16 @@ import { DatePipe } from '@angular/common';
             <label>Description</label>
             <span>{{ transaction()!.description || 'No description' }}</span>
           </div>
+          @if (transaction()!.tags?.length) {
+            <div class="detail-item full">
+              <label>Tags</label>
+              <div class="tag-chips">
+                @for (tag of transaction()!.tags; track tag) {
+                  <span class="tag-chip">{{ tag }}</span>
+                }
+              </div>
+            </div>
+          }
           <div class="detail-item">
             <label>Created By</label>
             <span>{{ transaction()!.createdByName }}</span>
@@ -253,6 +263,8 @@ import { DatePipe } from '@angular/common';
     .dist-empty { display: flex; align-items: center; gap: 8px; color: var(--color-text-secondary); font-size: 0.9rem; padding: 8px 0; }
     .linked-card { padding: 1rem; margin-top: 0.5rem; }
     .linked-animals { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag-chip { display: inline-block; padding: 2px 10px; background: var(--color-primary-light, var(--color-info-light)); color: var(--color-primary, var(--color-info)); border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
     .animal-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; background: var(--color-income-bg); color: var(--color-income); border-radius: 20px; font-size: 0.85rem; font-weight: 600; text-decoration: none; }
     .animal-chip mat-icon { font-size: 16px; width: 16px; height: 16px; }
     .buyer-link { display: inline-flex; align-items: center; gap: 6px; color: var(--color-primary); font-weight: 600; text-decoration: none; }

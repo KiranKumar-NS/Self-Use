@@ -50,6 +50,18 @@ import { MatIconModule } from '@angular/material/icon';
           }
         </div>
       </div>
+      <!-- Tag Chips -->
+      @if (allTags().length > 0) {
+        <div class="filter-row">
+          <span class="filter-label">Tag</span>
+          <div class="chip-scroll">
+            <button class="filter-chip" [class.active]="!filterTag" (click)="onTagChipClick('')">All</button>
+            @for (tag of allTags(); track tag) {
+              <button class="filter-chip" [class.active]="filterTag === tag" (click)="onTagChipClick(tag)">{{ tag }}</button>
+            }
+          </div>
+        </div>
+      }
     </div>
 
     @if (loading()) {
@@ -78,6 +90,27 @@ import { MatIconModule } from '@angular/material/icon';
           </mat-card>
         }
       </div>
+
+      <!-- Tag Productivity -->
+      @if (filterTag && tagProductivity()) {
+        <h3 class="section-title">Tag: "{{ filterTag }}" Productivity</h3>
+        <div class="summary-grid">
+          <mat-card class="stat-card income-card">
+            <span class="stat-label">Income</span>
+            <span class="stat-value income-text">{{ tagProductivity()!.income | currencyInr }}</span>
+            <span class="stat-count">{{ tagProductivity()!.incomeCount }} transactions</span>
+          </mat-card>
+          <mat-card class="stat-card total">
+            <span class="stat-label">Expense</span>
+            <span class="stat-value expense-text">{{ tagProductivity()!.expense | currencyInr }}</span>
+            <span class="stat-count">{{ tagProductivity()!.expenseCount }} transactions</span>
+          </mat-card>
+          <mat-card class="stat-card" [class.profit]="tagProductivity()!.net >= 0" [class.loss]="tagProductivity()!.net < 0">
+            <span class="stat-label">Net Profit/Loss</span>
+            <span class="stat-value" [class.income-text]="tagProductivity()!.net >= 0" [class.expense-text]="tagProductivity()!.net < 0">{{ tagProductivity()!.net | currencyInr }}</span>
+          </mat-card>
+        </div>
+      }
 
       <!-- Person Investment -->
       <h3 class="section-title">Person Investment</h3>
@@ -295,12 +328,15 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   filterSegment = '';
   filterPaidBy = '';
   filterCategory = '';
+  filterTag = '';
 
 
   // Unique values for dropdowns
   allSegments = signal<string[]>([]);
   allPaidBy = signal<string[]>([]);
   allCategories = signal<string[]>([]);
+  allTags = signal<string[]>([]);
+  tagProductivity = signal<{ income: number; expense: number; net: number; incomeCount: number; expenseCount: number } | null>(null);
 
   // Computed stats
   totalExpense = signal(0);
@@ -389,6 +425,9 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
 
     this.allTransactions.set(txns);
 
+    // Extract unique tags from expense transactions (income tags added below)
+    const tagSet = new Set<string>(txns.flatMap(t => t.tags || []));
+
     // Merge transaction names with base reference data (adds external/non-registered persons)
     const txnPersons = txns.map(t => normalizeName(t.paidByName || 'Unknown'));
     this.allPaidBy.set([...new Set([...this.allPaidBy(), ...txnPersons])].sort());
@@ -396,6 +435,10 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
 
     this.applyFilters();
     await this.buildInvestmentSummary(txns);
+
+    // Merge income tags and set allTags
+    this.incomeTransactions().forEach(t => (t.tags || []).forEach(tag => tagSet.add(tag)));
+    this.allTags.set([...tagSet].sort());
   }
 
   private async buildInvestmentSummary(expenseTxns: Transaction[]): Promise<void> {
@@ -538,6 +581,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       this.filterPaidBy = '';
       this.filterSegment = '';
       this.filterCategory = '';
+      this.filterTag = '';
     }
     this.applyFilters();
   }
@@ -552,8 +596,13 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     this.applyFilters();
   }
 
+  onTagChipClick(tag: string): void {
+    this.filterTag = this.filterTag === tag ? '' : tag;
+    this.applyFilters();
+  }
+
   hasFilters(): boolean {
-    return !!(this.filterSegment || this.filterPaidBy || this.filterCategory);
+    return !!(this.filterSegment || this.filterPaidBy || this.filterCategory || this.filterTag);
   }
 
   clearFilters(): void {
@@ -571,6 +620,9 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     }
     if (this.filterCategory) {
       txns = txns.filter((t) => t.categoryName === this.filterCategory);
+    }
+    if (this.filterTag) {
+      txns = txns.filter(t => t.tags?.includes(this.filterTag));
     }
 
     this.filtered.set(txns);
@@ -616,7 +668,23 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     }
     if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segmentName === this.filterSegment);
     if (this.filterCategory) incomeForRange = incomeForRange.filter(t => t.categoryName === this.filterCategory);
+    if (this.filterTag) incomeForRange = incomeForRange.filter(t => t.tags?.includes(this.filterTag));
     this.filteredIncome.set(incomeForRange);
+
+    // Compute tag productivity when a tag is selected
+    if (this.filterTag) {
+      const tagExpense = txns.reduce((s, t) => s + t.amount, 0);
+      const tagIncome = incomeForRange.reduce((s, t) => s + t.amount, 0);
+      this.tagProductivity.set({
+        income: tagIncome,
+        expense: tagExpense,
+        net: tagIncome - tagExpense,
+        incomeCount: incomeForRange.length,
+        expenseCount: txns.length,
+      });
+    } else {
+      this.tagProductivity.set(null);
+    }
 
     // Rebuild person investment from filtered data (use cached UID lookup)
     const uidToName2 = this.cachedUidToName;
