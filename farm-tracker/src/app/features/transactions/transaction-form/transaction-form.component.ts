@@ -25,6 +25,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 
 import { MatRadioModule } from '@angular/material/radio';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 
 @Component({
   selector: 'app-transaction-form',
@@ -32,7 +33,7 @@ import { MatRadioModule } from '@angular/material/radio';
   imports: [
     FormsModule, MatCardModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatDatepickerModule, MatRadioModule,
-    MatIconModule, MatCheckboxModule,
+    MatIconModule, MatCheckboxModule, MatAutocompleteModule,
   ],
   template: `
     <div class="page-header">
@@ -227,8 +228,18 @@ import { MatRadioModule } from '@angular/material/radio';
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Tags (optional, comma-separated)</mat-label>
           <input matInput [(ngModel)]="tagsInput" name="tags"
-            placeholder="e.g. vaccination-drive, eid-season" />
-          <mat-hint>Group transactions for ad-hoc analysis</mat-hint>
+            placeholder="e.g. q3-harvest-2026, plot-alpha"
+            [matAutocomplete]="tagAuto"
+            (input)="onTagInput()" />
+          <button mat-icon-button matSuffix type="button" (click)="fillAutoTags()" title="Auto-generate tags">
+            <mat-icon>auto_awesome</mat-icon>
+          </button>
+          <mat-autocomplete #tagAuto="matAutocomplete" (optionSelected)="addTag($event.option.value)">
+            @for (tag of filteredTagSuggestions(); track tag) {
+              <mat-option [value]="tag">{{ tag }}</mat-option>
+            }
+          </mat-autocomplete>
+          <mat-hint>Group transactions for crop/harvest tracking</mat-hint>
         </mat-form-field>
 
         <div class="form-actions">
@@ -326,6 +337,8 @@ export class TransactionFormComponent implements OnInit {
 
   suggestedName = '';
   private knownNames: string[] = [];
+  private knownTags: string[] = [];
+  filteredTagSuggestions = signal<string[]>([]);
   private editId = '';
 
   // Animal linking
@@ -355,6 +368,9 @@ export class TransactionFormComponent implements OnInit {
           .filter(t => t.paidBy === 'other' && t.paidByName)
           .map(t => t.paidByName!)
       )];
+      this.knownTags = [...new Set(
+        recent.transactions.flatMap(t => t.tags || [])
+      )].sort();
     } catch {}
 
     // Filter segments by user access
@@ -446,6 +462,142 @@ export class TransactionFormComponent implements OnInit {
     } else {
       this.activeAnimals.set([]);
     }
+  }
+
+  fillAutoTags(): void {
+    const manual = this.tagsInput.trim()
+      ? this.tagsInput.split(',').map(t => t.trim().toLowerCase()).filter(t => t)
+      : [];
+    const merged = this.autoGenerateTags(manual);
+    this.tagsInput = merged.join(', ');
+  }
+
+  addTag(tag: string): void {
+    const existing = this.tagsInput.split(',').map(t => t.trim().toLowerCase()).filter(t => t);
+    if (!existing.includes(tag)) {
+      existing.push(tag);
+      this.tagsInput = existing.join(', ');
+    }
+    this.filteredTagSuggestions.set([]);
+  }
+
+  onTagInput(): void {
+    const parts = this.tagsInput.split(',');
+    const currentPart = (parts[parts.length - 1] || '').trim().toLowerCase();
+    const alreadyUsed = parts.slice(0, -1).map(t => t.trim().toLowerCase()).filter(t => t);
+    const allSuggestions = this.getSuggestedTags();
+    if (!currentPart) {
+      this.filteredTagSuggestions.set(allSuggestions.filter(t => !alreadyUsed.includes(t)));
+    } else {
+      this.filteredTagSuggestions.set(
+        allSuggestions.filter(t => t.includes(currentPart) && !alreadyUsed.includes(t))
+      );
+    }
+  }
+
+  private getSuggestedTags(): string[] {
+    const seg = this.allSegments().find(s => s.id === this.segment);
+    const cat = this.filteredCategories().find(c => c.id === this.category);
+    const now = this.date || new Date();
+    const monthShort = now.toLocaleString('en', { month: 'short' }).toLowerCase();
+    const year = now.getFullYear();
+    const contextual: string[] = [];
+
+    // Category-based: e.g. feed-jul-2026
+    if (cat) {
+      contextual.push(`${cat.name.toLowerCase().replace(/\s+/g, '-')}-${monthShort}-${year}`);
+    }
+
+    // Segment + month: e.g. goats-jul-2026
+    if (seg) {
+      contextual.push(`${seg.name.toLowerCase().replace(/\s+/g, '-')}-${monthShort}-${year}`);
+    }
+
+    // Seasonal tags based on date
+    contextual.push(...this.getSeasonalTags(now));
+
+    // Crop-specific suggestions
+    if (seg?.segmentType === 'crop') {
+      const quarter = `q${Math.ceil((now.getMonth() + 1) / 4)}`;
+      contextual.push(`${quarter}-harvest-${year}`, 'season-1', 'season-2');
+    }
+
+    // Animal-linked suggestions
+    if (this.selectedAnimalIds.length > 0) {
+      for (const id of this.selectedAnimalIds) {
+        const a = this.activeAnimals().find(x => x.id === id);
+        if (a) {
+          const name = this.animalService.getDisplayName(a).toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+          contextual.push(name);
+        }
+      }
+    }
+
+    return [...new Set([...contextual, ...this.knownTags])].sort();
+  }
+
+  private getSeasonalTags(date: Date): string[] {
+    const month = date.getMonth(); // 0-indexed
+    const year = date.getFullYear();
+    const tags: string[] = [];
+
+    // Indian seasons
+    if (month >= 5 && month <= 8) tags.push(`monsoon-${year}`);       // Jun-Sep
+    if (month >= 9 && month <= 10) tags.push(`post-monsoon-${year}`); // Oct-Nov
+    if (month >= 2 && month <= 4) tags.push(`summer-${year}`);        // Mar-May
+    if (month === 11 || month <= 1) tags.push(`winter-${year}`);      // Dec-Feb
+
+    // Eid approximation (moves ~11 days earlier each year, but provide as suggestion)
+    // Bakra Eid / Eid-ul-Adha is the main one for animal trade
+    tags.push(`eid-${year}`);
+
+    // Harvest seasons
+    if (month >= 9 && month <= 11) tags.push(`rabi-sowing-${year}`);  // Oct-Dec
+    if (month >= 2 && month <= 4) tags.push(`rabi-harvest-${year}`);  // Mar-May
+    if (month >= 5 && month <= 7) tags.push(`kharif-sowing-${year}`); // Jun-Aug
+    if (month >= 9 && month <= 10) tags.push(`kharif-harvest-${year}`); // Oct-Nov
+
+    return tags;
+  }
+
+  /** Generate auto-tags based on context (category, segment, animals, season) */
+  private autoGenerateTags(manualTags: string[]): string[] {
+    const autoTags: string[] = [];
+    const seg = this.allSegments().find(s => s.id === this.segment);
+    const cat = this.filteredCategories().find(c => c.id === this.category);
+    const date = this.date || new Date();
+    const monthShort = date.toLocaleString('en', { month: 'short' }).toLowerCase();
+    const year = date.getFullYear();
+    const month = date.getMonth();
+
+    // 1. Category-based: feed-jul-2026
+    if (cat) {
+      autoTags.push(`${cat.name.toLowerCase().replace(/\s+/g, '-')}-${monthShort}-${year}`);
+    }
+
+    // 2. Segment + month: goats-jul-2026
+    if (seg) {
+      autoTags.push(`${seg.name.toLowerCase().replace(/\s+/g, '-')}-${monthShort}-${year}`);
+    }
+
+    // 3. Animal-linked: animal name/batch label
+    if (this.selectedAnimalIds.length > 0) {
+      for (const id of this.selectedAnimalIds) {
+        const a = this.activeAnimals().find(x => x.id === id);
+        if (a) {
+          const name = this.animalService.getDisplayName(a).toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+          if (name) autoTags.push(name);
+        }
+      }
+    }
+
+    // 4. Seasonal: Indian seasons + agricultural cycles
+    if (month >= 5 && month <= 8) autoTags.push(`monsoon-${year}`);
+    else if (month >= 2 && month <= 4) autoTags.push(`summer-${year}`);
+    else if (month === 11 || month <= 1) autoTags.push(`winter-${year}`);
+
+    // Merge: manual first, then auto (deduplicated)
+    return [...new Set([...manualTags, ...autoTags])];
   }
 
   onQtyRateChange(): void {
