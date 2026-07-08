@@ -30,8 +30,11 @@ service cloud.firestore {
     // Users collection
     match /users/{userId} {
       allow read: if isAuthenticated();
-      // User can create/update their own profile
-      allow create, update: if isAuthenticated() && request.auth.uid == userId;
+      // User can update their own profile (but NOT role, segments, or isActive)
+      allow update: if isAuthenticated() && request.auth.uid == userId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.assignedSegments == resource.data.assignedSegments
+        && request.resource.data.isActive == resource.data.isActive;
       // Admin can create/update/delete any user
       allow create, update, delete: if isAdmin();
     }
@@ -91,9 +94,10 @@ service cloud.firestore {
       allow update, delete: if isManagerOrAdmin();
     }
 
-    // Tasks - all authenticated users can manage
+    // Tasks - managers/admins can write, all authenticated can read
     match /tasks/{taskId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isManagerOrAdmin();
     }
   }
 }

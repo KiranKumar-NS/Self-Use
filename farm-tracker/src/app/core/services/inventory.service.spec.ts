@@ -44,6 +44,7 @@ vi.mock('@angular/core', async () => {
     ...actual as any,
     inject: vi.fn(() => ({
       userProfile: () => ({ uid: 'test-uid', displayName: 'Test User' }),
+      requireUser: () => ({ uid: 'test-uid', displayName: 'Test User' }),
       clearCache: vi.fn(),
     })),
   };

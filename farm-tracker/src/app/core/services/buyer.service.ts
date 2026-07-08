@@ -24,7 +24,7 @@ export class BuyerService {
 
   async create(data: BuyerFormData): Promise<string> {
     const batch = writeBatch(this.firestore);
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const buyerRef = doc(collection(this.firestore, 'buyers'));
 
     batch.set(buyerRef, {

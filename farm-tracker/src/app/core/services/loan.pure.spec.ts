@@ -50,6 +50,7 @@ vi.mock('@angular/core', async () => {
       // Return mock auth service
       return {
         userProfile: () => ({ uid: 'test', displayName: 'Test' }),
+        requireUser: () => ({ uid: 'test', displayName: 'Test' }),
         currentUser: () => ({ uid: 'test' }),
       };
     }),

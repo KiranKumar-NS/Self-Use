@@ -8,7 +8,15 @@ export const authGuard: CanActivateFn = () => {
 
   if (auth.isLoading()) {
     return new Promise<boolean>((resolve) => {
+      let elapsed = 0;
       const interval = setInterval(() => {
+        elapsed += 100;
+        if (elapsed > 10000) {
+          clearInterval(interval);
+          router.navigate(['/auth/login']);
+          resolve(false);
+          return;
+        }
         if (!auth.isLoading()) {
           clearInterval(interval);
           if (auth.currentUser() && auth.userProfile()?.isActive !== false) {

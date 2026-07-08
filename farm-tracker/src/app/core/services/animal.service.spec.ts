@@ -19,9 +19,13 @@ vi.mock('@angular/fire/firestore', () => {
       path: args.length > 2 ? `${args[1]}/${args[2]}` : 'animals/new-animal-id',
     })),
     getDocs: vi.fn().mockResolvedValue({ docs: [], empty: true }),
-    getDoc: vi.fn(async () => {
-      if (mockGetDocResults.length > 0) return mockGetDocResults.shift();
-      return { exists: () => false, data: () => undefined };
+    getDoc: vi.fn(async (ref: any) => {
+      if (mockGetDocResults.length > 0) {
+        const result = mockGetDocResults.shift();
+        result.id = ref?.id ?? result.id;
+        return result;
+      }
+      return { id: ref?.id, exists: () => false, data: () => undefined };
     }),
     query: vi.fn(),
     orderBy: vi.fn(),
@@ -47,6 +51,7 @@ vi.mock('@angular/core', async () => {
     ...actual as any,
     inject: vi.fn(() => ({
       userProfile: () => ({ uid: 'test-uid', displayName: 'Test User' }),
+      requireUser: () => ({ uid: 'test-uid', displayName: 'Test User' }),
     })),
   };
 });

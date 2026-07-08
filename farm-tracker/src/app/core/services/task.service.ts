@@ -27,7 +27,7 @@ export class TaskService {
   }
 
   async create(data: Partial<Task>): Promise<string> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const taskRef = doc(this.tasksRef);
 
     await setDoc(taskRef, {

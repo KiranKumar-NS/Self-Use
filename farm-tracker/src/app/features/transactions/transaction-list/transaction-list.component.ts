@@ -55,7 +55,7 @@ import { normalizeName } from '../../../core/utils/name.utils';
         @if (activeFilterCount() > 0) {
           <span class="filter-count">{{ activeFilterCount() }} active</span>
         }
-        @if (filterType || filterSegment || filterPaidBy || filterPaymentStatus || searchTerm) {
+        @if (filterType || filterSegment || filterPaidBy || filterPaymentStatus || filterTag || searchTerm) {
           <button mat-button class="clear-btn" (click)="clearFilters(); $event.stopPropagation()">Clear All</button>
         }
         <mat-icon class="toggle-icon" [class.expanded]="filtersOpen">expand_more</mat-icon>
@@ -101,9 +101,21 @@ import { normalizeName } from '../../../core/utils/name.utils';
           </mat-select>
         </mat-form-field>
 
+        @if (allTags().length > 0) {
+          <mat-form-field appearance="outline" class="filter-field">
+            <mat-label>Tag</mat-label>
+            <mat-select [(ngModel)]="filterTag">
+              <mat-option value="">All Tags</mat-option>
+              @for (tag of allTags(); track tag) {
+                <mat-option [value]="tag">{{ tag }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+
         <mat-form-field appearance="outline" class="filter-field search-field">
           <mat-label>Search</mat-label>
-          <input matInput [(ngModel)]="searchTerm" placeholder="Description, person, amount..." />
+          <input matInput [(ngModel)]="searchTerm" placeholder="Description, person, tag..." />
           @if (searchTerm) {
             <button matSuffix mat-icon-button (click)="searchTerm = ''"><mat-icon>close</mat-icon></button>
           }
@@ -173,7 +185,16 @@ import { normalizeName } from '../../../core/utils/name.utils';
                     <span class="payment-badge" [class]="txn.paymentMethod || 'cash'">{{ (txn.paymentMethod || 'cash') | uppercase }}</span>
                   </td>
                   <td class="by-cell">{{ txn.paidByName || txn.createdByName }}</td>
-                  <td class="desc-cell">{{ txn.description || '-' }}</td>
+                  <td class="desc-cell">
+                    {{ txn.description || '-' }}
+                    @if (txn.tags?.length) {
+                      <div class="tag-pills">
+                        @for (tag of txn.tags; track tag) {
+                          <span class="tag-pill">{{ tag }}</span>
+                        }
+                      </div>
+                    }
+                  </td>
                   <td class="actions-cell" (click)="$event.stopPropagation()">
                     <button mat-icon-button (click)="edit(txn.id)" title="Edit" aria-label="Edit transaction">
                       <mat-icon>edit</mat-icon>
@@ -260,6 +281,8 @@ import { normalizeName } from '../../../core/utils/name.utils';
 
     .by-cell { font-size: 0.8rem; color: var(--color-text-subtle); white-space: nowrap; }
     .desc-cell { max-width: 180px; }
+    .tag-pills { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+    .tag-pill { display: inline-block; padding: 1px 6px; background: var(--color-primary-light, var(--color-info-light)); color: var(--color-primary, var(--color-info)); border-radius: 10px; font-size: 0.6rem; font-weight: 600; }
 
     .clickable-row:hover .actions-cell button { opacity: 1; }
     .income-row td:first-child { border-left: 3px solid var(--color-income); }
@@ -308,8 +331,10 @@ export class TransactionListComponent implements OnInit {
   filterSegment = '';
   filterPaidBy = '';
   filterPaymentStatus = '';
+  filterTag = '';
   searchTerm = '';
   paidByList = signal<string[]>([]);
+  allTags = signal<string[]>([]);
 
   // Date range state
   private currentSelection: DateRangeSelection = { mode: 'monthly', month: getMonthString(new Date()) };
@@ -320,6 +345,7 @@ export class TransactionListComponent implements OnInit {
     if (this.filterSegment) count++;
     if (this.filterPaidBy) count++;
     if (this.filterPaymentStatus) count++;
+    if (this.filterTag) count++;
     if (this.searchTerm) count++;
     return count;
   });
@@ -353,6 +379,10 @@ export class TransactionListComponent implements OnInit {
       });
     }
 
+    if (this.filterTag) {
+      filtered = filtered.filter(txn => txn.tags?.includes(this.filterTag));
+    }
+
     const term = this.searchTerm.toLowerCase().trim();
     if (term) {
       filtered = filtered.filter(txn =>
@@ -361,7 +391,8 @@ export class TransactionListComponent implements OnInit {
         txn.createdByName?.toLowerCase().includes(term) ||
         txn.categoryName?.toLowerCase().includes(term) ||
         txn.segmentName?.toLowerCase().includes(term) ||
-        txn.amount.toString().includes(term)
+        txn.amount.toString().includes(term) ||
+        txn.tags?.some(tag => tag.includes(term))
       );
     }
 
@@ -396,10 +427,12 @@ export class TransactionListComponent implements OnInit {
     this.lastDoc = result.lastDoc;
     this.hasMore.set(result.transactions.length === limit);
     this.paidByList.set([...new Set(result.transactions.map(t => normalizeName(t.paidByName || t.createdByName || 'Unknown')))].sort());
+    this.allTags.set([...new Set(result.transactions.flatMap(t => t.tags || []))].sort());
     this.loading.set(false);
   }
 
   async loadMore(): Promise<void> {
+    if (this.loading()) return;
     const filters: any = {};
     if (this.filterType) filters.type = this.filterType;
     if (this.filterSegment) filters.segment = this.filterSegment;
@@ -446,6 +479,7 @@ export class TransactionListComponent implements OnInit {
     this.filterSegment = '';
     this.filterPaidBy = '';
     this.filterPaymentStatus = '';
+    this.filterTag = '';
     this.searchTerm = '';
     this.loadData();
   }

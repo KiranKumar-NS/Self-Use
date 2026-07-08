@@ -88,7 +88,9 @@ export class NotificationService {
           }
         }
       }
-    } catch {}
+    } catch (err) {
+      console.error('Notification: failed to load loans:', err);
+    }
 
     // 2. Overdue tasks
     try {
@@ -111,7 +113,9 @@ export class NotificationService {
           }
         }
       }
-    } catch {}
+    } catch (err) {
+      console.error('Notification: failed to load tasks:', err);
+    }
 
     // 3. Budget alerts
     try {
@@ -156,7 +160,9 @@ export class NotificationService {
           }
         }
       }
-    } catch {}
+    } catch (err) {
+      console.error('Notification: failed to load budget data:', err);
+    }
 
     this.notifications.set(items);
   }

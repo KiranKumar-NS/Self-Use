@@ -26,7 +26,7 @@ export class InventoryService {
 
   async recordEvent(data: InventoryEventFormData): Promise<string> {
     const batch = writeBatch(this.firestore);
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     const eventRef = doc(collection(this.firestore, 'inventoryEvents'));
 
@@ -103,7 +103,7 @@ export class InventoryService {
 
   async updateEvent(eventId: string, oldEvent: InventoryEvent, data: InventoryEventFormData): Promise<void> {
     const batch = writeBatch(this.firestore);
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     const newCountDelta = data.eventType === 'adjustment'
       ? data.count

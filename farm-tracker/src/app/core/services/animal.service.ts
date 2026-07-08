@@ -24,9 +24,10 @@ export class AnimalService {
 
   async create(data: AnimalFormData): Promise<string> {
     const batch = writeBatch(this.firestore);
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const animalRef = doc(collection(this.firestore, 'animals'));
 
+    if (!data.batchSize || data.batchSize < 1) throw new Error('Invalid batch size');
     const purchasePrice = data.purchasePrice || 0;
     const purchasePricePerHead = data.batchSize > 1 && purchasePrice
       ? Math.round((purchasePrice / data.batchSize) * 100) / 100
@@ -144,6 +145,15 @@ export class AnimalService {
   ): Promise<void> {
     const batch = writeBatch(this.firestore);
 
+    // Batch-fetch all animals upfront to avoid N+1 queries
+    const animalSnaps = await Promise.all(
+      animalIds.map(id => getDoc(doc(this.firestore, 'animals', id)))
+    );
+    const animalMap = new Map<string, Animal>();
+    for (const snap of animalSnaps) {
+      if (snap.exists()) animalMap.set(snap.id, snap.data() as Animal);
+    }
+
     // Pre-calculate splits for by_days mode
     if (splitMode === 'by_days' && !customSplits) {
       customSplits = {};
@@ -151,18 +161,16 @@ export class AnimalService {
       let totalDays = 0;
       const daysByAnimal: Record<string, number> = {};
 
-      // First pass: calculate days active for each animal
       for (const animalId of animalIds) {
-        const animalSnap = await getDoc(doc(this.firestore, 'animals', animalId));
-        if (!animalSnap.exists()) continue;
-        const animal = animalSnap.data() as Animal;
+        const animal = animalMap.get(animalId);
+        if (!animal) continue;
         const originMs = animal.originDate.toDate().getTime();
         const days = Math.max(1, Math.ceil((expenseDate - originMs) / (1000 * 60 * 60 * 24)));
         daysByAnimal[animalId] = days;
         totalDays += days;
       }
 
-      // Second pass: proportional split
+      // Proportional split
       if (totalDays > 0) {
         let allocated = 0;
         const ids = Object.keys(daysByAnimal);
@@ -187,10 +195,9 @@ export class AnimalService {
       : 0;
 
     for (const animalId of animalIds) {
+      const animal = animalMap.get(animalId);
+      if (!animal) continue;
       const animalRef = doc(this.firestore, 'animals', animalId);
-      const animalSnap = await getDoc(animalRef);
-      if (!animalSnap.exists()) continue;
-      const animal = animalSnap.data() as Animal;
 
       const amount = splitMode === 'custom' && customSplits
         ? (customSplits[animalId] || 0)
@@ -277,6 +284,7 @@ export class AnimalService {
     const animal = animalSnap.data() as Animal;
 
     const countSold = saleData.countSold || animal.currentCount;
+    if (countSold > animal.currentCount) throw new Error('Cannot sell more than available count');
     const newCount = animal.currentCount - countSold;
     const isFullySold = newCount <= 0;
 

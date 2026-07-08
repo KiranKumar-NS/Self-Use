@@ -42,9 +42,9 @@ export class AuthService {
           const userDoc = await getDoc(doc(this.firestore, 'users', user.uid));
           if (userDoc.exists()) {
             this.userProfile.set(userDoc.data() as AppUser);
-            // If role not in claims, use Firestore role
+            // If role not in claims, default to viewer (don't trust Firestore role)
             if (!this.userRole()) {
-              this.userRole.set((userDoc.data() as AppUser).role);
+              this.userRole.set('viewer');
             }
           }
         } catch (err) {
@@ -101,6 +101,12 @@ export class AuthService {
 
   async resetPassword(email: string): Promise<void> {
     await sendPasswordResetEmail(this.auth, email);
+  }
+
+  requireUser(): AppUser {
+    const user = this.userProfile();
+    if (!user) throw new Error('Session expired. Please log in again.');
+    return user;
   }
 
   hasSegmentAccess(segment: string): boolean {

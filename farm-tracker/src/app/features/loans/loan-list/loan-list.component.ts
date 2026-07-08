@@ -251,6 +251,7 @@ export class LoanListComponent implements OnInit {
   }
 
   async loadMore(): Promise<void> {
+    if (this.loading()) return;
     const filters: any = {};
     if (this.filterType) filters.type = this.filterType;
     if (this.filterStatus) filters.repaymentStatus = this.filterStatus;

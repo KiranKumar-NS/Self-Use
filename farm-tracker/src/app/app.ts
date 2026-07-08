@@ -1,6 +1,8 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { SwUpdate } from '@angular/service-worker';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-root',
@@ -8,21 +10,30 @@ import { SwUpdate } from '@angular/service-worker';
   template: `<router-outlet />`,
   styles: [],
 })
-export class App implements OnInit {
+export class App implements OnInit, OnDestroy {
   private swUpdate = inject(SwUpdate);
+  private snackBar = inject(MatSnackBar);
+  private subscription?: Subscription;
+  private updateInterval?: ReturnType<typeof setInterval>;
 
   ngOnInit(): void {
     if (this.swUpdate.isEnabled) {
-      // When a new version is ready, activate it and reload immediately
-      this.swUpdate.versionUpdates.subscribe(event => {
+      this.subscription = this.swUpdate.versionUpdates.subscribe(event => {
         if (event.type === 'VERSION_READY') {
-          this.swUpdate.activateUpdate().then(() => document.location.reload());
+          const ref = this.snackBar.open('A new version is available', 'Update', { duration: 0 });
+          ref.onAction().subscribe(() => {
+            this.swUpdate.activateUpdate().then(() => document.location.reload());
+          });
         }
       });
 
-      // Check immediately on app start, then every 30 seconds
       this.swUpdate.checkForUpdate();
-      setInterval(() => this.swUpdate.checkForUpdate(), 30_000);
+      this.updateInterval = setInterval(() => this.swUpdate.checkForUpdate(), 30_000);
     }
+  }
+
+  ngOnDestroy(): void {
+    this.subscription?.unsubscribe();
+    if (this.updateInterval) clearInterval(this.updateInterval);
   }
 }

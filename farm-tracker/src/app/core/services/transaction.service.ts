@@ -39,7 +39,7 @@ export class TransactionService {
 
   async create(data: TransactionFormData): Promise<string> {
     const batch = writeBatch(this.firestore);
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     const txnRef = doc(collection(this.firestore, 'transactions'));
     const summaryId = `${data.month}-${data.segment}`;
@@ -157,7 +157,7 @@ export class TransactionService {
 
   async update(id: string, data: TransactionFormData): Promise<void> {
     const batch = writeBatch(this.firestore);
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', id);
 
     const oldDoc = await getDoc(txnRef);
@@ -432,7 +432,7 @@ export class TransactionService {
 
   async softDelete(id: string): Promise<void> {
     const batch = writeBatch(this.firestore);
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', id);
 
     const oldDoc = await getDoc(txnRef);
@@ -565,7 +565,7 @@ export class TransactionService {
 
   async updateDistribution(transactionId: string, distributions: DistributionEntry[]): Promise<void> {
     const batch = writeBatch(this.firestore);
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', transactionId);
 
     const oldDoc = await getDoc(txnRef);
@@ -647,7 +647,7 @@ export class TransactionService {
 
   async markAsReceived(transactionId: string): Promise<void> {
     const batch = writeBatch(this.firestore);
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', transactionId);
 
     const oldDoc = await getDoc(txnRef);
@@ -680,7 +680,7 @@ export class TransactionService {
 
   async markAsPaid(transactionId: string): Promise<void> {
     const batch = writeBatch(this.firestore);
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', transactionId);
 
     const oldDoc = await getDoc(txnRef);

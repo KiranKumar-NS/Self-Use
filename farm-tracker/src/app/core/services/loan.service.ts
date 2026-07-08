@@ -321,7 +321,7 @@ export class LoanService {
   computeGoldAggregates = computeGoldAggregates;
 
   async create(data: LoanFormData): Promise<string> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const loanRef = doc(collection(this.firestore, 'loans'));
 
     const batch = writeBatch(this.firestore);
@@ -356,7 +356,7 @@ export class LoanService {
   }
 
   async update(id: string, data: LoanFormData): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const loanRef = doc(this.firestore, 'loans', id);
 
     const oldDoc = await getDoc(loanRef);
@@ -440,7 +440,7 @@ export class LoanService {
   }
 
   async addRepayment(loanId: string, amount: number, note: string, date: Date, paidByUid?: string, paidByName?: string): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     await runTransaction(this.firestore, async (transaction) => {
       // All reads FIRST (Firestore requirement)
@@ -511,7 +511,7 @@ export class LoanService {
   }
 
   async addMore(loanId: string, amount: number, note: string, date: Date): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     if (amount <= 0) throw new Error('Amount must be greater than 0');
 
     await runTransaction(this.firestore, async (transaction) => {
@@ -583,7 +583,7 @@ export class LoanService {
   }
 
   async softDelete(id: string): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const loanRef = doc(this.firestore, 'loans', id);
 
     // Read loan first to check for linked data and parent sync
@@ -763,7 +763,7 @@ export class LoanService {
 
   /** Create a formal loan — 1 write, 0 reads */
   async createFormalLoan(data: LoanFormData): Promise<string> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const loanRef = doc(collection(this.firestore, 'loans'));
 
     // Compute deductions
@@ -974,7 +974,7 @@ export class LoanService {
 
   /** Add a deduction to a formal loan — 1 read, 1 write */
   async addDeduction(loanId: string, deduction: Omit<LoanDeduction, 'id'>): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
@@ -1030,7 +1030,7 @@ export class LoanService {
       paidByName?: string;
     },
   ): Promise<string> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     let txnId = '';
 
     await runTransaction(this.firestore, async (transaction) => {
@@ -1140,7 +1140,7 @@ export class LoanService {
     note: string,
     date: Date,
   ): Promise<string> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     let simpleLoanId = '';
 
     await runTransaction(this.firestore, async (transaction) => {
@@ -1212,7 +1212,7 @@ export class LoanService {
 
   /** Remove a deduction from a formal loan — 1 read, 1 write */
   async removeDeduction(loanId: string, deductionId: string): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
@@ -1268,7 +1268,7 @@ export class LoanService {
       paidByName?: string;
     },
   ): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
@@ -1404,7 +1404,7 @@ export class LoanService {
     paidByUid?: string,
     paidByName?: string,
   ): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
@@ -1511,7 +1511,7 @@ export class LoanService {
     paymentReference?: string,
     note?: string,
   ): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
@@ -1624,7 +1624,7 @@ export class LoanService {
     paymentReference?: string,
     note?: string,
   ): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
@@ -1740,7 +1740,7 @@ export class LoanService {
     paymentReference?: string,
     note?: string,
   ): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
@@ -1838,7 +1838,7 @@ export class LoanService {
     effectiveDate: Date,
     note?: string,
   ): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     const newAnnualRate = toAnnualRate(newRateInput, newFrequency);
 
     await runTransaction(this.firestore, async (transaction) => {
@@ -1902,7 +1902,7 @@ export class LoanService {
     paymentReference?: string,
     note?: string,
   ): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
@@ -2005,7 +2005,7 @@ export class LoanService {
 
   /** Balance transfer — pre-close old loan + create new. 2 reads, 5 writes */
   async balanceTransfer(oldLoanId: string, newLoanData: LoanFormData): Promise<string> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     let newLoanId = '';
 
     await runTransaction(this.firestore, async (transaction) => {
@@ -2209,7 +2209,7 @@ export class LoanService {
 
   /** Add collateral item. 1 read, 1 write */
   async addCollateral(loanId: string, item: Omit<CollateralItem, 'id'>): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
       const loanSnap = await transaction.get(loanRef);
@@ -2229,7 +2229,7 @@ export class LoanService {
 
   /** Remove collateral item. 1 read, 1 write */
   async removeCollateral(loanId: string, itemId: string): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
       const loanSnap = await transaction.get(loanRef);
@@ -2250,7 +2250,7 @@ export class LoanService {
 
   /** Release collateral (mark as returned). 1 read, 1 write */
   async releaseCollateral(loanId: string, itemId: string, releasedDate: Date): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
       const loanSnap = await transaction.get(loanRef);
@@ -2270,7 +2270,7 @@ export class LoanService {
 
   /** Add loan document reference. 1 read, 1 write */
   async addLoanDocument(loanId: string, loanDoc: Omit<LoanDocument, 'id'>): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
       const loanSnap = await transaction.get(loanRef);
@@ -2288,7 +2288,7 @@ export class LoanService {
 
   /** Remove loan document reference. 1 read, 1 write */
   async removeLoanDocument(loanId: string, docId: string): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
       const loanSnap = await transaction.get(loanRef);
@@ -2336,7 +2336,7 @@ export class LoanService {
     newInterestRate?: number,
     note?: string,
   ): Promise<string> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
     let newLoanId = '';
 
     await runTransaction(this.firestore, async (transaction) => {
@@ -2445,7 +2445,7 @@ export class LoanService {
     additionalAmount: number,
     note?: string,
   ): Promise<void> {
-    const user = this.authService.userProfile()!;
+    const user = this.authService.requireUser();
 
     await runTransaction(this.firestore, async (transaction) => {
       const loanRef = doc(this.firestore, 'loans', loanId);
