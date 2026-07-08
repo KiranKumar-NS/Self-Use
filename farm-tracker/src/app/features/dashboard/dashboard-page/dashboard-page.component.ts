@@ -69,7 +69,7 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
 
         <app-stock-widget [segments]="segments()" />
 
-        <div class="charts-grid">
+        <div class="charts-grid hide-mobile">
           <app-segment-breakdown-chart [summaries]="currentMonthSummaries()" [personBreakdown]="personBreakdown()" />
           <app-monthly-trend-chart [trendData]="trendData()" [chartTitle]="trendTitle()" />
         </div>
@@ -111,6 +111,7 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .charts-grid { grid-template-columns: 1fr; }
       .widgets-row { grid-template-columns: 1fr; }
+      .hide-mobile { display: none; }
     }
   `],
 })

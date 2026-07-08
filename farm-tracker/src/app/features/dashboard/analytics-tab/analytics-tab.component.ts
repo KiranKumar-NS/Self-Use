@@ -1,6 +1,4 @@
 import { Component, inject, signal, Input, OnChanges, SimpleChanges, OnInit } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { DatePipe, UpperCasePipe } from '@angular/common';
 import { Transaction } from '../../../core/models/transaction.model';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { LoanService } from '../../../core/services/loan.service';
@@ -16,7 +14,6 @@ import { normalizeName } from '../../../core/utils/name.utils';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { DateRangeSelection } from '../../../shared/components/date-range-filter/date-range-filter.component';
-import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
 import { MatCardModule } from '@angular/material/card';
@@ -26,7 +23,7 @@ import { MatIconModule } from '@angular/material/icon';
   selector: 'app-analytics-tab',
   standalone: true,
   imports: [
-    FormsModule, DatePipe, UpperCasePipe, CurrencyInrPipe, LoadingSpinnerComponent,
+    CurrencyInrPipe, LoadingSpinnerComponent,
     BaseChartDirective,
     MatCardModule, MatButtonModule, MatIconModule, MatDialogModule,
   ],
@@ -196,64 +193,6 @@ import { MatIconModule } from '@angular/material/icon';
         </mat-card>
       </div>
 
-      <!-- Detail Table -->
-      <h3 class="section-title">Transaction Details</h3>
-      <mat-card class="table-card">
-        <div class="table-container">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th class="sortable" (click)="toggleSort('date')">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
-                <th class="sortable" (click)="toggleSort('segmentName')">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
-                <th class="sortable" (click)="toggleSort('categoryName')">Category <span class="sort-icon">{{ getSortIcon('categoryName') }}</span></th>
-                <th class="sortable" (click)="toggleSort('amount')">Amount <span class="sort-icon">{{ getSortIcon('amount') }}</span></th>
-                <th class="sortable" (click)="toggleSort('paidByName')">Paid By <span class="sort-icon">{{ getSortIcon('paidByName') }}</span></th>
-                <th class="">Via</th>
-                <th class="">Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (txn of paginatedFiltered(); track txn.id) {
-                <tr>
-                  <td class="date-cell">{{ txn.date.toDate() | date:'dd MMM yyyy' }}</td>
-                  <td>{{ txn.segmentName }}</td>
-                  <td>{{ txn.categoryName }}</td>
-                  <td class="amount-cell">{{ txn.amount | currencyInr }}</td>
-                  <td class="">{{ txn.paidByName }}</td>
-                  <td class=""><span class="payment-badge" [class]="txn.paymentMethod || 'upi'">{{ (txn.paymentMethod || 'upi') | uppercase }}</span></td>
-                  <td class="desc-cell">{{ txn.description }}</td>
-                </tr>
-              }
-            </tbody>
-            <tfoot>
-              <tr>
-                <td colspan="3"><strong>Total</strong></td>
-                <td class="amount-cell"><strong>{{ totalExpense() | currencyInr }}</strong></td>
-                <td class="" colspan="3"></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        @if (filtered().length > 0) {
-          <div class="pagination">
-            <div class="page-size">
-              <span>Rows per page:</span>
-              <select [(ngModel)]="pageSize" (change)="currentPage = 1">
-                <option [ngValue]="10">10</option>
-                <option [ngValue]="20">20</option>
-                <option [ngValue]="50">50</option>
-              </select>
-            </div>
-            <span class="page-info">{{ analyticsPageStart() }}–{{ analyticsPageEnd() }} of {{ sortedFiltered().length }}</span>
-            <div class="page-buttons">
-              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" aria-label="First page"><mat-icon>first_page</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage >= analyticsTotalPages()" (click)="currentPage = currentPage + 1" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage >= analyticsTotalPages()" (click)="currentPage = analyticsTotalPages()" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
-            </div>
-          </div>
-        }
-      </mat-card>
     }
   `,
   styles: [`
@@ -315,8 +254,6 @@ import { MatIconModule } from '@angular/material/icon';
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
     .chart-card { padding: 1.25rem; }
     .chart-card h3 { margin: 0 0 1rem; font-size: var(--font-md); color: var(--color-text); }
-    .amount-cell { color: var(--color-expense); }
-    .desc-cell { max-width: 250px; }
 
     @media (max-width: 768px) {
       .charts-grid { grid-template-columns: 1fr; }
@@ -359,11 +296,6 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   filterPaidBy = '';
   filterCategory = '';
 
-  // Sorting & pagination
-  sortColumn = '';
-  sortDirection: SortDirection = 'asc';
-  pageSize = 20;
-  currentPage = 1;
 
   // Unique values for dropdowns
   allSegments = signal<string[]>([]);
@@ -629,7 +561,6 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   }
 
   applyFilters(): void {
-    this.currentPage = 1;
     let txns = [...this.allTransactions()];
 
     if (this.filterSegment) {
@@ -755,29 +686,6 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     this.investmentSummary.set(summary);
     this.maxInvestment.set(summary.length > 0 ? Math.max(...summary.map(s => s.net)) : 0);
     this.totalUndistributed.set(Object.values(investMap).reduce((s, p) => s + p.holding, 0));
-  }
-
-  sortedFiltered(): Transaction[] {
-    return sortData(this.filtered(), this.sortColumn, this.sortDirection);
-  }
-
-  paginatedFiltered(): Transaction[] {
-    return paginate(this.sortedFiltered(), this.currentPage, this.pageSize);
-  }
-
-  analyticsTotalPages(): number { return totalPages(this.sortedFiltered().length, this.pageSize); }
-  analyticsPageStart(): number { return pageStart(this.sortedFiltered().length, this.currentPage, this.pageSize); }
-  analyticsPageEnd(): number { return pageEnd(this.sortedFiltered().length, this.currentPage, this.pageSize); }
-
-  toggleSort(column: string): void {
-    const state = toggleSortState({ column: this.sortColumn, direction: this.sortDirection }, column);
-    this.sortColumn = state.column;
-    this.sortDirection = state.direction;
-    this.currentPage = 1;
-  }
-
-  getSortIcon(column: string): string {
-    return getSortIndicator(this.sortColumn, this.sortDirection, column);
   }
 
   private get rangeLabel(): string {
