@@ -19,6 +19,7 @@ function pdfCurrency(amount: number): string {
 @Injectable({ providedIn: 'root' })
 export class ExportService {
   private formatPeriodLabel(period: string): string {
+    if (period === 'all' || period === 'all-time') return 'All-Time';
     if (period.includes('_to_')) {
       const [start, end] = period.split('_to_');
       return `${getMonthName(start)} – ${getMonthName(end)}`;
@@ -530,6 +531,11 @@ export class ExportService {
       'Description': t.description,
       'Tags': (t as any).tags?.join(', ') || '',
       'Linked Loan ID': (t as any).linkedLoanId || '',
+      'Linked Animal IDs': t.linkedAnimalIds?.join('; ') || '',
+      'Linked Animal Names': t.linkedAnimalNames?.join('; ') || '',
+      'Animal Cost Split': t.animalCostSplit ? Object.entries(t.animalCostSplit).map(([id, amt]) => `${id}:${amt}`).join('; ') : '',
+      'Linked Buyer ID': t.linkedBuyerId || '',
+      'Linked Buyer Name': t.linkedBuyerName || '',
       'Created By': t.createdBy,
       'Created By Name': t.createdByName,
       'Created At': ts(t.createdAt),
@@ -561,6 +567,11 @@ export class ExportService {
         'Description': t.description,
         'Tags': (t as any).tags?.join(', ') || '',
         'Distribution': distStr,
+        'Linked Animal IDs': t.linkedAnimalIds?.join('; ') || '',
+        'Linked Animal Names': t.linkedAnimalNames?.join('; ') || '',
+        'Animal Cost Split': t.animalCostSplit ? Object.entries(t.animalCostSplit).map(([id, amt]) => `${id}:${amt}`).join('; ') : '',
+        'Linked Buyer ID': t.linkedBuyerId || '',
+        'Linked Buyer Name': t.linkedBuyerName || '',
         'Created By': t.createdBy,
         'Created By Name': t.createdByName,
         'Created At': ts(t.createdAt),
