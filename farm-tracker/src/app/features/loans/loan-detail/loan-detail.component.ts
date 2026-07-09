@@ -448,6 +448,14 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                     <mat-datepicker-toggle matIconSuffix [for]="iPicker" /><mat-datepicker #iPicker />
                   </mat-form-field>
                   <mat-form-field appearance="outline">
+                    <mat-label>Expense Segment</mat-label>
+                    <mat-select [(ngModel)]="paymentSegment">
+                      @for (seg of allSegments(); track seg.id) {
+                        <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
                     <mat-label>Reference</mat-label>
                     <input matInput [(ngModel)]="interestPayRef" />
                   </mat-form-field>
@@ -470,6 +478,14 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                     <mat-label>Date</mat-label>
                     <input matInput [matDatepicker]="cPicker" [(ngModel)]="closePrincipalDate" />
                     <mat-datepicker-toggle matIconSuffix [for]="cPicker" /><mat-datepicker #cPicker />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Expense Segment</mat-label>
+                    <mat-select [(ngModel)]="paymentSegment">
+                      @for (seg of allSegments(); track seg.id) {
+                        <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
+                      }
+                    </mat-select>
                   </mat-form-field>
                   <mat-form-field appearance="outline">
                     <mat-label>Reference</mat-label>
@@ -500,6 +516,14 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                 <mat-datepicker-toggle matIconSuffix [for]="ppPicker" /><mat-datepicker #ppPicker />
               </mat-form-field>
               <mat-form-field appearance="outline">
+                <mat-label>Expense Segment</mat-label>
+                <mat-select [(ngModel)]="paymentSegment">
+                  @for (seg of allSegments(); track seg.id) {
+                    <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
                 <mat-label>Reference</mat-label>
                 <input matInput [(ngModel)]="partPayRef" />
               </mat-form-field>
@@ -528,6 +552,14 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                 <mat-label>Date</mat-label>
                 <input matInput [matDatepicker]="pcPicker" [(ngModel)]="preCloseDate" />
                 <mat-datepicker-toggle matIconSuffix [for]="pcPicker" /><mat-datepicker #pcPicker />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Expense Segment</mat-label>
+                <mat-select [(ngModel)]="paymentSegment">
+                  @for (seg of allSegments(); track seg.id) {
+                    <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
+                  }
+                </mat-select>
               </mat-form-field>
               <button mat-flat-button color="warn" (click)="preClose()" [disabled]="savingFormal()">
                 {{ savingFormal() ? 'Closing...' : 'Pre-Close' }}
@@ -885,6 +917,10 @@ export class LoanDetailComponent implements OnInit {
   formalError = signal(''); savingFormal = signal(false);
   showPartPayment = false; showPreClose = false;
   showInterestForm = false; showCloseForm = false;
+  paymentSegment = '';  // segment override for loan payments (defaults to loan.segment)
+  private get paymentSegmentName(): string {
+    return this.allSegments().find(s => s.id === this.paymentSegment)?.name || this.loan()?.segmentName || '';
+  }
 
   // EMI payment (set when clicking "Pay" on an EMI row)
   emiPayData: LiveEMIEntry | null = null;
@@ -953,10 +989,11 @@ export class LoanDetailComponent implements OnInit {
         this.emiSchedule.set(this.loanService.buildLiveEMISchedule(loan, repayments));
       }
 
-      // Pre-fill pre-close amount
+      // Pre-fill defaults
       this.preCloseAmount = loan.outstandingBalance ?? loan.balanceRemaining;
       this.closePrincipalAmount = loan.outstandingBalance ?? loan.balanceRemaining;
       this.interestPayAmount = loan.interestAmountPerPeriod ?? 0;
+      this.paymentSegment = loan.segment;
     }
 
     this.loading.set(false);
@@ -994,6 +1031,8 @@ export class LoanDetailComponent implements OnInit {
         principalPortion: emi.principal,
         interestPortion: emi.interest,
         date: new Date(),
+        segmentId: this.paymentSegment,
+        segmentName: this.paymentSegmentName,
       });
       await this.loadData();
     } catch (err: any) { this.formalError.set(err.message); } finally { this.savingFormal.set(false); }
@@ -1003,7 +1042,7 @@ export class LoanDetailComponent implements OnInit {
     this.formalError.set(''); this.savingFormal.set(true);
     try {
       const penaltyAmt = Math.round(emi.emiAmount * 0.02 * 100) / 100; // Default 2% penalty
-      await this.loanService.addPenaltyPayment(this.loanId, penaltyAmt, emi.emiNumber, new Date());
+      await this.loanService.addPenaltyPayment(this.loanId, penaltyAmt, emi.emiNumber, new Date(), undefined, undefined, this.paymentSegment, this.paymentSegmentName);
       await this.loadData();
     } catch (err: any) { this.formalError.set(err.message); } finally { this.savingFormal.set(false); }
   }
@@ -1012,7 +1051,7 @@ export class LoanDetailComponent implements OnInit {
     if (this.partPayAmount <= 0) { this.formalError.set('Amount must be greater than 0'); return; }
     this.formalError.set(''); this.savingFormal.set(true);
     try {
-      await this.loanService.addPartPayment(this.loanId, this.partPayAmount, this.partPayDate, this.partPayRef);
+      await this.loanService.addPartPayment(this.loanId, this.partPayAmount, this.partPayDate, this.partPayRef, undefined, this.paymentSegment, this.paymentSegmentName);
       this.partPayAmount = 0; this.partPayRef = ''; this.showPartPayment = false;
       await this.loadData();
     } catch (err: any) { this.formalError.set(err.message); } finally { this.savingFormal.set(false); }
@@ -1022,7 +1061,7 @@ export class LoanDetailComponent implements OnInit {
     if (this.preCloseAmount <= 0) { this.formalError.set('Amount must be greater than 0'); return; }
     this.formalError.set(''); this.savingFormal.set(true);
     try {
-      await this.loanService.preCloseLoan(this.loanId, this.preCloseAmount, this.preCloseCharges, this.preCloseDate);
+      await this.loanService.preCloseLoan(this.loanId, this.preCloseAmount, this.preCloseCharges, this.preCloseDate, undefined, undefined, this.paymentSegment, this.paymentSegmentName);
       this.showPreClose = false;
       await this.loadData();
     } catch (err: any) { this.formalError.set(err.message); } finally { this.savingFormal.set(false); }
@@ -1032,7 +1071,7 @@ export class LoanDetailComponent implements OnInit {
     if (this.interestPayAmount <= 0) { this.formalError.set('Amount must be greater than 0'); return; }
     this.formalError.set(''); this.savingFormal.set(true);
     try {
-      await this.loanService.addInterestPayment(this.loanId, this.interestPayAmount, this.interestPayDate, this.interestPayRef);
+      await this.loanService.addInterestPayment(this.loanId, this.interestPayAmount, this.interestPayDate, this.interestPayRef, undefined, undefined, this.paymentSegment, this.paymentSegmentName);
       this.interestPayRef = ''; this.showInterestForm = false;
       await this.loadData();
     } catch (err: any) { this.formalError.set(err.message); } finally { this.savingFormal.set(false); }
@@ -1042,7 +1081,7 @@ export class LoanDetailComponent implements OnInit {
     if (this.closePrincipalAmount <= 0) { this.formalError.set('Amount must be greater than 0'); return; }
     this.formalError.set(''); this.savingFormal.set(true);
     try {
-      await this.loanService.closePrincipal(this.loanId, this.closePrincipalAmount, this.closePrincipalDate, this.closePrincipalRef);
+      await this.loanService.closePrincipal(this.loanId, this.closePrincipalAmount, this.closePrincipalDate, this.closePrincipalRef, undefined, this.paymentSegment, this.paymentSegmentName);
       this.showCloseForm = false;
       await this.loadData();
     } catch (err: any) { this.formalError.set(err.message); } finally { this.savingFormal.set(false); }
