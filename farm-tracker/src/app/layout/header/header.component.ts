@@ -1,11 +1,13 @@
 import { Component, inject, output } from '@angular/core';
 import { Router } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
 import { AuthService } from '../../core/services/auth.service';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { NotificationBellComponent } from '../notification-bell/notification-bell.component';
+import { UserGuideDialogComponent } from '../user-guide/user-guide-dialog.component';
 
 @Component({
   selector: 'app-header',
@@ -19,6 +21,9 @@ import { NotificationBellComponent } from '../notification-bell/notification-bel
       <span class="spacer"></span>
 
       <div class="user-info">
+        <button mat-icon-button (click)="openGuide()" aria-label="User guide" class="guide-btn">
+          <mat-icon>help_outline</mat-icon>
+        </button>
         <app-notification-bell />
         <span class="user-name">{{ auth.userProfile()?.displayName }}</span>
 
@@ -64,7 +69,16 @@ import { NotificationBellComponent } from '../notification-bell/notification-bel
 export class HeaderComponent {
   auth = inject(AuthService);
   private router = inject(Router);
+  private dialog = inject(MatDialog);
   menuToggle = output();
+
+  openGuide(): void {
+    this.dialog.open(UserGuideDialogComponent, {
+      data: { currentRoute: this.router.url },
+      panelClass: 'guide-dialog-panel',
+      maxWidth: '95vw',
+    });
+  }
 
   async logout(): Promise<void> {
     await this.auth.logout();

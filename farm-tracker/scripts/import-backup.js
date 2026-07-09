@@ -141,6 +141,12 @@ async function importBackup(wb, dryRun) {
         timeline: [{ action: 'created', by: 'import', byName: 'Import Script', at: admin.firestore.Timestamp.now(), changes: 'imported from backup' }],
         expensePaymentStatus: str(r['Payment Status']) || 'paid',
         linkedLoanId: str(r['Linked Loan ID']) || null,
+        tags: str(r['Tags']) ? str(r['Tags']).split(',').map(t => t.trim()).filter(t => t) : null,
+        linkedAnimalIds: str(r['Linked Animal IDs']) ? str(r['Linked Animal IDs']).split(';').map(s => s.trim()).filter(s => s) : null,
+        linkedAnimalNames: str(r['Linked Animal Names']) ? str(r['Linked Animal Names']).split(';').map(s => s.trim()).filter(s => s) : null,
+        animalCostSplit: str(r['Animal Cost Split']) ? Object.fromEntries(str(r['Animal Cost Split']).split(';').map(s => s.trim()).filter(s => s).map(s => { const [id, amt] = s.split(':'); return [id.trim(), num(amt)]; })) : null,
+        linkedBuyerId: str(r['Linked Buyer ID']) || null,
+        linkedBuyerName: str(r['Linked Buyer Name']) || null,
         month, year: txnDate.getFullYear(),
       });
       stats.expenses++;
@@ -192,6 +198,12 @@ async function importBackup(wb, dryRun) {
         timeline: [{ action: 'created', by: 'import', byName: 'Import Script', at: admin.firestore.Timestamp.now(), changes: 'imported from backup' }],
         paymentStatus: str(r['Payment Status']) || 'received',
         distributions: distributions.length > 0 ? distributions : null,
+        tags: str(r['Tags']) ? str(r['Tags']).split(',').map(t => t.trim()).filter(t => t) : null,
+        linkedAnimalIds: str(r['Linked Animal IDs']) ? str(r['Linked Animal IDs']).split(';').map(s => s.trim()).filter(s => s) : null,
+        linkedAnimalNames: str(r['Linked Animal Names']) ? str(r['Linked Animal Names']).split(';').map(s => s.trim()).filter(s => s) : null,
+        animalCostSplit: str(r['Animal Cost Split']) ? Object.fromEntries(str(r['Animal Cost Split']).split(';').map(s => s.trim()).filter(s => s).map(s => { const [id, amt] = s.split(':'); return [id.trim(), num(amt)]; })) : null,
+        linkedBuyerId: str(r['Linked Buyer ID']) || null,
+        linkedBuyerName: str(r['Linked Buyer Name']) || null,
         month, year: txnDate.getFullYear(),
       });
       stats.income++;

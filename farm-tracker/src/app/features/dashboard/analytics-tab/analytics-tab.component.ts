@@ -167,8 +167,8 @@ import { MatIconModule } from '@angular/material/icon';
       </div>
 
       <!-- Charts Section -->
-      <h3 class="section-title">Breakdown</h3>
-      <div class="charts-grid">
+      <h3 class="section-title desktop-only">Breakdown</h3>
+      <div class="charts-grid desktop-only">
         <mat-card class="chart-card">
           <h3>Expense by Person</h3>
           @if (personChartData.labels!.length > 0) {
@@ -203,7 +203,7 @@ import { MatIconModule } from '@angular/material/icon';
         }
       </div>
 
-      <div class="charts-grid">
+      <div class="charts-grid desktop-only">
         <mat-card class="chart-card">
           <h3>Expense by Segment</h3>
           @if (segmentChartData.labels!.length > 0) {
@@ -291,6 +291,7 @@ import { MatIconModule } from '@angular/material/icon';
     @media (max-width: 768px) {
       .charts-grid { grid-template-columns: 1fr; }
       .person-grid { grid-template-columns: 1fr; }
+      .desktop-only { display: none; }
     }
     @media (max-width: 480px) {
       .summary-grid { grid-template-columns: 1fr 1fr; gap: 0.5rem; }

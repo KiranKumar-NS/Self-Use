@@ -358,6 +358,13 @@ tr:hover .actions-cell button { opacity: 1; }
   }
 }
 
+// ── User guide dialog ────────────────────────────────────
+.guide-dialog-panel .mat-mdc-dialog-container .mdc-dialog__surface {
+  padding: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
 // ── Mobile table improvements ──────────────────────────────
 @media (max-width: 640px) {
   .data-table {

@@ -254,53 +254,52 @@ import {
                 </div>
               </mat-card>
             }
+            <!-- Reconcile Summaries Section -->
+            <mat-card class="reconcile-section">
+              <div class="reconcile-header">
+                <mat-icon class="reconcile-icon">sync</mat-icon>
+                <div>
+                  <h3>Reconcile Summaries</h3>
+                  <p class="reconcile-desc">Recompute all monthly and yearly summaries from raw transaction data. Use this if summary totals have drifted due to partial write failures.</p>
+                </div>
+              </div>
+              @if (reconciling()) {
+                <mat-progress-bar mode="indeterminate" />
+                <p class="reconcile-status">Reconciling... This may take a moment.</p>
+              }
+              @if (reconcileReport()) {
+                <div class="reconcile-results">
+                  <div class="reconcile-stat">
+                    <span class="stat-label">Transactions processed</span>
+                    <span class="stat-value">{{ reconcileReport()!.totalTransactions }}</span>
+                  </div>
+                  <div class="reconcile-stat">
+                    <span class="stat-label">Monthly summaries written</span>
+                    <span class="stat-value">{{ reconcileReport()!.monthlySummariesWritten }}</span>
+                  </div>
+                  <div class="reconcile-stat">
+                    <span class="stat-label">Yearly summaries written</span>
+                    <span class="stat-value">{{ reconcileReport()!.yearlySummariesWritten }}</span>
+                  </div>
+                  <div class="reconcile-stat corrected">
+                    <span class="stat-label">Monthly corrected</span>
+                    <span class="stat-value">{{ reconcileReport()!.monthlyCorrected }}</span>
+                  </div>
+                  <div class="reconcile-stat corrected">
+                    <span class="stat-label">Yearly corrected</span>
+                    <span class="stat-value">{{ reconcileReport()!.yearlyCorrected }}</span>
+                  </div>
+                </div>
+              }
+              <button mat-flat-button color="warn" (click)="reconcileSummaries()" [disabled]="reconciling()">
+                <mat-icon>sync</mat-icon>
+                {{ reconciling() ? 'Reconciling...' : 'Reconcile All Summaries' }}
+              </button>
+            </mat-card>
           </div>
         </mat-tab>
 
       </mat-tab-group>
-
-      <!-- Reconcile Summaries Section -->
-      <mat-card class="reconcile-section">
-        <div class="reconcile-header">
-          <mat-icon class="reconcile-icon">sync</mat-icon>
-          <div>
-            <h3>Reconcile Summaries</h3>
-            <p class="reconcile-desc">Recompute all monthly and yearly summaries from raw transaction data. Use this if summary totals have drifted due to partial write failures.</p>
-          </div>
-        </div>
-        @if (reconciling()) {
-          <mat-progress-bar mode="indeterminate" />
-          <p class="reconcile-status">Reconciling... This may take a moment.</p>
-        }
-        @if (reconcileReport()) {
-          <div class="reconcile-results">
-            <div class="reconcile-stat">
-              <span class="stat-label">Transactions processed</span>
-              <span class="stat-value">{{ reconcileReport()!.totalTransactions }}</span>
-            </div>
-            <div class="reconcile-stat">
-              <span class="stat-label">Monthly summaries written</span>
-              <span class="stat-value">{{ reconcileReport()!.monthlySummariesWritten }}</span>
-            </div>
-            <div class="reconcile-stat">
-              <span class="stat-label">Yearly summaries written</span>
-              <span class="stat-value">{{ reconcileReport()!.yearlySummariesWritten }}</span>
-            </div>
-            <div class="reconcile-stat corrected">
-              <span class="stat-label">Monthly corrected</span>
-              <span class="stat-value">{{ reconcileReport()!.monthlyCorrected }}</span>
-            </div>
-            <div class="reconcile-stat corrected">
-              <span class="stat-label">Yearly corrected</span>
-              <span class="stat-value">{{ reconcileReport()!.yearlyCorrected }}</span>
-            </div>
-          </div>
-        }
-        <button mat-flat-button color="warn" (click)="reconcileSummaries()" [disabled]="reconciling()">
-          <mat-icon>sync</mat-icon>
-          {{ reconciling() ? 'Reconciling...' : 'Reconcile All Summaries' }}
-        </button>
-      </mat-card>
     }
   `,
   styles: [`
