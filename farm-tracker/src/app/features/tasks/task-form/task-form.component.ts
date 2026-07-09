@@ -18,6 +18,8 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
+import { TagInputComponent } from '../../../shared/components/tag-input/tag-input.component';
+import { TagService } from '../../../core/services/tag.service';
 
 @Component({
   selector: 'app-task-form',
@@ -25,6 +27,7 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
   imports: [
     FormsModule, MatCardModule, MatFormFieldModule, MatInputModule, MatSelectModule,
     MatButtonModule, MatIconModule, MatDatepickerModule, MatCheckboxModule, MatSnackBarModule,
+    TagInputComponent,
   ],
   template: `
     <div class="page-header">
@@ -117,10 +120,7 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
         </div>
 
         <!-- Tags -->
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Tags (comma separated)</mat-label>
-          <input matInput [(ngModel)]="tagsInput" name="tags" placeholder="e.g. farm, urgent, weekly" />
-        </mat-form-field>
+        <app-tag-input [tags]="tags" (tagsChange)="tags = $event" placeholder="e.g. farm, urgent, weekly" />
 
         <div class="form-actions">
           <button mat-button type="button" (click)="cancel()">Cancel</button>
@@ -160,6 +160,7 @@ export class TaskFormComponent implements OnInit, HasUnsavedChanges {
   private taskService = inject(TaskService);
   private userService = inject(UserService);
   private authService = inject(AuthService);
+  private tagService = inject(TagService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private snackBar = inject(MatSnackBar);
@@ -178,7 +179,7 @@ export class TaskFormComponent implements OnInit, HasUnsavedChanges {
   assignee = '';
   dueDate: Date | null = null;
   subtasks: Subtask[] = [];
-  tagsInput = '';
+  tags: string[] = [];
   private editId = '';
 
   async ngOnInit(): Promise<void> {
@@ -199,7 +200,7 @@ export class TaskFormComponent implements OnInit, HasUnsavedChanges {
         this.assignee = task.assignee || '';
         this.dueDate = task.dueDate?.toDate() || null;
         this.subtasks = [...task.subtasks];
-        this.tagsInput = task.tags.join(', ');
+        this.tags = [...task.tags];
       }
     }
   }
@@ -212,7 +213,6 @@ export class TaskFormComponent implements OnInit, HasUnsavedChanges {
     this.error.set('');
     this.saving.set(true);
 
-    const tags = this.tagsInput ? this.tagsInput.split(',').map((t) => t.trim()).filter(Boolean) : [];
     const assigneeUser = this.users().find((u) => u.uid === this.assignee);
     const data: Partial<Task> = {
       title: this.title,
@@ -224,7 +224,7 @@ export class TaskFormComponent implements OnInit, HasUnsavedChanges {
       assigneeName: assigneeUser?.displayName || null,
       dueDate: this.dueDate ? Timestamp.fromDate(this.dueDate) : null,
       subtasks: this.subtasks.filter((s) => s.title.trim()),
-      tags,
+      tags: this.tags,
     };
 
     try {
@@ -233,6 +233,7 @@ export class TaskFormComponent implements OnInit, HasUnsavedChanges {
       } else {
         await this.taskService.create(data);
       }
+      if (this.tags.length) this.tagService.addTags(this.tags);
       this.snackBar.open(
         this.isEdit() ? 'Task updated' : 'Task created',
         '',

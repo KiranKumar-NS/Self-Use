@@ -28,6 +28,8 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
+import { TagInputComponent } from '../../../shared/components/tag-input/tag-input.component';
+import { TagService } from '../../../core/services/tag.service';
 
 @Component({
   selector: 'app-transaction-form',
@@ -36,6 +38,7 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
     FormsModule, MatCardModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatDatepickerModule, MatRadioModule,
     MatIconModule, MatCheckboxModule, MatAutocompleteModule, MatSnackBarModule,
+    TagInputComponent,
   ],
   template: `
     <div class="page-header">
@@ -227,22 +230,12 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
           <textarea matInput [(ngModel)]="description" name="description" rows="3"></textarea>
         </mat-form-field>
 
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Tags (optional, comma-separated)</mat-label>
-          <input matInput [(ngModel)]="tagsInput" name="tags"
-            placeholder="e.g. q3-harvest-2026, plot-alpha"
-            [matAutocomplete]="tagAuto"
-            (input)="onTagInput()" />
-          <button mat-icon-button matSuffix type="button" (click)="fillAutoTags()" title="Auto-generate tags">
+        <div class="tag-row">
+          <app-tag-input [tags]="tags" (tagsChange)="tags = $event" placeholder="e.g. q3-harvest-2026, plot-alpha" />
+          <button mat-icon-button type="button" (click)="fillAutoTags()" title="Auto-generate tags" class="auto-tag-btn">
             <mat-icon>auto_awesome</mat-icon>
           </button>
-          <mat-autocomplete #tagAuto="matAutocomplete" (optionSelected)="addTag($event.option.value)">
-            @for (tag of filteredTagSuggestions(); track tag) {
-              <mat-option [value]="tag">{{ tag }}</mat-option>
-            }
-          </mat-autocomplete>
-          <mat-hint>Group transactions for crop/harvest tracking</mat-hint>
-        </mat-form-field>
+        </div>
 
         <div class="form-actions">
           <button mat-button type="button" (click)="cancel()">Cancel</button>
@@ -291,6 +284,9 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
     .animal-row { padding: 4px 0; border-bottom: 1px solid var(--color-bg-alt); }
     .breed-tag { color: var(--color-purple); font-size: 0.8rem; }
     .no-animals { color: var(--color-text-muted); font-size: 0.85rem; padding: 8px 0; }
+    .tag-row { display: flex; align-items: flex-start; gap: 4px; width: 100%; }
+    .tag-row app-tag-input { flex: 1; }
+    .auto-tag-btn { margin-top: 8px; }
     @media (max-width: 640px) {
       .form-row { flex-direction: column; gap: 0.5rem; }
       .qty-row { flex-direction: row; flex-wrap: wrap; }
@@ -311,6 +307,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private snackBar = inject(MatSnackBar);
+  private tagService = inject(TagService);
 
   isEdit = signal(false);
   error = signal('');
@@ -327,7 +324,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   segment = '';
   category = '';
   description = '';
-  tagsInput = '';
+  tags: string[] = [];
   paidBy = '';
   customPaidByName = '';
   paymentMethod: PaymentMethod = 'upi';
@@ -342,8 +339,6 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
 
   suggestedName = '';
   private knownNames: string[] = [];
-  private knownTags: string[] = [];
-  filteredTagSuggestions = signal<string[]>([]);
   private editId = '';
 
   // Animal linking
@@ -373,9 +368,6 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
           .filter(t => t.paidBy === 'other' && t.paidByName)
           .map(t => t.paidByName!)
       )];
-      this.knownTags = [...new Set(
-        recent.transactions.flatMap(t => t.tags || [])
-      )].sort();
     } catch {}
 
     // Filter segments by user access
@@ -411,7 +403,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         this.paymentMethod = txn.paymentMethod || 'cash';
         this.paymentStatus = txn.paymentStatus || 'received';
         this.expensePaymentStatus = txn.expensePaymentStatus || 'paid';
-        this.tagsInput = txn.tags?.join(', ') || '';
+        this.tags = txn.tags ? [...txn.tags] : [];
         this.onTypeChange();
 
         // Load existing animal links
@@ -470,99 +462,8 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   }
 
   fillAutoTags(): void {
-    const manual = this.tagsInput.trim()
-      ? this.tagsInput.split(',').map(t => t.trim().toLowerCase()).filter(t => t)
-      : [];
-    const merged = this.autoGenerateTags(manual);
-    this.tagsInput = merged.join(', ');
-  }
-
-  addTag(tag: string): void {
-    const existing = this.tagsInput.split(',').map(t => t.trim().toLowerCase()).filter(t => t);
-    if (!existing.includes(tag)) {
-      existing.push(tag);
-      this.tagsInput = existing.join(', ');
-    }
-    this.filteredTagSuggestions.set([]);
-  }
-
-  onTagInput(): void {
-    const parts = this.tagsInput.split(',');
-    const currentPart = (parts[parts.length - 1] || '').trim().toLowerCase();
-    const alreadyUsed = parts.slice(0, -1).map(t => t.trim().toLowerCase()).filter(t => t);
-    const allSuggestions = this.getSuggestedTags();
-    if (!currentPart) {
-      this.filteredTagSuggestions.set(allSuggestions.filter(t => !alreadyUsed.includes(t)));
-    } else {
-      this.filteredTagSuggestions.set(
-        allSuggestions.filter(t => t.includes(currentPart) && !alreadyUsed.includes(t))
-      );
-    }
-  }
-
-  private getSuggestedTags(): string[] {
-    const seg = this.allSegments().find(s => s.id === this.segment);
-    const cat = this.filteredCategories().find(c => c.id === this.category);
-    const now = this.date || new Date();
-    const monthShort = now.toLocaleString('en', { month: 'short' }).toLowerCase();
-    const year = now.getFullYear();
-    const contextual: string[] = [];
-
-    // Category-based: e.g. feed-jul-2026
-    if (cat) {
-      contextual.push(`${cat.name.toLowerCase().replace(/\s+/g, '-')}-${monthShort}-${year}`);
-    }
-
-    // Segment + month: e.g. goats-jul-2026
-    if (seg) {
-      contextual.push(`${seg.name.toLowerCase().replace(/\s+/g, '-')}-${monthShort}-${year}`);
-    }
-
-    // Seasonal tags based on date
-    contextual.push(...this.getSeasonalTags(now));
-
-    // Crop-specific suggestions
-    if (seg?.segmentType === 'crop') {
-      const quarter = `q${Math.ceil((now.getMonth() + 1) / 4)}`;
-      contextual.push(`${quarter}-harvest-${year}`, 'season-1', 'season-2');
-    }
-
-    // Animal-linked suggestions
-    if (this.selectedAnimalIds.length > 0) {
-      for (const id of this.selectedAnimalIds) {
-        const a = this.activeAnimals().find(x => x.id === id);
-        if (a) {
-          const name = this.animalService.getDisplayName(a).toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-          contextual.push(name);
-        }
-      }
-    }
-
-    return [...new Set([...contextual, ...this.knownTags])].sort();
-  }
-
-  private getSeasonalTags(date: Date): string[] {
-    const month = date.getMonth(); // 0-indexed
-    const year = date.getFullYear();
-    const tags: string[] = [];
-
-    // Indian seasons
-    if (month >= 5 && month <= 8) tags.push(`monsoon-${year}`);       // Jun-Sep
-    if (month >= 9 && month <= 10) tags.push(`post-monsoon-${year}`); // Oct-Nov
-    if (month >= 2 && month <= 4) tags.push(`summer-${year}`);        // Mar-May
-    if (month === 11 || month <= 1) tags.push(`winter-${year}`);      // Dec-Feb
-
-    // Eid approximation (moves ~11 days earlier each year, but provide as suggestion)
-    // Bakra Eid / Eid-ul-Adha is the main one for animal trade
-    tags.push(`eid-${year}`);
-
-    // Harvest seasons
-    if (month >= 9 && month <= 11) tags.push(`rabi-sowing-${year}`);  // Oct-Dec
-    if (month >= 2 && month <= 4) tags.push(`rabi-harvest-${year}`);  // Mar-May
-    if (month >= 5 && month <= 7) tags.push(`kharif-sowing-${year}`); // Jun-Aug
-    if (month >= 9 && month <= 10) tags.push(`kharif-harvest-${year}`); // Oct-Nov
-
-    return tags;
+    const merged = this.autoGenerateTags([...this.tags]);
+    this.tags = merged;
   }
 
   /** Generate auto-tags based on context (category, segment, animals, season) */
@@ -651,9 +552,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         expensePaymentStatus: this.type === 'expense' ? this.expensePaymentStatus : undefined,
         paidBy: resolvedPaidBy,
         paidByName: resolvedPaidByName,
-        tags: this.tagsInput.trim()
-          ? this.tagsInput.split(',').map(t => t.trim().toLowerCase()).filter(t => t)
-          : undefined,
+        tags: this.tags.length ? this.tags : undefined,
         month: getMonthString(this.date),
         year: getYear(this.date),
       };
@@ -702,6 +601,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
           );
         }
       }
+      if (this.tags.length) this.tagService.addTags(this.tags);
       this.snackBar.open(
         this.isEdit() ? 'Transaction updated' : 'Transaction created',
         '',
