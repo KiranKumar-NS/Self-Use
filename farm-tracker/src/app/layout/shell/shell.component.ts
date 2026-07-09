@@ -4,6 +4,7 @@ import { SidebarComponent } from '../sidebar/sidebar.component';
 import { HeaderComponent } from '../header/header.component';
 import { BottomNavComponent } from '../bottom-nav/bottom-nav.component';
 import { NotificationService } from '../../core/services/notification.service';
+import { ScheduleService } from '../../core/services/schedule.service';
 import { routeAnimation } from '../../core/utils/route-animations';
 
 @Component({
@@ -51,6 +52,7 @@ import { routeAnimation } from '../../core/utils/route-animations';
 })
 export class ShellComponent implements OnInit {
   private notificationService = inject(NotificationService);
+  private scheduleService = inject(ScheduleService);
   private contexts = inject(ChildrenOutletContexts);
   sidebarOpen = signal(false);
 
@@ -59,6 +61,7 @@ export class ShellComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.scheduleService.processOverdueSchedules().catch(() => {});
     this.notificationService.refresh().catch(() => {});
   }
 }

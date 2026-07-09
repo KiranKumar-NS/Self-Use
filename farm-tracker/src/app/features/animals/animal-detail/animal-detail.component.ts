@@ -8,6 +8,10 @@ import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SaleDialogComponent } from '../sale-dialog/sale-dialog.component';
+import { VaccinationDialogComponent } from '../vaccination-dialog/vaccination-dialog.component';
+import { MedicalDialogComponent } from '../medical-dialog/medical-dialog.component';
+import { WeightLogDialogComponent } from '../weight-log-dialog/weight-log-dialog.component';
+import { WeightChartComponent } from '../weight-chart/weight-chart.component';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -17,7 +21,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 @Component({
   selector: 'app-animal-detail',
   standalone: true,
-  imports: [DatePipe, CurrencyInrPipe, LoadingSpinnerComponent, RouterLink, MatCardModule, MatButtonModule, MatIconModule, MatSnackBarModule],
+  imports: [DatePipe, CurrencyInrPipe, LoadingSpinnerComponent, RouterLink, WeightChartComponent, MatCardModule, MatButtonModule, MatIconModule, MatSnackBarModule],
   template: `
     @if (loading()) {
       <app-loading-spinner />
@@ -186,6 +190,99 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
         </mat-card>
       }
 
+      <!-- Vaccination History -->
+      <div class="section-header">
+        <h3 class="section-title">Vaccination History ({{ animal()!.vaccinationHistory?.length || 0 }})</h3>
+        @if (animal()!.status === 'active' && !auth.isViewer()) {
+          <button mat-stroked-button (click)="addVaccination()"><mat-icon>vaccines</mat-icon> Add</button>
+        }
+      </div>
+      <mat-card class="table-card">
+        @if (!animal()!.vaccinationHistory?.length) {
+          <div class="empty-costs"><mat-icon>info_outline</mat-icon><span>No vaccination records yet.</span></div>
+        } @else {
+          <div class="table-container">
+            <table class="data-table">
+              <thead><tr><th>Date</th><th>Vaccine</th><th>Dosage</th><th>By</th><th>Next Due</th><th>Cost</th></tr></thead>
+              <tbody>
+                @for (v of animal()!.vaccinationHistory; track v.id) {
+                  <tr>
+                    <td class="date-cell">{{ v.date.toDate() | date:'dd MMM yyyy' }}</td>
+                    <td><strong>{{ v.vaccineName }}</strong></td>
+                    <td>{{ v.dosage || '-' }}</td>
+                    <td>{{ v.administeredBy || '-' }}</td>
+                    <td>{{ v.nextDueDate ? (v.nextDueDate.toDate() | date:'dd MMM yyyy') : '-' }}</td>
+                    <td>{{ v.cost ? (v.cost | currencyInr) : '-' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </mat-card>
+
+      <!-- Medical History -->
+      <div class="section-header">
+        <h3 class="section-title">Medical Records ({{ animal()!.medicalHistory?.length || 0 }})</h3>
+        @if (animal()!.status === 'active' && !auth.isViewer()) {
+          <button mat-stroked-button (click)="addMedicalRecord()"><mat-icon>medical_services</mat-icon> Add</button>
+        }
+      </div>
+      <mat-card class="table-card">
+        @if (!animal()!.medicalHistory?.length) {
+          <div class="empty-costs"><mat-icon>info_outline</mat-icon><span>No medical records yet.</span></div>
+        } @else {
+          <div class="table-container">
+            <table class="data-table">
+              <thead><tr><th>Date</th><th>Type</th><th>Disease</th><th>Medicine</th><th>Doctor</th><th>Temp</th><th>Weight</th><th>Cost</th></tr></thead>
+              <tbody>
+                @for (m of animal()!.medicalHistory; track m.id) {
+                  <tr>
+                    <td class="date-cell">{{ m.date.toDate() | date:'dd MMM yyyy' }}</td>
+                    <td><span class="type-badge">{{ m.type }}</span></td>
+                    <td>{{ m.disease || '-' }}</td>
+                    <td>{{ m.medicine || '-' }}</td>
+                    <td>{{ m.doctor || '-' }}</td>
+                    <td>{{ m.temperature ? m.temperature + '°F' : '-' }}</td>
+                    <td>{{ m.weight ? m.weight + ' kg' : '-' }}</td>
+                    <td>{{ m.cost ? (m.cost | currencyInr) : '-' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </mat-card>
+
+      <!-- Weight History -->
+      <div class="section-header">
+        <h3 class="section-title">Weight History ({{ animal()!.weightLogs?.length || 0 }})</h3>
+        @if (!auth.isViewer()) {
+          <button mat-stroked-button (click)="addWeightLog()"><mat-icon>monitor_weight</mat-icon> Add</button>
+        }
+      </div>
+      <mat-card class="table-card">
+        @if (!animal()!.weightLogs?.length) {
+          <div class="empty-costs"><mat-icon>info_outline</mat-icon><span>No weight logs yet.</span></div>
+        } @else {
+          <app-weight-chart [weightLogs]="animal()!.weightLogs!" />
+          <div class="table-container" style="margin-top: 16px;">
+            <table class="data-table">
+              <thead><tr><th>Date</th><th>Weight (kg)</th><th>Remarks</th></tr></thead>
+              <tbody>
+                @for (w of animal()!.weightLogs; track w.id) {
+                  <tr>
+                    <td class="date-cell">{{ w.date.toDate() | date:'dd MMM yyyy' }}</td>
+                    <td><strong>{{ w.weight }} kg</strong></td>
+                    <td>{{ w.remarks || '-' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </mat-card>
+
       <!-- Cost Breakdown -->
       <h3 class="section-title">Cost Entries ({{ animal()!.costEntries.length }})</h3>
       <mat-card class="table-card">
@@ -256,6 +353,9 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
     .amount-cell.expense { color: var(--color-expense); font-weight: 600; }
     .desc-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin: 1.5rem 0 0.5rem; }
+    .section-header .section-title { margin: 0; }
+    .type-badge { text-transform: capitalize; font-size: 0.8rem; font-weight: 600; }
 
     @media (max-width: 768px) {
       .page-header { flex-direction: column; align-items: flex-start; }
@@ -310,12 +410,52 @@ export class AnimalDetailComponent implements OnInit {
         title: 'Record Death',
         message: `Mark "${this.animalService.getDisplayName(this.animal()!)}" as dead?`,
         confirmText: 'Confirm',
+        showInput: true,
+        inputLabel: 'Cause of death',
+        inputPlaceholder: 'e.g. disease, accident, old age, unknown',
       } as ConfirmDialogData,
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        await this.animalService.recordDeath(this.animalId, new Date());
+        const cause = result.inputValue || 'unknown';
+        await this.animalService.recordDeath(this.animalId, new Date(), cause, undefined, cause);
         this.snackBar.open('Death recorded', '', { duration: 2500 });
+        await this.loadAnimal();
+      }
+    });
+  }
+
+  addVaccination(): void {
+    const ref = this.dialog.open(VaccinationDialogComponent, {
+      width: '90vw', maxWidth: '550px', data: { animalId: this.animalId },
+    });
+    ref.afterClosed().subscribe(async (result) => {
+      if (result) {
+        this.snackBar.open('Vaccination recorded', '', { duration: 2500 });
+        await this.loadAnimal();
+      }
+    });
+  }
+
+  addMedicalRecord(): void {
+    const ref = this.dialog.open(MedicalDialogComponent, {
+      width: '90vw', maxWidth: '550px', data: { animalId: this.animalId },
+    });
+    ref.afterClosed().subscribe(async (result) => {
+      if (result) {
+        this.snackBar.open('Medical record added', '', { duration: 2500 });
+        await this.loadAnimal();
+      }
+    });
+  }
+
+  addWeightLog(): void {
+    const ref = this.dialog.open(WeightLogDialogComponent, {
+      width: '90vw', maxWidth: '450px', data: { animalId: this.animalId },
+    });
+    ref.afterClosed().subscribe(async (result) => {
+      if (result) {
+        this.snackBar.open('Weight logged', '', { duration: 2500 });
         await this.loadAnimal();
       }
     });

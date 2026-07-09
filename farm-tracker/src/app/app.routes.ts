@@ -47,6 +47,36 @@ export const routes: Routes = [
         pathMatch: 'full' as const,
       },
       {
+        path: 'schedules',
+        loadChildren: () => import('./features/schedules/schedules.routes').then(m => m.SCHEDULE_ROUTES),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
+        path: 'breeding',
+        loadChildren: () => import('./features/breeding/breeding.routes').then(m => m.BREEDING_ROUTES),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
+        path: 'crops',
+        loadChildren: () => import('./features/crops/crops.routes').then(m => m.CROP_ROUTES),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
+        path: 'harvests',
+        loadChildren: () => import('./features/harvests/harvests.routes').then(m => m.HARVEST_ROUTES),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
+        path: 'consumables',
+        loadChildren: () => import('./features/consumables/consumables.routes').then(m => m.CONSUMABLE_ROUTES),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
+        path: 'suppliers',
+        loadChildren: () => import('./features/suppliers/suppliers.routes').then(m => m.SUPPLIER_ROUTES),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
         path: 'admin',
         loadChildren: () => import('./features/admin/admin.routes').then(m => m.ADMIN_ROUTES),
         canActivate: [roleGuard(['admin'])],

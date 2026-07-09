@@ -99,5 +99,72 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create, update, delete: if isManagerOrAdmin();
     }
+
+    // Yearly summaries
+    match /yearlySummaries/{summaryId} {
+      allow read: if isAuthenticated();
+      allow write: if isManagerOrAdmin();
+    }
+
+    // Animals
+    match /animals/{animalId} {
+      allow read: if isAuthenticated();
+      allow create: if isManagerOrAdmin()
+        && hasSegmentAccess(request.resource.data.segment);
+      allow update: if isManagerOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Buyers
+    match /buyers/{buyerId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isManagerOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Schedules (recurring transactions + reminders)
+    match /schedules/{scheduleId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isManagerOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Breeding records
+    match /breedingRecords/{recordId} {
+      allow read: if isAuthenticated();
+      allow create: if isManagerOrAdmin()
+        && hasSegmentAccess(request.resource.data.segment);
+      allow update, delete: if isManagerOrAdmin();
+    }
+
+    // Crop activities
+    match /cropActivities/{activityId} {
+      allow read: if isAuthenticated();
+      allow create: if isManagerOrAdmin()
+        && hasSegmentAccess(request.resource.data.segment);
+      allow update, delete: if isManagerOrAdmin();
+    }
+
+    // Harvests
+    match /harvests/{harvestId} {
+      allow read: if isAuthenticated();
+      allow create: if isManagerOrAdmin()
+        && hasSegmentAccess(request.resource.data.segment);
+      allow update, delete: if isManagerOrAdmin();
+    }
+
+    // Inventory items (consumables)
+    match /inventoryItems/{itemId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isManagerOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Suppliers
+    match /suppliers/{supplierId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isManagerOrAdmin();
+      allow delete: if isAdmin();
+    }
   }
 }

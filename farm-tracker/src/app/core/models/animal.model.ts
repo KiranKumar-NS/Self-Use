@@ -3,6 +3,44 @@ import { Timestamp } from '@angular/fire/firestore';
 export type AnimalStatus = 'active' | 'sold' | 'dead';
 export type TrackingMode = 'individual' | 'batch';
 
+// --- Health & Weight tracking (embedded arrays on Animal document) ---
+
+export interface VaccinationEntry {
+  id: string;
+  date: Timestamp;
+  vaccineName: string;
+  dosage?: string;
+  administeredBy?: string;
+  nextDueDate?: Timestamp;
+  batchNumber?: string;
+  cost?: number;
+  linkedTransactionId?: string;
+  note?: string;
+}
+
+export interface MedicalEntry {
+  id: string;
+  date: Timestamp;
+  type: 'treatment' | 'checkup' | 'surgery' | 'emergency';
+  disease?: string;
+  symptoms?: string;
+  medicine?: string;
+  dosage?: string;
+  doctor?: string;
+  temperature?: number;
+  weight?: number;
+  cost?: number;
+  linkedTransactionId?: string;
+  note?: string;
+}
+
+export interface WeightLogEntry {
+  id: string;
+  date: Timestamp;
+  weight: number;
+  remarks?: string;
+}
+
 export interface AnimalCostEntry {
   transactionId: string;
   date: Timestamp;
@@ -63,6 +101,16 @@ export interface Animal {
   createdByName: string;
   createdAt: Timestamp;
   isDeleted: boolean;
+
+  // Health records (optional, embedded arrays)
+  vaccinationHistory?: VaccinationEntry[];
+  medicalHistory?: MedicalEntry[];
+  weightLogs?: WeightLogEntry[];
+
+  // Death analysis (optional, set on recordDeath)
+  deathCause?: string;
+  deathNote?: string;
+  ageAtDeathDays?: number;
 
   // For queries
   month: string;

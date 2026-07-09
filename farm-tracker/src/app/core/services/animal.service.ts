@@ -13,7 +13,7 @@ import {
   serverTimestamp,
   Timestamp,
 } from '@angular/fire/firestore';
-import { Animal, AnimalFormData, AnimalCostEntry } from '../models/animal.model';
+import { Animal, AnimalFormData, AnimalCostEntry, VaccinationEntry, MedicalEntry, WeightLogEntry } from '../models/animal.model';
 import { AuthService } from './auth.service';
 import { getMonthString, getYear } from '../utils/date.utils';
 
@@ -315,7 +315,7 @@ export class AnimalService {
     await batch.commit();
   }
 
-  async recordDeath(animalId: string, date: Date, note?: string, countDead?: number): Promise<void> {
+  async recordDeath(animalId: string, date: Date, note?: string, countDead?: number, deathCause?: string): Promise<void> {
     const batch = writeBatch(this.firestore);
     const animalRef = doc(this.firestore, 'animals', animalId);
     const animalSnap = await getDoc(animalRef);
@@ -337,6 +337,13 @@ export class AnimalService {
     }
 
     if (note) updates['note'] = (animal.note ? animal.note + '; ' : '') + note;
+    if (deathCause) updates['deathCause'] = deathCause;
+    if (note) updates['deathNote'] = note;
+
+    // Compute age at death in days
+    const originMs = animal.originDate.toDate().getTime();
+    const deathMs = date.getTime();
+    updates['ageAtDeathDays'] = Math.max(0, Math.floor((deathMs - originMs) / (1000 * 60 * 60 * 24)));
 
     batch.update(animalRef, updates);
     await batch.commit();
@@ -359,5 +366,77 @@ export class AnimalService {
       return animal.name || animal.tag || `${animal.segmentName} #${animal.id.slice(0, 6)}`;
     }
     return animal.batchLabel || `Batch of ${animal.batchSize} ${animal.segmentName}`;
+  }
+
+  // --- Vaccination Records ---
+
+  async addVaccination(animalId: string, entry: VaccinationEntry): Promise<void> {
+    const animalRef = doc(this.firestore, 'animals', animalId);
+    const animalSnap = await getDoc(animalRef);
+    if (!animalSnap.exists()) return;
+    const animal = animalSnap.data() as Animal;
+    const history = [...(animal.vaccinationHistory || []), entry];
+    const batch = writeBatch(this.firestore);
+    batch.update(animalRef, { vaccinationHistory: history });
+    await batch.commit();
+  }
+
+  async removeVaccination(animalId: string, entryId: string): Promise<void> {
+    const animalRef = doc(this.firestore, 'animals', animalId);
+    const animalSnap = await getDoc(animalRef);
+    if (!animalSnap.exists()) return;
+    const animal = animalSnap.data() as Animal;
+    const history = (animal.vaccinationHistory || []).filter(e => e.id !== entryId);
+    const batch = writeBatch(this.firestore);
+    batch.update(animalRef, { vaccinationHistory: history });
+    await batch.commit();
+  }
+
+  // --- Medical Records ---
+
+  async addMedicalRecord(animalId: string, entry: MedicalEntry): Promise<void> {
+    const animalRef = doc(this.firestore, 'animals', animalId);
+    const animalSnap = await getDoc(animalRef);
+    if (!animalSnap.exists()) return;
+    const animal = animalSnap.data() as Animal;
+    const history = [...(animal.medicalHistory || []), entry];
+    const batch = writeBatch(this.firestore);
+    batch.update(animalRef, { medicalHistory: history });
+    await batch.commit();
+  }
+
+  async removeMedicalRecord(animalId: string, entryId: string): Promise<void> {
+    const animalRef = doc(this.firestore, 'animals', animalId);
+    const animalSnap = await getDoc(animalRef);
+    if (!animalSnap.exists()) return;
+    const animal = animalSnap.data() as Animal;
+    const history = (animal.medicalHistory || []).filter(e => e.id !== entryId);
+    const batch = writeBatch(this.firestore);
+    batch.update(animalRef, { medicalHistory: history });
+    await batch.commit();
+  }
+
+  // --- Weight Logs ---
+
+  async addWeightLog(animalId: string, entry: WeightLogEntry): Promise<void> {
+    const animalRef = doc(this.firestore, 'animals', animalId);
+    const animalSnap = await getDoc(animalRef);
+    if (!animalSnap.exists()) return;
+    const animal = animalSnap.data() as Animal;
+    const logs = [...(animal.weightLogs || []), entry];
+    const batch = writeBatch(this.firestore);
+    batch.update(animalRef, { weightLogs: logs });
+    await batch.commit();
+  }
+
+  async removeWeightLog(animalId: string, entryId: string): Promise<void> {
+    const animalRef = doc(this.firestore, 'animals', animalId);
+    const animalSnap = await getDoc(animalRef);
+    if (!animalSnap.exists()) return;
+    const animal = animalSnap.data() as Animal;
+    const logs = (animal.weightLogs || []).filter(e => e.id !== entryId);
+    const batch = writeBatch(this.firestore);
+    batch.update(animalRef, { weightLogs: logs });
+    await batch.commit();
   }
 }

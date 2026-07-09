@@ -62,6 +62,10 @@ export interface Transaction {
   linkedBuyerId?: string;
   linkedBuyerName?: string;
 
+  // Supplier linkage (optional, for expense purchases)
+  linkedSupplierId?: string;
+  linkedSupplierName?: string;
+
   // Freeform tags for ad-hoc grouping (e.g. "vaccination-drive", "eid-season")
   tags?: string[];
 

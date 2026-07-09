@@ -16,6 +16,10 @@ export const STOCK_ROUTES: Routes = [
     loadComponent: () => import('../animals/animal-analytics/animal-analytics.component').then(m => m.AnimalAnalyticsComponent),
   },
   {
+    path: 'mortality',
+    loadComponent: () => import('../animals/mortality-dashboard/mortality-dashboard.component').then(m => m.MortalityDashboardComponent),
+  },
+  {
     path: ':id',
     loadComponent: () => import('../animals/animal-detail/animal-detail.component').then(m => m.AnimalDetailComponent),
   },

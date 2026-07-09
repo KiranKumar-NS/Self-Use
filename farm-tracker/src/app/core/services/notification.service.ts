@@ -3,6 +3,7 @@ import { LoanService } from './loan.service';
 import { TaskService } from './task.service';
 import { SegmentService } from './segment.service';
 import { SummaryService } from './summary.service';
+import { ScheduleService } from './schedule.service';
 import { AppNotification } from '../models/notification.model';
 import { getMonthString } from '../utils/date.utils';
 
@@ -12,6 +13,7 @@ export class NotificationService {
   private taskService = inject(TaskService);
   private segmentService = inject(SegmentService);
   private summaryService = inject(SummaryService);
+  private scheduleService = inject(ScheduleService);
 
   notifications = signal<AppNotification[]>([]);
   unreadCount = computed(() => this.notifications().length);
@@ -162,6 +164,48 @@ export class NotificationService {
       }
     } catch (err) {
       console.error('Notification: failed to load budget data:', err);
+    }
+
+    // 4. Recurring transaction & reminder alerts
+    try {
+      const pendingRecurring = await this.scheduleService.getPendingRecurring();
+      if (pendingRecurring.length > 0) {
+        const id = `recurring_due_${now.toISOString().slice(0, 10)}`;
+        if (!this.dismissedIds.has(id)) {
+          items.push({
+            id,
+            type: 'recurring_due',
+            title: `${pendingRecurring.length} recurring transaction(s) pending`,
+            message: pendingRecurring.map(s => s.title).join(', '),
+            severity: 'warning',
+            link: '/schedules',
+            createdAt: now,
+          });
+        }
+      }
+
+      const upcomingReminders = await this.scheduleService.getUpcomingReminders(7);
+      for (const reminder of upcomingReminders) {
+        const dueDate = reminder.nextDueDate.toDate();
+        const daysUntil = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        const isOverdue = daysUntil < 0;
+        const id = `reminder_${isOverdue ? 'due' : 'upcoming'}_${reminder.id}`;
+        if (!this.dismissedIds.has(id)) {
+          items.push({
+            id,
+            type: isOverdue ? 'reminder_due' : 'reminder_upcoming',
+            title: `${isOverdue ? 'Overdue' : 'Upcoming'}: ${reminder.title}`,
+            message: isOverdue
+              ? `Was due ${Math.abs(daysUntil)} days ago`
+              : `Due ${daysUntil === 0 ? 'today' : `in ${daysUntil} days`}`,
+            severity: isOverdue ? 'error' : 'warning',
+            link: '/schedules',
+            createdAt: now,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Notification: failed to load schedules:', err);
     }
 
     this.notifications.set(items);

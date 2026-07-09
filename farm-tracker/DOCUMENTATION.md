@@ -1,6 +1,6 @@
 # Farm Tracker
 
-Angular 21 + Firebase (Firestore + Auth) + Angular Material + Chart.js PWA for multi-user farm financial management. Tracks animals, transactions, loans, buyers, tasks. Firebase Spark (free) plan — no Cloud Functions, all aggregation is client-side.
+Angular 21 + Firebase (Firestore + Auth) + Angular Material + Chart.js PWA for multi-user farm financial management. Tracks animals, transactions, loans, buyers, tasks, breeding, crops, harvests, consumable inventory, suppliers, and scheduled reminders. Firebase Spark (free) plan — no Cloud Functions, all aggregation is client-side.
 
 **Tech Stack:** Angular 21 (standalone components), Firebase Firestore, Firebase Auth, Angular Material, Chart.js (ng2-charts), Angular CDK (drag-drop), jsPDF + jspdf-autotable, Angular Service Worker, Vitest, SCSS.
 
@@ -33,6 +33,8 @@ Expense & income CRUD with pagination, sorting, filtering. Fields: amount, date,
 **Cost Attribution:** Link transactions to multiple animals. Split costs across animals via cost attribution dialog. Creates costEntries on animal records.
 
 **Buyer Linkage:** Link income transactions to buyers. Auto-updates buyer denormalized stats.
+
+**Supplier Linkage:** Link expense transactions to suppliers via optional supplier selector. Fields: linkedSupplierId, linkedSupplierName.
 
 **Income Distribution:** Split income among multiple partners with amount allocation. Reinvestment option (separate tracking). Remaining/over-allocation validation.
 
@@ -81,7 +83,7 @@ Expense & income CRUD with pagination, sorting, filtering. Fields: amount, date,
 
 ### Stock `/stock`
 
-Unified page (merged Animals + Inventory) with stock summary cards at top and two tabs: **Animals** (records list with filters, search, stats, pagination) and **Stock Log** (inventory event history). Actions: "Record Event" dialog, "Register Animal" form page, "Analytics" link.
+Unified page (merged Animals + Inventory) with stock summary cards at top and two tabs: **Animals** (records list with filters, search, stats, pagination) and **Stock Log** (inventory event history). Actions: "Record Event" dialog, "Register Animal" form page, "Analytics" link, "Mortality" link.
 
 **Auto Animal Record Creation:** When recording a purchase/birth event via the "Record Event" dialog, an "Also create animal record" toggle (default: on) auto-creates a batch animal record (count > 1) or individual record (count = 1) with breed, purchase price, and batch label.
 
@@ -93,7 +95,80 @@ Unified page (merged Animals + Inventory) with stock summary cards at top and tw
 
 **Sale:** Sale dialog creates transaction + inventory event + updates buyer stats. Fields: salePrice, salePricePerHead, buyerId/Name, saleDate.
 
+**Vaccination History:** Embedded array on Animal. Fields: vaccineName, date, dosage, administeredBy, nextDueDate, batchNumber, cost. Add via dialog from animal detail page.
+
+**Medical Records:** Embedded array on Animal. Fields: type (treatment/checkup/surgery/emergency), date, disease, symptoms, medicine, dosage, doctor, temperature, weight, cost. Add via dialog from animal detail page.
+
+**Weight History:** Embedded array on Animal. Fields: date, weight (kg), remarks. Weight chart (Chart.js line graph) on animal detail page. Add via dialog.
+
+**Death Recording:** Record death with cause (disease/accident/old_age/unknown). Auto-computes ageAtDeathDays from originDate. Fields: deathCause, deathNote, ageAtDeathDays.
+
+**Mortality Analysis** `/stock/mortality`: Dashboard with mortality rate %, cause breakdown (doughnut chart), estimated financial loss, average age at death, monthly trend (bar chart), per-segment statistics.
+
 **Animal Analytics** `/stock/analytics`: Profitability analysis per animal, cost breakdown, ROI.
+
+### Breeding `/breeding`
+
+Track mating, pregnancy, and delivery for animals. Fields: segment, dam (female), sire (male, optional), matingDate, matingMethod (natural/artificial), status (mated/confirmed_pregnant/delivered/failed), expectedDeliveryDate, gestationDays, actualDeliveryDate, offspringCount, offspringMale, offspringFemale, complications, veterinaryCost, note.
+
+Animal pickers filter by gender within selected segment. Status badges with color coding. Upcoming deliveries tracked via notification alerts.
+
+### Crop Activities `/crops`
+
+Track farming activities for crop segments (Dragon Fruit). Activity types: irrigation, fertilizer, pruning, spraying, weeding, flowering, harvest, planting, mulching, soil_testing, other. Fields: segment, activityType, date, description, productUsed, quantity, unit, area, duration (hours), laborCount, cost, weather, temperature, note.
+
+Timeline/table view filtered by segment. Activity type colored badges. Linked to transactions for cost tracking.
+
+### Harvests `/harvests`
+
+Harvest → Storage → Sale pipeline with wastage tracking. Status pipeline: harvested → in_storage → partially_sold → fully_sold.
+
+**Harvest Record:** segment, cropName, variety, harvestDate, totalQuantity, unit, grade, storageLocation, harvestCost, linkedCropActivityId.
+
+**Sale Recording:** Records sale from harvest with quantity, ratePerUnit, buyer selection. Auto-creates income transaction via TransactionService. Auto-updates buyer stats via BuyerService. Embedded sales[] array with per-sale tracking.
+
+**Wastage:** Record wastage quantity and reason. Updates remainingQuantity. Auto-transitions status when remaining reaches zero.
+
+**Computed Fields:** totalSold, totalRevenue, wastageQuantity, remainingQuantity = totalQuantity - totalSold - wastageQuantity, averageRate.
+
+**Detail Page:** Pipeline progress visualization, summary cards, sales history table, transaction links.
+
+### Consumable Inventory `/consumables`
+
+Track consumable stock items: feed, medicine, fertilizer, seeds, fuel, diesel, packaging, tools, other.
+
+**Item Fields:** name, category, unit (kg/liters/bags/bottles/pieces), currentStock, minimumStock (reorder alert threshold), segments[] (which segments use this item).
+
+**Stock Movements:** Embedded array tracking all stock changes. Types: opening, purchase, used, adjustment, wastage. Each movement: date, type, quantity (+/-), unitCost, totalCost, supplierId, supplierName, note, recordedBy.
+
+**Operations:**
+- `recordPurchase(qty, unitCost, supplier?)` — Adds stock, updates totalPurchased, totalSpent, lastPurchaseRate, averagePurchaseRate
+- `recordUsage(qty, note?)` — Reduces stock, updates totalUsed. Validates stock availability.
+- `recordWastage(qty, reason?)` — Reduces stock, updates totalWastage.
+
+**Low Stock Alerts:** Items with currentStock ≤ minimumStock highlighted in UI. Notification integration for low_stock alerts.
+
+**Card-based UI:** Grid layout with stock level progress bars, action buttons (Purchase, Use, Wastage), category badges.
+
+### Suppliers `/suppliers`
+
+Supplier management (mirrors Buyer model). Fields: name, phone, location, gstNumber, itemCategories[], note.
+
+**Denormalized Stats:** totalOrders, totalAmountPaid, pendingAmount, averageRate, lastOrderDate, ordersBySegment, amountBySegment. Auto-updated on purchase operations.
+
+**Pending Amount:** Track unpaid invoices per supplier via `updatePendingAmount(delta)`.
+
+### Schedules & Reminders `/schedules`
+
+Unified scheduling engine for recurring transactions and scheduled reminders. Shared `schedules` collection with `type: 'recurring_transaction' | 'reminder'`.
+
+**Recurring Transactions:** Auto-create transactions on a schedule. Template: type (expense/income), amount, category, segment, paymentMethod, paidBy, tags. Frequency: daily/weekly/biweekly/monthly/quarterly/yearly. Start/end dates.
+
+**Reminders:** Scheduled alerts with optional auto-task creation. Reminder types: vaccination, deworming, spraying, fertilizer, insurance, loan_emi, breeding_checkup, harvest, custom. Linked to animals and/or segments. Configurable notify-before days.
+
+**Client-Side Processing:** Since no Cloud Functions (Spark plan), `ScheduleService.processOverdueSchedules()` runs on app startup via ShellComponent.ngOnInit(). Processes all overdue schedules: creates transactions for recurring type, creates tasks for reminders with autoCreateTask. Safety limit: max 12 missed occurrences per schedule. Advances nextDueDate after processing.
+
+**Dashboard Integration:** Upcoming reminders widget. Pending recurring indicator. NotificationService alerts for overdue/upcoming reminders.
 
 ### Inventory Events
 
@@ -125,6 +200,11 @@ In-memory (not Firestore). Types:
 - Task overdue: past due date (warning severity)
 - Budget warning: ≥80% of monthly limit (warning severity)
 - Budget exceeded: ≥100% of monthly limit (error severity)
+- Recurring due: pending recurring transactions to process (warning severity)
+- Reminder due: overdue reminders (error severity)
+- Reminder upcoming: reminders due within 7 days (warning severity)
+- Low stock: consumable items below minimum threshold (warning severity)
+- Delivery expected: breeding deliveries approaching (warning severity)
 
 Dismissals stored in localStorage.
 
@@ -167,7 +247,7 @@ Expense: feed, medicine, labor, transport, maintenance, loan-repayment, other-ex
 Income: milk, eggs, animal-sales, crop-sales, fruit-sales, other-income
 
 ### `transactions/{id}`
-id, type (`expense|income`), date, amount, quantity?, unit? (`kg|head|dozen|litre|pieces|bag|bundle`), ratePerUnit?, category (ID), categoryName, segment (ID), segmentName, description, paymentMethod (`cash|upi`), paidBy (uid|"other"|null), paidByName, paymentStatus? (`received|pending`), expensePaymentStatus? (`paid|pending`), distributions? [{uid, name, amount}], linkedLoanId?, linkedAnimalIds[]?, linkedAnimalNames[]?, animalCostSplit? {animalId: amount}, linkedBuyerId?, linkedBuyerName?, tags[]?, timeline [{action, by, byName, at, changes?}], createdBy, createdByName, createdAt, isDeleted, month (`YYYY-MM`), year
+id, type (`expense|income`), date, amount, quantity?, unit? (`kg|head|dozen|litre|pieces|bag|bundle`), ratePerUnit?, category (ID), categoryName, segment (ID), segmentName, description, paymentMethod (`cash|upi`), paidBy (uid|"other"|null), paidByName, paymentStatus? (`received|pending`), expensePaymentStatus? (`paid|pending`), distributions? [{uid, name, amount}], linkedLoanId?, linkedAnimalIds[]?, linkedAnimalNames[]?, animalCostSplit? {animalId: amount}, linkedBuyerId?, linkedBuyerName?, linkedSupplierId?, linkedSupplierName?, tags[]?, timeline [{action, by, byName, at, changes?}], createdBy, createdByName, createdAt, isDeleted, month (`YYYY-MM`), year
 
 ### `loans/{id}`
 **Base:** id, date, amount, type (`given|received`), personName, purpose, segment, segmentName, repaymentStatus (`pending|partial|completed`), totalRepaid, balanceRemaining, recordedBy, recordedByName, createdAt, isDeleted, timeline[], month, year
@@ -186,13 +266,31 @@ id, type (`expense|income`), date, amount, quantity?, unit? (`kg|head|dozen|litr
 id, date, amount (+repay/-disburse), note, paidBy?, paidByName?, recordedBy, recordedByName, createdAt, scheduledDueDate?, isEMIPayment?, emiNumber?, principalPortion?, interestPortion?, paymentReference?, transactionId?, isPreClosure?, preClosureCharges?, isPartPayment?, penaltyAmount?
 
 ### `animals/{id}`
-id, segment, segmentName, trackingMode (`individual|batch`), tag?, name?, breed?, gender? (`male|female|unknown`), batchLabel?, batchSize, currentCount, origin (`birth|purchase`), originDate, originInventoryEventId?, purchasePrice?, purchasePricePerHead?, status (`active|sold|dead`), exitDate?, exitType? (`sale|death`), saleTransactionId?, saleInventoryEventId?, salePrice?, salePricePerHead?, buyerId?, buyerName?, totalCosts, costEntries [{transactionId, date, category, categoryName, amount, description?}], totalInvested, profit?, profitMargin?, createdBy, createdByName, createdAt, isDeleted, month, year, note?
+id, segment, segmentName, trackingMode (`individual|batch`), tag?, name?, breed?, gender? (`male|female|unknown`), batchLabel?, batchSize, currentCount, origin (`birth|purchase`), originDate, originInventoryEventId?, purchasePrice?, purchasePricePerHead?, status (`active|sold|dead`), exitDate?, exitType? (`sale|death`), saleTransactionId?, saleInventoryEventId?, salePrice?, salePricePerHead?, buyerId?, buyerName?, totalCosts, costEntries [{transactionId, date, category, categoryName, amount, description?}], totalInvested, profit?, profitMargin?, vaccinationHistory? [{id, date, vaccineName, dosage?, administeredBy?, nextDueDate?, batchNumber?, cost?, linkedTransactionId?, note?}], medicalHistory? [{id, date, type (`treatment|checkup|surgery|emergency`), disease?, symptoms?, medicine?, dosage?, doctor?, temperature?, weight?, cost?, linkedTransactionId?, note?}], weightLogs? [{id, date, weight, remarks?}], deathCause?, deathNote?, ageAtDeathDays?, createdBy, createdByName, createdAt, isDeleted, month, year, note?
 
 ### `buyers/{id}`
 id, name, phone?, location?, note?, totalPurchases, totalAmountPaid, averageRate?, lastPurchaseDate?, purchasesBySegment? {segmentId: count}, amountBySegment? {segmentId: amount}, createdBy, createdByName, createdAt, isDeleted
 
+### `suppliers/{id}`
+id, name, phone?, location?, gstNumber?, itemCategories?[], totalOrders, totalAmountPaid, pendingAmount, averageRate?, lastOrderDate?, ordersBySegment? {segmentId: count}, amountBySegment? {segmentId: amount}, note?, createdBy, createdByName, createdAt, isDeleted
+
 ### `inventoryEvents/{id}`
 id, segment, segmentName, eventType (`birth|death|purchase|sale|adjustment`), count (+add/-remove), breed?, note, date, createdBy, createdByName, createdAt, month, year, isDeleted?, linkedAnimalIds[]?, estimatedValue?
+
+### `inventoryItems/{id}`
+id, name, category (`feed|medicine|fertilizer|seeds|fuel|diesel|packaging|tools|other`), unit, currentStock, minimumStock?, segments[], segmentNames[], movements [{id, date, type (`opening|purchase|used|adjustment|wastage`), quantity (+/-), unitCost?, totalCost?, linkedTransactionId?, supplierId?, supplierName?, note?, recordedBy, recordedByName}], totalPurchased, totalUsed, totalWastage, totalSpent, lastPurchaseRate?, averagePurchaseRate?, note?, createdBy, createdByName, createdAt, isDeleted
+
+### `schedules/{id}`
+id, type (`recurring_transaction|reminder`), title, description, frequency (`daily|weekly|biweekly|monthly|quarterly|yearly`), startDate, endDate?, nextDueDate, lastProcessedDate?, transactionTemplate? {type, amount, category, categoryName, segment, segmentName, description, paymentMethod, paidBy?, paidByName?, tags?[]}, reminderConfig? {reminderType (`vaccination|deworming|spraying|fertilizer|insurance|loan_emi|breeding_checkup|harvest|custom`), linkedAnimalIds?[], linkedAnimalNames?[], linkedSegment?, linkedSegmentName?, autoCreateTask, taskPriority?, notifyDaysBefore}, isActive, isDeleted, processedCount, createdBy, createdByName, createdAt
+
+### `breedingRecords/{id}`
+id, segment, segmentName, sireId?, sireName?, damId, damName, matingDate, matingMethod? (`natural|artificial`), status (`mated|confirmed_pregnant|delivered|failed`), expectedDeliveryDate?, gestationDays?, actualDeliveryDate?, offspringCount?, offspringMale?, offspringFemale?, offspringAnimalIds?[], complications?, veterinaryCost?, linkedTransactionId?, note?, createdBy, createdByName, createdAt, isDeleted, month, year
+
+### `cropActivities/{id}`
+id, segment, segmentName, activityType (`irrigation|fertilizer|pruning|spraying|weeding|flowering|harvest|planting|mulching|soil_testing|other`), date, description, productUsed?, quantity?, unit?, area?, duration?, laborCount?, cost?, linkedTransactionId?, weather?, temperature?, note?, createdBy, createdByName, createdAt, isDeleted, month, year
+
+### `harvests/{id}`
+id, segment, segmentName, status (`harvested|in_storage|partially_sold|fully_sold`), harvestDate, cropName, variety?, totalQuantity, unit, grade?, storageLocation?, storageDate?, sales [{id, date, quantity, unit, ratePerUnit, totalAmount, buyerId?, buyerName?, linkedTransactionId?, note?}], totalSold, totalRevenue, wastageQuantity, wastageReason?, wastageDate?, remainingQuantity, averageRate?, harvestCost?, linkedCropActivityId?, note?, createdBy, createdByName, createdAt, isDeleted, month, year
 
 ### `tasks/{id}`
 id, title, description, priority (`low|medium|high|urgent`), status (`backlog|todo|in_progress|done`), visibility (`shared|personal`), assignee (uid|null), assigneeName, dueDate (Timestamp|null), subtasks [{id, title, done, dueDate (YYYY-MM-DD|null)}], tags[], kanbanOrder, createdBy, createdByName, createdAt, updatedAt, completedAt, isDeleted?
@@ -205,26 +303,36 @@ Same fields as monthlySummaries, aggregated annually.
 
 ## Key Relationships
 
-- Transaction → Category, Segment, Loan?, Animal[]?, Buyer?, User (distributions)
+- Transaction → Category, Segment, Loan?, Animal[]?, Buyer?, Supplier?, User (distributions)
 - Animal → Segment, Transaction (costEntries + sale), Buyer?, InventoryEvent (origin + sale)
+- Animal.vaccinationHistory/medicalHistory/weightLogs → embedded health records
 - Loan → Segment, Repayment[] (subcollection), Loan (renewal/transfer/parent)
 - InventoryEvent → Segment, Animal[]?
-- Buyer ← Animal (sale), Transaction (sale)
+- Buyer ← Animal (sale), Transaction (sale), Harvest (sale)
+- Supplier ← InventoryItem (purchase movements), Transaction (expense linkage)
+- InventoryItem.movements → StockMovement[] (embedded), Supplier?
+- Harvest → Segment, CropActivity?, Transaction (auto-created on sale), Buyer (sale linkage)
+- Harvest.sales → HarvestSaleEntry[] (embedded), Transaction (per-sale)
+- CropActivity → Segment, Transaction? (cost linkage)
+- BreedingRecord → Segment, Animal (sire + dam), Animal[] (offspring)
+- Schedule → Transaction (recurring template), Task (auto-created reminder), Animal[]? (reminder linkage)
 - User → Segment[] (assigned), Task (assignee)
 - Transaction writes auto-update → MonthlySummary + YearlySummary (via atomic increment())
 
 ## Design Patterns
 
 - **Soft deletes** (`isDeleted`) on most collections
-- **Denormalized names** (segmentName, categoryName, buyerName, etc.) to avoid joins
+- **Denormalized names** (segmentName, categoryName, buyerName, supplierName, etc.) to avoid joins
 - **Month/year indexing** (`month: "YYYY-MM"`, `year`) for period queries
-- **Embedded arrays** (costEntries, timeline, distributions, deductions, collaterals)
+- **Embedded arrays** (costEntries, timeline, distributions, deductions, collaterals, vaccinationHistory, medicalHistory, weightLogs, movements, sales)
 - **Precomputed summaries** (monthlySummaries/yearlySummaries updated atomically via `increment()`)
 - **In-memory caching** for reference data (segments, categories, users)
 - **Client-side aggregation** (no Cloud Functions — Spark plan constraint)
+- **Client-side scheduling** (processOverdueSchedules on app startup — no Cloud Functions)
 - **Atomic batch writes** for all mutations (transaction + summary + related updates)
 - **Standalone components** throughout (no NgModules)
 - **Signal-based state** with Angular computed signals for derived state (isAdmin, isManager, etc.)
+- **Backward-compatible extensions** — all new fields on existing models are optional, no migration needed
 
 ## Routes
 
@@ -232,7 +340,13 @@ Same fields as monthlySummaries, aggregated annually.
 |------|--------|
 | `/dashboard` | All authenticated |
 | `/transactions`, `/loans`, `/stock`, `/buyers` | Admin, Manager |
-| `/stock/new`, `/stock/analytics`, `/stock/:id` | Admin, Manager |
+| `/stock/new`, `/stock/analytics`, `/stock/mortality`, `/stock/:id` | Admin, Manager |
+| `/schedules` | Admin, Manager |
+| `/breeding` | Admin, Manager |
+| `/crops` | Admin, Manager |
+| `/harvests`, `/harvests/:id` | Admin, Manager |
+| `/consumables` | Admin, Manager |
+| `/suppliers` | Admin, Manager |
 | `/tasks` | All authenticated |
 | `/admin`, `/admin/register`, `/admin/data-setup` | Admin only |
 | `/auth/login`, `/auth/forgot-password` | Public |
@@ -244,13 +358,27 @@ Guards: `authGuard` (login + active check), `roleGuard(roles)`, `unsavedChangesG
 
 **AuthService** — Firebase Auth. Login, logout, password reset. User profile from Firestore. Computed signals: isAdmin, isManager, isViewer, isLoggedIn, assignedSegments.
 
-**TransactionService** — CRUD with atomic batch writes. Auto-updates monthly/yearly summaries. Distribution, tag, animal linkage support. Person name normalization. Pagination with cursor. Soft delete with summary rollback.
+**TransactionService** — CRUD with atomic batch writes. Auto-updates monthly/yearly summaries. Distribution, tag, animal linkage, supplier linkage support. Person name normalization. Pagination with cursor. Soft delete with summary rollback.
 
 **LoanService** — Simple + formal loan management. EMI schedule generation (reducing-balance). Repayment tracking with principal/interest split. Gold loan calculations (purity, LTV, RBI rates). Rate change history. Balance transfer/renewal linking. Closure/pre-closure handling. All payment methods accept optional segment override for correct multi-segment expense attribution.
 
-**AnimalService** — Individual + batch animal CRUD. Cost attribution from transactions. Profit calculation. Status transitions with inventory events. Batch count management.
+**AnimalService** — Individual + batch animal CRUD. Cost attribution from transactions. Profit calculation. Status transitions with inventory events. Batch count management. Vaccination/medical record CRUD (addVaccination, addMedicalRecord, removeVaccination, removeMedicalRecord). Weight log CRUD (addWeightLog, removeWeightLog). Death recording with cause and age-at-death computation.
 
 **BuyerService** — CRUD with auto-updated denormalized stats on sales. Per-segment purchase tracking. Average rate calculation.
+
+**SupplierService** — CRUD mirroring BuyerService. Denormalized stats (totalOrders, totalAmountPaid, pendingAmount). Per-segment tracking. Pending amount management.
+
+**ScheduleService** — CRUD for recurring transactions and reminders. `processOverdueSchedules()` runs on app startup: creates transactions from templates, creates tasks from reminders. Date advancement (calculateNextDueDate). Safety limit: max 12 missed occurrences per schedule. Queries: getActive, getUpcomingReminders(daysAhead), getPendingRecurring.
+
+**BreedingService** — CRUD for breeding records. Queries: getByAnimal, getUpcomingDeliveries. Segment-filtered.
+
+**CropActivityService** — CRUD for crop activities. Queries: getAll with segment/activityType filters.
+
+**HarvestService** — CRUD for harvests. `recordSale()` creates income transaction + updates buyer + updates harvest sales/totals/status. `recordWastage()` updates wastage and remainingQuantity. Status auto-transitions.
+
+**InventoryItemService** — CRUD for consumable items. `recordPurchase(qty, unitCost, supplier?)`, `recordUsage(qty)`, `recordWastage(qty, reason)`. Low stock detection via `getLowStockItems()`. Average purchase rate calculation.
+
+**MortalityService** — Pure computation service (no new collection). Queries dead animals and computes: mortality rate %, cause breakdown, estimated financial loss, average age at death, monthly trend, per-segment statistics.
 
 **CategoryService** — Cached getAll/getByType. Seed defaults. Type filtering (expense/income).
 
@@ -260,7 +388,7 @@ Guards: `authGuard` (login + active check), `roleGuard(roles)`, `unsavedChangesG
 
 **InventoryService** — Record events. Atomic segment stock updates. Breed tracking.
 
-**NotificationService** — In-memory alerts. Loan overdue/due-soon, task overdue, budget warning/exceeded. localStorage dismissals.
+**NotificationService** — In-memory alerts. Loan overdue/due-soon, task overdue, budget warning/exceeded, recurring due, reminder due/upcoming, low stock, delivery expected. localStorage dismissals.
 
 **SummaryService** — Query monthly/yearly summaries. Aggregation helpers. Batched multi-month queries.
 
@@ -270,9 +398,11 @@ Guards: `authGuard` (login + active check), `roleGuard(roles)`, `unsavedChangesG
 
 ## Shared Components
 
-**UI Components:** LoadingSpinnerComponent, LoadingSkeletonComponent, ConfirmDialogComponent, EmptyStateComponent, DateRangeFilterComponent, NotificationBellComponent.
+**UI Components:** LoadingSpinnerComponent, LoadingSkeletonComponent, ConfirmDialogComponent (with optional text/number input), EmptyStateComponent, DateRangeFilterComponent, NotificationBellComponent.
 
-**Dialogs:** SaleDialogComponent (animal sale with buyer/price), CostAttributionDialogComponent (split costs across animals), DistributionDialogComponent (split income among partners), BuyerFormDialogComponent (inline buyer creation), InventoryEventDialogComponent (stock movement), WhatsappShareDialogComponent (formatted sharing).
+**Dialogs:** SaleDialogComponent (animal sale with buyer/price), CostAttributionDialogComponent (split costs across animals), DistributionDialogComponent (split income among partners), BuyerFormDialogComponent (inline buyer creation), InventoryEventDialogComponent (stock movement), WhatsappShareDialogComponent (formatted sharing), VaccinationDialogComponent (animal vaccination record), MedicalDialogComponent (animal medical record), WeightLogDialogComponent (animal weight log), RecurringSetupDialogComponent (recurring transaction schedule), ReminderFormDialogComponent (scheduled reminder), BreedingFormDialogComponent (breeding record), CropActivityFormDialogComponent (crop activity), HarvestFormDialogComponent (harvest record), HarvestSaleDialogComponent (harvest sale), SupplierFormDialogComponent (supplier CRUD), ConsumableFormDialogComponent (consumable item), StockMovementDialogComponent (consumable purchase/use/wastage).
+
+**Chart Components:** WeightChartComponent (line chart for animal weight history).
 
 **Pipes:** CurrencyInrPipe (₹X,XXX.XX), RelativeTimePipe ("2 days ago").
 
