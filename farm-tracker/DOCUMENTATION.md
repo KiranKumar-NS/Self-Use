@@ -1,10 +1,12 @@
 # Farm Tracker
 
-Angular 21 + Firebase (Firestore + Auth) + Angular Material + Chart.js PWA for multi-user farm financial management. Tracks animals, transactions, loans, buyers, tasks. Firebase Spark (free) plan.
+Angular 21 + Firebase (Firestore + Auth) + Angular Material + Chart.js PWA for multi-user farm financial management. Tracks animals, transactions, loans, buyers, tasks. Firebase Spark (free) plan — no Cloud Functions, all aggregation is client-side.
+
+**Tech Stack:** Angular 21 (standalone components), Firebase Firestore, Firebase Auth, Angular Material, Chart.js (ng2-charts), Angular CDK (drag-drop), jsPDF + jspdf-autotable, Angular Service Worker, Vitest, SCSS.
 
 ## Segments & Roles
 
-Segments: Goats (🐐), Chickens (🐔), Dragon Fruit (🌵). Users assigned to specific segments.
+Segments: Goats (🐐), Chickens (🐔), Dragon Fruit (🌵). Users assigned to specific segments. Segment types: `animal` or `crop`. Units: `head|kg|trees|litres`.
 
 | Role | Transactions/Loans/Stock/Buyers | Tasks | Admin |
 |------|---------------------------------|-------|-------|
@@ -14,23 +16,142 @@ Segments: Goats (🐐), Chickens (🐔), Dragon Fruit (🌵). Users assigned to 
 
 ## Features
 
-**Dashboard** `/dashboard` — Summary cards (income/expense/profit), stock widget, budget vs actual, loan summary with EMIs, segment breakdown chart, monthly trend chart, person investment cards (expenses paid, income received, holdings, loan hold/owed), filter chips (person + segment + tag), tag productivity cards (income/expense/net per tag for crop tracking), export (Excel/PDF/WhatsApp).
+### Dashboard `/dashboard`
 
-**Transactions** `/transactions` — Expense & income CRUD. Fields: amount, category, segment, paymentMethod (cash/upi), paidBy, quantity/unit/rate (for sales). Payment status tracking (received/pending, paid/credit). Cost attribution to animals. Buyer linkage. Income distribution among partners. Tags for ad-hoc grouping (e.g., harvest cycles, plot blocks) with autocomplete and crop-specific suggestions. Tag filter in list view. Tag-based search. Timeline audit trail.
+Summary cards (income/expense/profit), stock widget, budget vs actual (monthly mode), loan summary with EMI alerts, segment breakdown chart (hidden on mobile), monthly trend chart (hidden on mobile), person investment cards (expenses paid, income received, holdings, loan hold/owed), filter chips (person + segment + tag), tag productivity cards (income/expense/net per tag for crop tracking), undistributed income card, pending amounts tracking. Export: Excel/PDF/WhatsApp.
 
-**Loans** `/loans` — Simple (owe/lent between people) and Formal (bank/finance/gold loan). Formal: sanctioned amount, disbursement, deductions, EMI/interest-only repayment, fixed/floating interest, collateral (gold/property/vehicle/FD), documents, pre-closure, renewal, balance transfer, government subsidy, utilization tracking, loan holder. Repayment subcollection with principal/interest split.
+**Analytics Tab:** Advanced analytics with person/segment/tag filters. Person investment summary with net investment, expense vs income breakdown, income undistributed amounts, loan holds in custody with per-loan detail. Tag productivity analysis when tag filter is active. Charts: expense by person (bar), expense by category (doughnut), expense by segment (doughnut), monthly expense trend (bar).
 
-**Stock** `/stock` — Animal tracking (individual with tag/name/breed/gender OR batch with label/size). Origin: birth/purchase. Status: active→sold/dead. Per-animal cost tracking via costEntries linked to transactions. Profit = salePrice - totalInvested. Sale dialog creates transaction + inventory event + updates buyer. Animal analytics.
+**Date Range:** Monthly selection or custom period. Default: All Time view. Shared date range filter across all pages with year/month selection.
 
-**Inventory Events** — Birth/death/purchase/sale/adjustment events that update segment.currentStock atomically.
+### Transactions `/transactions`
 
-**Buyers** `/buyers` — Name, phone, location. Denormalized stats: totalPurchases, totalAmountPaid, averageRate, lastPurchaseDate, purchasesBySegment.
+Expense & income CRUD with pagination, sorting, filtering. Fields: amount, date, category, segment, description, paymentMethod (cash/upi), paidBy (user or "other" with custom name), quantity/unit/rate (for sales). Units: `kg|head|dozen|litre|pieces|bag|bundle`.
 
-**Tasks** `/tasks` — Kanban (backlog/todo/in_progress/done). Priority, assignee, subtasks, due dates, shared/personal visibility, drag-drop.
+**Payment Status:** Income: received/pending. Expense: paid/credit (pending).
 
-**Admin** `/admin` — User CRUD, role/segment assignment, data setup (seed categories/segments/budgets).
+**Cost Attribution:** Link transactions to multiple animals. Split costs across animals via cost attribution dialog. Creates costEntries on animal records.
 
-**Notifications** — In-memory (not Firestore). Loan overdue (>30d), task overdue, budget warning (≥80%), budget exceeded (≥100%). Dismissals in localStorage.
+**Buyer Linkage:** Link income transactions to buyers. Auto-updates buyer denormalized stats.
+
+**Income Distribution:** Split income among multiple partners with amount allocation. Reinvestment option (separate tracking). Remaining/over-allocation validation.
+
+**Tags:** Freeform tags for ad-hoc grouping (harvest cycles, plot blocks). Tag autocomplete with crop-specific suggestions. Tag filter in list view. Tag-based search.
+
+**Auto-Tag Generation:** Smart context-aware tags generated automatically:
+- Category-based: `{category}-{month-short}-{year}` (e.g., `feed-jul-2026`)
+- Segment-based: `{segment}-{month-short}-{year}` (e.g., `goats-jul-2026`)
+- Animal-linked: from linked animal names/batch labels
+- Seasonal: `monsoon-{year}` (May-Aug), `summer-{year}` (Feb-Apr), `winter-{year}` (Nov-Jan)
+- Merge strategy: manual tags first, then auto-tags (deduplicated)
+
+**Timeline:** Audit trail on each transaction showing all modifications with user, timestamp, and change details.
+
+**Paid By Filter:** Filter transactions by who paid.
+
+### Loans `/loans`
+
+**Simple Loans:** Owe/lent between people. Fields: date, amount, type (given/received), personName, purpose, segment. Repayment tracking with status (pending/partial/completed).
+
+**Formal Loans:** Bank/finance/gold loan lifecycle management.
+- Source: bank, finance_company, individual, gold_loan
+- Disbursement: sanctioned amount, net disbursed, deductions (processing fees, insurance, stamps, etc.)
+- Deductions: type, amount, paidTo, paymentReference, isFinanced flag
+- Repayment types: EMI (reducing-balance) or interest-only
+- Interest: fixed/floating rate, annual/monthly/weekly frequency
+- EMI: tenure, emiAmount, totalEMIs, emisPaid, moratoriumMonths, emiStartDate, schedule preview
+- Interest-only: payment frequency, amount per period, total payments made
+- Rate changes: history with old/new rate, new EMI, notes (for floating rate)
+- Collateral: gold, property, vehicle, fixed_deposit, other. Per-item tracking with weight/purity/value for gold.
+- Gold loan specifics: LTV ratio, RBI calculations, pledge receipt, per-item gold tracking (gross/net weight, purity, rate per gram, value)
+- Documents: sanction_letter, agreement, insurance_policy, noc, other with reference numbers and dates
+- Pre-closure: charges, early repayment handling
+- Renewal: link renewed-from/renewed-by loans
+- Balance transfer: link replaced-by/replaces loans
+- Government subsidy: subsidyDetails, effectiveRate
+- Utilization tracking: total, remaining
+- Loan holder: heldByUid/Name
+- Multi-segment: segments[], segmentNames[]
+- Part-payment and penalty tracking
+- Next payment due date with alerts
+- Closure: fully_paid, pre_closed, balance_transfer, renewed
+- **Payment segment override:** All payment forms (EMI, interest, part-payment, penalty, pre-close, close principal) include an "Expense Segment" dropdown defaulting to loan's primary segment, overridable by user. Ensures multi-segment loans attribute expenses to the correct segment.
+
+**Repayment Subcollection** `loans/{id}/repayments/{id}`: Individual payments with principal/interest split, EMI number, scheduled due date, payment reference, pre-closure flag, penalty amount.
+
+### Stock `/stock`
+
+Unified page (merged Animals + Inventory) with stock summary cards at top and two tabs: **Animals** (records list with filters, search, stats, pagination) and **Stock Log** (inventory event history). Actions: "Record Event" dialog, "Register Animal" form page, "Analytics" link.
+
+**Auto Animal Record Creation:** When recording a purchase/birth event via the "Record Event" dialog, an "Also create animal record" toggle (default: on) auto-creates a batch animal record (count > 1) or individual record (count = 1) with breed, purchase price, and batch label.
+
+**Individual Animals:** tag/ID, name, breed, gender (male/female/unknown). Origin: birth (with breed info) or purchase (with price). Status: active → sold/dead with exit tracking.
+
+**Batch Animals:** batchLabel, batchSize, currentCount. Same origin/status tracking.
+
+**Cost Tracking:** costEntries array linked to transactions. Each entry: transactionId, date, category, categoryName, amount, description. totalInvested = purchasePrice + sum(costEntries). profit = salePrice - totalInvested. profitMargin percentage.
+
+**Sale:** Sale dialog creates transaction + inventory event + updates buyer stats. Fields: salePrice, salePricePerHead, buyerId/Name, saleDate.
+
+**Animal Analytics** `/stock/analytics`: Profitability analysis per animal, cost breakdown, ROI.
+
+### Inventory Events
+
+Birth/death/purchase/sale/adjustment events. Count: positive (add) or negative (remove). Auto-updates segment.currentStock atomically via batch writes. Breed tracking. Estimated value for mortality/loss analysis. Linked to animals via linkedAnimalIds.
+
+### Buyers `/buyers`
+
+Name, phone, location, note. Denormalized stats auto-updated on sales: totalPurchases, totalAmountPaid, averageRate, lastPurchaseDate, purchasesBySegment (count), amountBySegment (amount). Buyer detail page with purchase history.
+
+### Tasks `/tasks`
+
+Kanban board: backlog → todo → in_progress → done. Priority: low/medium/high/urgent. Assignee, due dates, subtasks (with individual completion and optional due dates). Tags. Visibility: shared (all users) or personal (creator only). Drag-drop via Angular CDK. Desktop: Kanban columns. Mobile: tab view. Filter: All Tasks vs My Tasks. kanbanOrder for column sorting.
+
+### Admin `/admin`
+
+**User Management:** CRUD users, role assignment (admin/manager/viewer), segment assignment per user, active/inactive toggle.
+
+**Data Setup** `/admin/data-setup`: Seed default segments (Goats/Chickens/Dragon Fruit) and categories. Segment budget management (monthly expense limit, income target). Category creation.
+
+### Authentication
+
+Email/password login. Registration (admin-creates-user flow via `/admin/register`). Forgot password with reset email. Auth guard checks login + active user flag.
+
+### Notifications
+
+In-memory (not Firestore). Types:
+- Loan overdue: >30 days past due (error severity)
+- Loan payment due: <5 days until next payment (warning severity)
+- Task overdue: past due date (warning severity)
+- Budget warning: ≥80% of monthly limit (warning severity)
+- Budget exceeded: ≥100% of monthly limit (error severity)
+
+Dismissals stored in localStorage.
+
+## Export & Import
+
+### Export Formats
+
+**PDF Reports:**
+- `exportTransactionsPdf()` — Full farm financial report: summaries, segment breakdown, category breakdown, paid-by summary, transaction details, income distribution
+- `exportLoansPdf()` — Loan summary reports by month
+- `exportLoanDetailPdf()` — Individual loan detail: deductions, collateral, personal withdrawals
+
+**CSV Exports:**
+- `exportTransactionsCsv()` — All fields including quantity, unit, rate, payment status, distributions
+- `exportLoansCsv()` — Comprehensive loan data with formal loan fields
+
+**Excel Backup:**
+- `exportBackupExcel()` — Multi-sheet backup (Expenses, Income, Loans, Inventory Events, Animals, Buyers) with all fields for re-import
+- `exportLoanDetailExcel()` — Single loan detail with 9 sheets: Overview, Deductions, Repayments, Utilization, Personal Withdrawals, Collateral, Rate Changes, Documents
+
+**WhatsApp:** Formatted summary sharing via WhatsApp share dialog.
+
+All exports use Indian Rupees (₹) formatting.
+
+### Import
+
+**`scripts/import-backup.js`** — Restores data from Excel backups. Auto-detects file type (transaction backup vs loan detail). Supports `--dry-run` flag. Handles all fields for round-trip re-import.
 
 ## Firestore Schema
 
@@ -90,7 +211,7 @@ Same fields as monthlySummaries, aggregated annually.
 - InventoryEvent → Segment, Animal[]?
 - Buyer ← Animal (sale), Transaction (sale)
 - User → Segment[] (assigned), Task (assignee)
-- Transaction writes auto-update → MonthlySummary + YearlySummary
+- Transaction writes auto-update → MonthlySummary + YearlySummary (via atomic increment())
 
 ## Design Patterns
 
@@ -98,10 +219,12 @@ Same fields as monthlySummaries, aggregated annually.
 - **Denormalized names** (segmentName, categoryName, buyerName, etc.) to avoid joins
 - **Month/year indexing** (`month: "YYYY-MM"`, `year`) for period queries
 - **Embedded arrays** (costEntries, timeline, distributions, deductions, collaterals)
-- **Precomputed summaries** (monthlySummaries updated atomically via `increment()`)
+- **Precomputed summaries** (monthlySummaries/yearlySummaries updated atomically via `increment()`)
 - **In-memory caching** for reference data (segments, categories, users)
 - **Client-side aggregation** (no Cloud Functions — Spark plan constraint)
-- **Atomic batch writes** for all mutations
+- **Atomic batch writes** for all mutations (transaction + summary + related updates)
+- **Standalone components** throughout (no NgModules)
+- **Signal-based state** with Angular computed signals for derived state (isAdmin, isManager, etc.)
 
 ## Routes
 
@@ -115,4 +238,76 @@ Same fields as monthlySummaries, aggregated annually.
 | `/auth/login`, `/auth/forgot-password` | Public |
 | `/animals`, `/inventory`, `/analytics` | Redirect to `/stock` or `/dashboard` |
 
-Guards: `authGuard` (login + active check), `roleGuard(roles)`, `unsavedChangesGuard`
+Guards: `authGuard` (login + active check), `roleGuard(roles)`, `unsavedChangesGuard` (form dirty check).
+
+## Services
+
+**AuthService** — Firebase Auth. Login, logout, password reset. User profile from Firestore. Computed signals: isAdmin, isManager, isViewer, isLoggedIn, assignedSegments.
+
+**TransactionService** — CRUD with atomic batch writes. Auto-updates monthly/yearly summaries. Distribution, tag, animal linkage support. Person name normalization. Pagination with cursor. Soft delete with summary rollback.
+
+**LoanService** — Simple + formal loan management. EMI schedule generation (reducing-balance). Repayment tracking with principal/interest split. Gold loan calculations (purity, LTV, RBI rates). Rate change history. Balance transfer/renewal linking. Closure/pre-closure handling. All payment methods accept optional segment override for correct multi-segment expense attribution.
+
+**AnimalService** — Individual + batch animal CRUD. Cost attribution from transactions. Profit calculation. Status transitions with inventory events. Batch count management.
+
+**BuyerService** — CRUD with auto-updated denormalized stats on sales. Per-segment purchase tracking. Average rate calculation.
+
+**CategoryService** — Cached getAll/getByType. Seed defaults. Type filtering (expense/income).
+
+**SegmentService** — Cached segment list. Budget update. Seed defaults. Migration support.
+
+**TaskService** — Kanban operations. Visibility filter (personal/shared). Status grouping. Subtask management. Drag-drop reorder.
+
+**InventoryService** — Record events. Atomic segment stock updates. Breed tracking.
+
+**NotificationService** — In-memory alerts. Loan overdue/due-soon, task overdue, budget warning/exceeded. localStorage dismissals.
+
+**SummaryService** — Query monthly/yearly summaries. Aggregation helpers. Batched multi-month queries.
+
+**ExportService** — PDF (transactions report, loan summary, loan detail). CSV (transactions, loans). Excel (multi-sheet backup, loan detail with 9 sheets). WhatsApp formatting. All INR.
+
+**UserService** — User CRUD. Role/segment assignment. Active toggle.
+
+## Shared Components
+
+**UI Components:** LoadingSpinnerComponent, LoadingSkeletonComponent, ConfirmDialogComponent, EmptyStateComponent, DateRangeFilterComponent, NotificationBellComponent.
+
+**Dialogs:** SaleDialogComponent (animal sale with buyer/price), CostAttributionDialogComponent (split costs across animals), DistributionDialogComponent (split income among partners), BuyerFormDialogComponent (inline buyer creation), InventoryEventDialogComponent (stock movement), WhatsappShareDialogComponent (formatted sharing).
+
+**Pipes:** CurrencyInrPipe (₹X,XXX.XX), RelativeTimePipe ("2 days ago").
+
+**Directives:** HasRoleDirective (*hasRole="admin") — conditional UI rendering by role using Angular effect.
+
+## Utilities
+
+**date.utils.ts** — getMonthString, getYear, getMonthName, getMonthRange, getDateRange, getLast6MonthsFrom, formatDateForFirestore, parseFirestoreDate.
+
+**name.utils.ts** — normalizeName (trim, title-case), nameKey (safe object keys from names).
+
+**firestore.utils.ts** — formatCurrency (INR), FirestoreDateAdapter (Material DatePicker).
+
+**table.utils.ts** — sortData (generic), toggleSortState, paginate (client-side), totalPages, pageStart, pageEnd.
+
+**route-animations.ts** — Reusable animation triggers for route transitions.
+
+## PWA & Hosting
+
+**Service Worker** (ngsw-config.json): Register on stable (30s). Asset groups: app (prefetch HTML/CSS/JS), images+fonts (lazy). Data groups: Google Fonts CSS (30d cache), Google Fonts files (1y cache).
+
+**Firebase Hosting** (firebase.json): SPA rewrite (all routes → index.html). No-cache headers on `ngsw.json`, `ngsw-worker.js`, `index.html`. Security headers: X-Frame-Options SAMEORIGIN, X-Content-Type-Options nosniff, Referrer-Policy strict-origin-when-cross-origin, Permissions-Policy deny geo/mic/camera.
+
+## Scripts
+
+**`scripts/setup-collections.js`** — Initialize Firestore with default segments + categories. Idempotent, safe to re-run.
+
+**`scripts/clean-db.js`** — Database cleanup/reset. Commands: `all` (full reset), `transactions`, `loans`, `audit`, `summaries`, `seed`. Includes confirmation prompts.
+
+**`scripts/import-backup.js`** — Restore from Excel exports. Auto-detects transaction backup vs loan detail. `--dry-run` flag supported.
+
+## Testing
+
+184 tests across 14 spec files using Vitest. Covers services, utilities, and component logic.
+
+## Build Config
+
+Angular builder: `@angular/build:application`. Inline styles: SCSS. Service worker enabled. Production budgets: initial bundle 2MB warn / 3MB error, component styles 4kB warn / 8kB error. Output hashing on all assets. Package manager: npm.
