@@ -2,9 +2,9 @@ import { ApplicationConfig, provideBrowserGlobalErrorListeners, isDevMode } from
 import { provideRouter, withComponentInputBinding } from '@angular/router';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideServiceWorker } from '@angular/service-worker';
-import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
+import { provideFirebaseApp, initializeApp, getApp } from '@angular/fire/app';
 import { provideAuth, getAuth } from '@angular/fire/auth';
-import { provideFirestore, getFirestore } from '@angular/fire/firestore';
+import { provideFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from '@angular/fire/firestore';
 import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 import { DateAdapter, provideNativeDateAdapter } from '@angular/material/core';
 import { MAT_SNACK_BAR_DEFAULT_OPTIONS } from '@angular/material/snack-bar';
@@ -23,7 +23,9 @@ export const appConfig: ApplicationConfig = {
     }),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
     provideAuth(() => getAuth()),
-    provideFirestore(() => getFirestore()),
+    provideFirestore(() => initializeFirestore(getApp(), {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    })),
     provideCharts(withDefaultRegisterables()),
     provideNativeDateAdapter(),
     { provide: DateAdapter, useClass: CustomDateAdapter },

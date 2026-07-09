@@ -16,6 +16,8 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatIconModule } from '@angular/material/icon';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
 
 @Component({
   selector: 'app-animal-form',
@@ -23,7 +25,7 @@ import { getMonthString, getYear } from '../../../core/utils/date.utils';
   imports: [
     FormsModule, MatCardModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatDatepickerModule, MatRadioModule,
-    MatIconModule, MatAutocompleteModule,
+    MatIconModule, MatAutocompleteModule, MatSnackBarModule,
   ],
   template: `
     <div class="page-header">
@@ -139,7 +141,7 @@ import { getMonthString, getYear } from '../../../core/utils/date.utils';
         <div class="form-row">
           <mat-form-field appearance="outline">
             <mat-label>{{ origin === 'birth' ? 'Birth Date' : 'Purchase Date' }}</mat-label>
-            <input matInput [matDatepicker]="picker" [(ngModel)]="originDate" name="originDate" required />
+            <input matInput [matDatepicker]="picker" [(ngModel)]="originDate" name="originDate" [max]="today" required />
             <mat-datepicker-toggle matIconSuffix [for]="picker" />
             <mat-datepicker #picker />
             <mat-error>Required</mat-error>
@@ -186,19 +188,22 @@ import { getMonthString, getYear } from '../../../core/utils/date.utils';
     }
   `],
 })
-export class AnimalFormComponent implements OnInit {
+export class AnimalFormComponent implements OnInit, HasUnsavedChanges {
   private animalService = inject(AnimalService);
   private segmentService = inject(SegmentService);
   private inventoryService = inject(InventoryService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private snackBar = inject(MatSnackBar);
 
   isEdit = signal(false);
   error = signal('');
   saving = signal(false);
+  private saved = false;
 
   allSegments = signal<Segment[]>([]);
 
+  today = new Date();
   segment = '';
   trackingMode: TrackingMode = 'individual';
   tag = '';
@@ -308,12 +313,24 @@ export class AnimalFormComponent implements OnInit {
           year: getYear(this.originDate),
         });
       }
+      this.snackBar.open(
+        this.isEdit() ? 'Animal updated' : 'Animal created',
+        '',
+        { duration: 2500 }
+      );
+      this.saved = true;
       this.router.navigate(['/stock']);
     } catch (err: any) {
       this.error.set(err.message || 'Failed to save');
     } finally {
       this.saving.set(false);
     }
+  }
+
+  hasUnsavedChanges(): boolean {
+    if (this.saved) return false;
+    if (this.isEdit()) return true;
+    return this.segment !== '' || this.tag.trim() !== '' || this.name.trim() !== '';
   }
 
   cancel(): void {

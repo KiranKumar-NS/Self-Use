@@ -71,7 +71,7 @@ export interface InventoryEventDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Date</mat-label>
-          <input matInput [matDatepicker]="picker" [(ngModel)]="date" />
+          <input matInput [matDatepicker]="picker" [(ngModel)]="date" [max]="today" />
           <mat-datepicker-toggle matIconSuffix [for]="picker" />
           <mat-datepicker #picker />
         </mat-form-field>
@@ -196,6 +196,7 @@ export class InventoryEventDialogComponent implements OnInit {
   saving = signal(false);
   error = signal('');
 
+  today = new Date();
   isEdit = false;
   segment = '';
   eventType: InventoryEventType = 'birth';

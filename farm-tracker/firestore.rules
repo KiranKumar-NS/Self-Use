@@ -22,6 +22,10 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
+    function isActiveUser() {
+      return getUserData().isActive == true;
+    }
+
     function hasSegmentAccess(segment) {
       return isAdmin() ||
         (getUserRole() == 'manager' && segment in getUserData().assignedSegments);
@@ -42,7 +46,7 @@ service cloud.firestore {
     // Segments (reference data)
     match /segments/{segmentId} {
       allow read: if isAuthenticated();
-      allow write: if isManagerOrAdmin();
+      allow write: if isManagerOrAdmin() && isActiveUser();
     }
 
     // Categories (reference data)
@@ -54,116 +58,134 @@ service cloud.firestore {
     // Transactions
     match /transactions/{transactionId} {
       allow read: if isAuthenticated();
-      allow create: if isManagerOrAdmin()
+      allow create: if isManagerOrAdmin() && isActiveUser()
         && hasSegmentAccess(request.resource.data.segment)
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.isDeleted == false;
-      allow update: if isManagerOrAdmin()
-        && hasSegmentAccess(resource.data.segment);
+      allow update: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentAccess(resource.data.segment)
+        && hasSegmentAccess(request.resource.data.segment);
       allow delete: if isAdmin();
     }
 
     // Loans (personal loans use segment='personal' which all users can access)
     match /loans/{loanId} {
       allow read: if isAuthenticated();
-      allow create: if isManagerOrAdmin()
+      allow create: if isManagerOrAdmin() && isActiveUser()
         && (request.resource.data.segment == 'personal' || hasSegmentAccess(request.resource.data.segment));
-      allow update: if isManagerOrAdmin()
+      allow update: if isManagerOrAdmin() && isActiveUser()
         && (resource.data.segment == 'personal' || hasSegmentAccess(resource.data.segment));
-      allow delete: if isManagerOrAdmin();
+      allow delete: if isManagerOrAdmin() && isActiveUser();
 
-      // Repayments subcollection
+      // Repayments subcollection — check parent loan segment
       match /repayments/{repaymentId} {
         allow read: if isAuthenticated();
-        allow create: if isManagerOrAdmin();
-        allow update, delete: if isManagerOrAdmin();
+        allow create: if isManagerOrAdmin() && isActiveUser()
+          && (get(/databases/$(database)/documents/loans/$(loanId)).data.segment == 'personal'
+              || hasSegmentAccess(get(/databases/$(database)/documents/loans/$(loanId)).data.segment));
+        allow update, delete: if isManagerOrAdmin() && isActiveUser()
+          && (get(/databases/$(database)/documents/loans/$(loanId)).data.segment == 'personal'
+              || hasSegmentAccess(get(/databases/$(database)/documents/loans/$(loanId)).data.segment));
       }
     }
 
     // Monthly summaries
     match /monthlySummaries/{summaryId} {
       allow read: if isAuthenticated();
-      allow write: if isManagerOrAdmin();
+      allow write: if isManagerOrAdmin() && isActiveUser();
     }
 
     // Inventory events
     match /inventoryEvents/{eventId} {
       allow read: if isAuthenticated();
-      allow create: if isManagerOrAdmin()
+      allow create: if isManagerOrAdmin() && isActiveUser()
         && hasSegmentAccess(request.resource.data.segment);
-      allow update, delete: if isManagerOrAdmin();
+      allow update: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentAccess(resource.data.segment);
+      allow delete: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentAccess(resource.data.segment);
     }
 
     // Tasks - managers/admins can write, all authenticated can read
     match /tasks/{taskId} {
       allow read: if isAuthenticated();
-      allow create, update, delete: if isManagerOrAdmin();
+      allow create, update, delete: if isManagerOrAdmin() && isActiveUser();
     }
 
     // Yearly summaries
     match /yearlySummaries/{summaryId} {
       allow read: if isAuthenticated();
-      allow write: if isManagerOrAdmin();
+      allow write: if isManagerOrAdmin() && isActiveUser();
     }
 
     // Animals
     match /animals/{animalId} {
       allow read: if isAuthenticated();
-      allow create: if isManagerOrAdmin()
+      allow create: if isManagerOrAdmin() && isActiveUser()
         && hasSegmentAccess(request.resource.data.segment);
-      allow update: if isManagerOrAdmin();
+      allow update: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentAccess(resource.data.segment);
       allow delete: if isAdmin();
     }
 
     // Buyers
     match /buyers/{buyerId} {
       allow read: if isAuthenticated();
-      allow create, update: if isManagerOrAdmin();
+      allow create, update: if isManagerOrAdmin() && isActiveUser();
       allow delete: if isAdmin();
     }
 
     // Schedules (recurring transactions + reminders)
     match /schedules/{scheduleId} {
       allow read: if isAuthenticated();
-      allow create, update: if isManagerOrAdmin();
+      allow create, update: if isManagerOrAdmin() && isActiveUser();
       allow delete: if isAdmin();
     }
 
     // Breeding records
     match /breedingRecords/{recordId} {
       allow read: if isAuthenticated();
-      allow create: if isManagerOrAdmin()
+      allow create: if isManagerOrAdmin() && isActiveUser()
         && hasSegmentAccess(request.resource.data.segment);
-      allow update, delete: if isManagerOrAdmin();
+      allow update: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentAccess(resource.data.segment);
+      allow delete: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentAccess(resource.data.segment);
     }
 
     // Crop activities
     match /cropActivities/{activityId} {
       allow read: if isAuthenticated();
-      allow create: if isManagerOrAdmin()
+      allow create: if isManagerOrAdmin() && isActiveUser()
         && hasSegmentAccess(request.resource.data.segment);
-      allow update, delete: if isManagerOrAdmin();
+      allow update: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentAccess(resource.data.segment);
+      allow delete: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentAccess(resource.data.segment);
     }
 
     // Harvests
     match /harvests/{harvestId} {
       allow read: if isAuthenticated();
-      allow create: if isManagerOrAdmin()
+      allow create: if isManagerOrAdmin() && isActiveUser()
         && hasSegmentAccess(request.resource.data.segment);
-      allow update, delete: if isManagerOrAdmin();
+      allow update: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentAccess(resource.data.segment);
+      allow delete: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentAccess(resource.data.segment);
     }
 
     // Inventory items (consumables)
     match /inventoryItems/{itemId} {
       allow read: if isAuthenticated();
-      allow create, update: if isManagerOrAdmin();
+      allow create, update: if isManagerOrAdmin() && isActiveUser();
       allow delete: if isAdmin();
     }
 
     // Suppliers
     match /suppliers/{supplierId} {
       allow read: if isAuthenticated();
-      allow create, update: if isManagerOrAdmin();
+      allow create, update: if isManagerOrAdmin() && isActiveUser();
       allow delete: if isAdmin();
     }
   }

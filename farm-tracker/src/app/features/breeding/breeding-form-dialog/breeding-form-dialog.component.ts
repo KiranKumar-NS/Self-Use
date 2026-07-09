@@ -67,7 +67,7 @@ export interface BreedingFormDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Mating Date</mat-label>
-          <input matInput [matDatepicker]="matingPicker" [(ngModel)]="matingDate" required />
+          <input matInput [matDatepicker]="matingPicker" [(ngModel)]="matingDate" [max]="today" required />
           <mat-datepicker-toggle matSuffix [for]="matingPicker" />
           <mat-datepicker #matingPicker />
         </mat-form-field>
@@ -95,7 +95,7 @@ export interface BreedingFormDialogData {
         @if (status === 'delivered') {
           <mat-form-field appearance="outline">
             <mat-label>Actual Delivery Date</mat-label>
-            <input matInput [matDatepicker]="actualPicker" [(ngModel)]="actualDeliveryDate" />
+            <input matInput [matDatepicker]="actualPicker" [(ngModel)]="actualDeliveryDate" [max]="today" />
             <mat-datepicker-toggle matSuffix [for]="actualPicker" />
             <mat-datepicker #actualPicker />
           </mat-form-field>
@@ -158,6 +158,7 @@ export class BreedingFormDialogComponent implements OnInit {
   segments = signal<Segment[]>([]);
   animals = signal<Animal[]>([]);
 
+  today = new Date();
   selectedSegment = '';
   status: BreedingStatus = 'mated';
   damId = '';

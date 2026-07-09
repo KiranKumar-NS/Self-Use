@@ -46,7 +46,7 @@ export interface HarvestFormDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Harvest Date</mat-label>
-          <input matInput [matDatepicker]="picker" [(ngModel)]="harvestDate" required />
+          <input matInput [matDatepicker]="picker" [(ngModel)]="harvestDate" [max]="today" required />
           <mat-datepicker-toggle matIconSuffix [for]="picker" />
           <mat-datepicker #picker />
         </mat-form-field>
@@ -79,7 +79,7 @@ export interface HarvestFormDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Harvest Cost</mat-label>
-          <input matInput type="number" [(ngModel)]="harvestCost" />
+          <input matInput type="number" [(ngModel)]="harvestCost" min="0" />
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
@@ -117,6 +117,7 @@ export class HarvestFormDialogComponent implements OnInit {
   error = signal('');
   cropSegments = signal<Segment[]>([]);
 
+  today = new Date();
   segment = '';
   cropName = '';
   variety = '';

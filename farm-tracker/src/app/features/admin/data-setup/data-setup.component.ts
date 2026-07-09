@@ -2,6 +2,7 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { SegmentService } from '../../../core/services/segment.service';
 import { CategoryService } from '../../../core/services/category.service';
+import { SummaryReconciliationService, ReconciliationReport } from '../../../core/services/summary-reconciliation.service';
 import { Segment } from '../../../core/models/segment.model';
 import { Category } from '../../../core/models/category.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
@@ -14,6 +15,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import {
   Firestore,
   doc,
@@ -28,7 +30,7 @@ import {
   imports: [
     FormsModule, LoadingSpinnerComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatChipsModule,
-    MatTabsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule,
+    MatTabsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule, MatProgressBarModule,
   ],
   template: `
     <div class="page-header">
@@ -256,6 +258,49 @@ import {
         </mat-tab>
 
       </mat-tab-group>
+
+      <!-- Reconcile Summaries Section -->
+      <mat-card class="reconcile-section">
+        <div class="reconcile-header">
+          <mat-icon class="reconcile-icon">sync</mat-icon>
+          <div>
+            <h3>Reconcile Summaries</h3>
+            <p class="reconcile-desc">Recompute all monthly and yearly summaries from raw transaction data. Use this if summary totals have drifted due to partial write failures.</p>
+          </div>
+        </div>
+        @if (reconciling()) {
+          <mat-progress-bar mode="indeterminate" />
+          <p class="reconcile-status">Reconciling... This may take a moment.</p>
+        }
+        @if (reconcileReport()) {
+          <div class="reconcile-results">
+            <div class="reconcile-stat">
+              <span class="stat-label">Transactions processed</span>
+              <span class="stat-value">{{ reconcileReport()!.totalTransactions }}</span>
+            </div>
+            <div class="reconcile-stat">
+              <span class="stat-label">Monthly summaries written</span>
+              <span class="stat-value">{{ reconcileReport()!.monthlySummariesWritten }}</span>
+            </div>
+            <div class="reconcile-stat">
+              <span class="stat-label">Yearly summaries written</span>
+              <span class="stat-value">{{ reconcileReport()!.yearlySummariesWritten }}</span>
+            </div>
+            <div class="reconcile-stat corrected">
+              <span class="stat-label">Monthly corrected</span>
+              <span class="stat-value">{{ reconcileReport()!.monthlyCorrected }}</span>
+            </div>
+            <div class="reconcile-stat corrected">
+              <span class="stat-label">Yearly corrected</span>
+              <span class="stat-value">{{ reconcileReport()!.yearlyCorrected }}</span>
+            </div>
+          </div>
+        }
+        <button mat-flat-button color="warn" (click)="reconcileSummaries()" [disabled]="reconciling()">
+          <mat-icon>sync</mat-icon>
+          {{ reconciling() ? 'Reconciling...' : 'Reconcile All Summaries' }}
+        </button>
+      </mat-card>
     }
   `,
   styles: [`
@@ -301,6 +346,17 @@ import {
     .budget-seg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 0.75rem; }
     .budget-fields { display: flex; gap: 1rem; flex-wrap: wrap; }
     .budget-fields mat-form-field { flex: 1; min-width: 200px; }
+    .reconcile-section { padding: 1.5rem; margin-top: 2rem; border: 1px solid var(--color-border, #e0e0e0); }
+    .reconcile-header { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
+    .reconcile-icon { font-size: 2rem; width: 2rem; height: 2rem; color: var(--color-warning, #f59e0b); }
+    .reconcile-header h3 { margin: 0; font-size: 1rem; color: var(--color-text); }
+    .reconcile-desc { margin: 4px 0 0; font-size: 0.8rem; color: var(--color-text-secondary); }
+    .reconcile-status { font-size: 0.85rem; color: var(--color-text-secondary); margin: 0.75rem 0; }
+    .reconcile-results { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; padding: 1rem; background: var(--color-bg, #f9f9f9); border-radius: 8px; }
+    .reconcile-stat { display: flex; flex-direction: column; gap: 2px; min-width: 140px; }
+    .stat-label { font-size: 0.75rem; color: var(--color-text-secondary); }
+    .stat-value { font-size: 1.1rem; font-weight: 600; color: var(--color-text); }
+    .reconcile-stat.corrected .stat-value { color: var(--color-warning, #f59e0b); }
     @media (max-width: 768px) {
       .seed-banner { flex-direction: column; text-align: center; }
       .seed-banner button { margin-left: 0; }
@@ -313,10 +369,13 @@ import {
 export class DataSetupComponent implements OnInit {
   private segmentService = inject(SegmentService);
   private categoryService = inject(CategoryService);
+  private reconciliationService = inject(SummaryReconciliationService);
   private firestore = inject(Firestore);
 
   loading = signal(true);
   seeding = signal(false);
+  reconciling = signal(false);
+  reconcileReport = signal<ReconciliationReport | null>(null);
   successMsg = signal('');
   errorMsg = signal('');
 
@@ -474,6 +533,26 @@ export class DataSetupComponent implements OnInit {
       await this.loadData();
     } catch (err: any) {
       this.errorMsg.set(err.message || 'Failed to update budget');
+    }
+  }
+
+  async reconcileSummaries(): Promise<void> {
+    this.clearMessages();
+    this.reconcileReport.set(null);
+    this.reconciling.set(true);
+    try {
+      const report = await this.reconciliationService.reconcileAll();
+      this.reconcileReport.set(report);
+      const corrected = report.monthlyCorrected + report.yearlyCorrected;
+      this.successMsg.set(
+        corrected > 0
+          ? `Reconciliation complete. ${corrected} summary doc(s) were corrected from ${report.totalTransactions} transactions.`
+          : `Reconciliation complete. All ${report.monthlySummariesWritten + report.yearlySummariesWritten} summaries were already accurate (${report.totalTransactions} transactions).`
+      );
+    } catch (err: any) {
+      this.errorMsg.set(err.message || 'Reconciliation failed');
+    } finally {
+      this.reconciling.set(false);
     }
   }
 

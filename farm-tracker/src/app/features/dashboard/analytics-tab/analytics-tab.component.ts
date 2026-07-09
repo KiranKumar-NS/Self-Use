@@ -67,21 +67,21 @@ import { MatIconModule } from '@angular/material/icon';
     @if (loading()) {
       <app-loading-spinner />
     } @else {
-      <!-- Summary Stats -->
+      <!-- Summary Stats: use pre-aggregated summaries when unfiltered, transaction-based when filtered -->
       <div class="summary-grid">
         <mat-card class="stat-card total">
           <span class="stat-label">Total Expense</span>
-          <span class="stat-value expense-text">{{ totalExpense() | currencyInr }}</span>
+          <span class="stat-value expense-text">{{ (hasFilters() ? totalExpense() : summaryTotalExpense()) | currencyInr }}</span>
           <span class="stat-count">{{ filtered().length }} transactions</span>
         </mat-card>
         <mat-card class="stat-card income-card">
           <span class="stat-label">Total Income</span>
-          <span class="stat-value income-text">{{ totalIncomeAmount() | currencyInr }}</span>
+          <span class="stat-value income-text">{{ (hasFilters() ? totalIncomeAmount() : summaryTotalIncome()) | currencyInr }}</span>
           <span class="stat-count">{{ filteredIncome().length }} transactions</span>
         </mat-card>
-        <mat-card class="stat-card" [class.profit]="netProfit() >= 0" [class.loss]="netProfit() < 0">
+        <mat-card class="stat-card" [class.profit]="(hasFilters() ? netProfit() : summaryNetProfit()) >= 0" [class.loss]="(hasFilters() ? netProfit() : summaryNetProfit()) < 0">
           <span class="stat-label">Net Profit/Loss</span>
-          <span class="stat-value" [class.income-text]="netProfit() >= 0" [class.expense-text]="netProfit() < 0">{{ netProfit() | currencyInr }}</span>
+          <span class="stat-value" [class.income-text]="(hasFilters() ? netProfit() : summaryNetProfit()) >= 0" [class.expense-text]="(hasFilters() ? netProfit() : summaryNetProfit()) < 0">{{ (hasFilters() ? netProfit() : summaryNetProfit()) | currencyInr }}</span>
         </mat-card>
         @if (totalUndistributed() > 0) {
           <mat-card class="stat-card undistributed-card">
@@ -338,7 +338,12 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   allTags = signal<string[]>([]);
   tagProductivity = signal<{ income: number; expense: number; net: number; incomeCount: number; expenseCount: number } | null>(null);
 
-  // Computed stats
+  // Summary-based totals (accurate, from pre-aggregated Firestore summaries)
+  summaryTotalExpense = signal(0);
+  summaryTotalIncome = signal(0);
+  summaryNetProfit = signal(0);
+
+  // Computed stats (from loaded transactions — used for charts/breakdowns)
   totalExpense = signal(0);
   segmentTotals = signal<{ name: string; total: number; count: number }[]>([]);
   personTotals = signal<{ name: string; total: number; segments: { name: string; total: number }[] }[]>([]);
@@ -416,7 +421,18 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       filters.month = this.currentSelection.month;
     }
 
-    const result = await this.transactionService.getAll(filters, 200);
+    // Fetch transactions AND pre-aggregated summaries in parallel
+    // Summaries give accurate totals; transactions are for breakdowns/charts
+    const [result, summaryTotals] = await Promise.all([
+      this.transactionService.getAll(filters, 200),
+      this.loadSummaryTotals(),
+    ]);
+
+    // Set accurate totals from summaries
+    this.summaryTotalExpense.set(summaryTotals.totalExpense);
+    this.summaryTotalIncome.set(summaryTotals.totalIncome);
+    this.summaryNetProfit.set(summaryTotals.netProfit);
+
     let txns = result.transactions;
 
     if (this.currentSelection.mode === 'custom') {
@@ -439,6 +455,26 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     // Merge income tags and set allTags
     this.incomeTransactions().forEach(t => (t.tags || []).forEach(tag => tagSet.add(tag)));
     this.allTags.set([...tagSet].sort());
+  }
+
+  /** Load accurate totals from pre-aggregated monthly/yearly summaries */
+  private async loadSummaryTotals(): Promise<{ totalExpense: number; totalIncome: number; netProfit: number }> {
+    try {
+      if (this.currentSelection.mode === 'monthly' && this.currentSelection.month) {
+        const summaries = await this.summaryService.getForMonth(this.currentSelection.month);
+        return this.summaryService.aggregateSummaries(summaries);
+      } else if (this.currentSelection.mode === 'custom') {
+        const months = getMonthRange(this.currentSelection.fromMonth!, this.currentSelection.toMonth!);
+        const summaries = await this.summaryService.getForMonthsBatched(months);
+        return this.summaryService.aggregateSummaries(summaries);
+      } else {
+        // All time — use all monthly summaries
+        const summaries = await this.summaryService.getAll();
+        return this.summaryService.aggregateSummaries(summaries);
+      }
+    } catch {
+      return { totalExpense: 0, totalIncome: 0, netProfit: 0 };
+    }
   }
 
   private async buildInvestmentSummary(expenseTxns: Transaction[]): Promise<void> {

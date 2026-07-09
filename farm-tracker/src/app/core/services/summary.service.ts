@@ -14,13 +14,28 @@ import { MonthlySummary, YearlySummary } from '../models/monthly-summary.model';
 export class SummaryService {
   private firestore = inject(Firestore);
 
+  private monthCache = new Map<string, { data: MonthlySummary[]; time: number }>();
+  private allCache: { data: MonthlySummary[]; time: number } | null = null;
+  private readonly CACHE_TTL = 60 * 1000; // 1 minute
+
+  clearCache(): void {
+    this.monthCache.clear();
+    this.allCache = null;
+  }
+
   async getForMonth(month: string): Promise<MonthlySummary[]> {
+    const cached = this.monthCache.get(month);
+    if (cached && Date.now() - cached.time < this.CACHE_TTL) {
+      return cached.data;
+    }
     const q = query(
       collection(this.firestore, 'monthlySummaries'),
       where('month', '==', month)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => d.data() as MonthlySummary);
+    const result = snapshot.docs.map((d) => d.data() as MonthlySummary);
+    this.monthCache.set(month, { data: result, time: Date.now() });
+    return result;
   }
 
   async getForMonthAndSegment(month: string, segment: string): Promise<MonthlySummary | null> {
@@ -51,8 +66,13 @@ export class SummaryService {
   }
 
   async getAll(): Promise<MonthlySummary[]> {
+    if (this.allCache && Date.now() - this.allCache.time < this.CACHE_TTL) {
+      return this.allCache.data;
+    }
     const snapshot = await getDocs(collection(this.firestore, 'monthlySummaries'));
-    return snapshot.docs.map((d) => d.data() as MonthlySummary);
+    const result = snapshot.docs.map((d) => d.data() as MonthlySummary);
+    this.allCache = { data: result, time: Date.now() };
+    return result;
   }
 
   async getForYear(year: number): Promise<YearlySummary[]> {

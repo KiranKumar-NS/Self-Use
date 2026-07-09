@@ -311,6 +311,13 @@ export class LoanService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
 
+  private summaryCache: { data: any; time: number } | null = null;
+  private readonly SUMMARY_CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+
+  clearSummaryCache(): void {
+    this.summaryCache = null;
+  }
+
   // Expose pure functions as service methods
   generateEMISchedule = generateEMISchedule;
   buildLiveEMISchedule = buildLiveEMISchedule;
@@ -717,6 +724,10 @@ export class LoanService {
     upcomingEMIAmount: number;
     totalInterestPaid: number;
   }> {
+    if (this.summaryCache && Date.now() - this.summaryCache.time < this.SUMMARY_CACHE_TTL) {
+      return this.summaryCache.data;
+    }
+
     const q = query(
       collection(this.firestore, 'loans'),
       where('isDeleted', '==', false)
@@ -744,7 +755,7 @@ export class LoanService {
       }
     }
 
-    return {
+    const result = {
       totalGiven: loans.filter((l) => l.type === 'given').reduce((sum, l) => sum + l.amount, 0),
       totalReceived: loans.filter((l) => l.type === 'received').reduce((sum, l) => sum + l.amount, 0),
       pendingGiven: loans.filter((l) => l.type === 'given' && l.repaymentStatus !== 'completed')
@@ -757,6 +768,8 @@ export class LoanService {
       upcomingEMIAmount,
       totalInterestPaid: formalLoans.reduce((sum, l) => sum + (l.totalInterestPaid ?? 0), 0),
     };
+    this.summaryCache = { data: result, time: Date.now() };
+    return result;
   }
 
   // ==================== Formal Loan Methods ====================

@@ -26,6 +26,8 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 
 import { MatRadioModule } from '@angular/material/radio';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
 
 @Component({
   selector: 'app-transaction-form',
@@ -33,7 +35,7 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
   imports: [
     FormsModule, MatCardModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatDatepickerModule, MatRadioModule,
-    MatIconModule, MatCheckboxModule, MatAutocompleteModule,
+    MatIconModule, MatCheckboxModule, MatAutocompleteModule, MatSnackBarModule,
   ],
   template: `
     <div class="page-header">
@@ -56,7 +58,7 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
         <div class="form-row">
           <mat-form-field appearance="outline">
             <mat-label>Date</mat-label>
-            <input matInput [matDatepicker]="picker" [(ngModel)]="date" name="date" required />
+            <input matInput [matDatepicker]="picker" [(ngModel)]="date" name="date" [max]="today" required />
             <mat-datepicker-toggle matIconSuffix [for]="picker" />
             <mat-datepicker #picker />
             <mat-error>Required</mat-error>
@@ -299,7 +301,7 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
     }
   `],
 })
-export class TransactionFormComponent implements OnInit {
+export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   private transactionService = inject(TransactionService);
   private authService = inject(AuthService);
   private categoryService = inject(CategoryService);
@@ -308,12 +310,15 @@ export class TransactionFormComponent implements OnInit {
   animalService = inject(AnimalService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private snackBar = inject(MatSnackBar);
 
   isEdit = signal(false);
   error = signal('');
   saving = signal(false);
+  private saved = false;
 
   type: 'expense' | 'income' = 'expense';
+  today = new Date();
   date = new Date();
   amount = 0;
   quantity: number | null = null;
@@ -697,12 +702,24 @@ export class TransactionFormComponent implements OnInit {
           );
         }
       }
+      this.snackBar.open(
+        this.isEdit() ? 'Transaction updated' : 'Transaction created',
+        '',
+        { duration: 2500 }
+      );
+      this.saved = true;
       this.router.navigate(['/transactions']);
     } catch (err: any) {
       this.error.set(err.message || 'Failed to save transaction');
     } finally {
       this.saving.set(false);
     }
+  }
+
+  hasUnsavedChanges(): boolean {
+    if (this.saved) return false;
+    if (this.isEdit()) return true;
+    return this.amount > 0 || this.description.trim() !== '';
   }
 
   cancel(): void {

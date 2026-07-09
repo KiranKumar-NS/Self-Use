@@ -45,7 +45,7 @@ export interface CropActivityFormDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Date</mat-label>
-          <input matInput [matDatepicker]="picker" [(ngModel)]="date" required />
+          <input matInput [matDatepicker]="picker" [(ngModel)]="date" [max]="today" required />
           <mat-datepicker-toggle matIconSuffix [for]="picker" />
           <mat-datepicker #picker />
         </mat-form-field>
@@ -62,7 +62,7 @@ export interface CropActivityFormDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Quantity</mat-label>
-          <input matInput type="number" [(ngModel)]="quantity" />
+          <input matInput type="number" [(ngModel)]="quantity" min="0" />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -77,17 +77,17 @@ export interface CropActivityFormDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Duration (hours)</mat-label>
-          <input matInput type="number" [(ngModel)]="duration" />
+          <input matInput type="number" [(ngModel)]="duration" min="0" />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>Labor Count</mat-label>
-          <input matInput type="number" [(ngModel)]="laborCount" />
+          <input matInput type="number" [(ngModel)]="laborCount" min="0" />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>Cost</mat-label>
-          <input matInput type="number" [(ngModel)]="cost" />
+          <input matInput type="number" [(ngModel)]="cost" min="0" />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -140,6 +140,7 @@ export class CropActivityFormDialogComponent implements OnInit {
     'flowering', 'harvest', 'planting', 'mulching', 'soil_testing', 'other',
   ];
 
+  today = new Date();
   segment = '';
   activityType: CropActivityType = 'other';
   date: Date = new Date();

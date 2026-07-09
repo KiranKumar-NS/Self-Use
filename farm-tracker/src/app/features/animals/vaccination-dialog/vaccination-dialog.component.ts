@@ -29,7 +29,7 @@ export interface VaccinationDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Date</mat-label>
-          <input matInput [matDatepicker]="datePicker" [(ngModel)]="date" required />
+          <input matInput [matDatepicker]="datePicker" [(ngModel)]="date" [max]="today" required />
           <mat-datepicker-toggle matSuffix [for]="datePicker" />
           <mat-datepicker #datePicker />
         </mat-form-field>
@@ -94,6 +94,7 @@ export class VaccinationDialogComponent {
   saving = signal(false);
   error = signal('');
 
+  today = new Date();
   vaccineName = '';
   date: Date = new Date();
   dosage = '';

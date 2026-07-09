@@ -35,7 +35,7 @@ export interface MedicalDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Date</mat-label>
-          <input matInput [matDatepicker]="datePicker" [(ngModel)]="date" required />
+          <input matInput [matDatepicker]="datePicker" [(ngModel)]="date" [max]="today" required />
           <mat-datepicker-toggle matSuffix [for]="datePicker" />
           <mat-datepicker #datePicker />
         </mat-form-field>
@@ -93,7 +93,7 @@ export interface MedicalDialogData {
 
     <mat-dialog-actions align="end">
       <button mat-button (click)="dialogRef.close()">Cancel</button>
-      <button mat-flat-button color="primary" [disabled]="saving()" (click)="save()">
+      <button mat-flat-button color="primary" [disabled]="saving() || !recordType" (click)="save()">
         {{ saving() ? 'Saving...' : 'Add Record' }}
       </button>
     </mat-dialog-actions>
@@ -113,6 +113,7 @@ export class MedicalDialogComponent {
   saving = signal(false);
   error = signal('');
 
+  today = new Date();
   recordType: 'treatment' | 'checkup' | 'surgery' | 'emergency' = 'treatment';
   date: Date = new Date();
   disease = '';

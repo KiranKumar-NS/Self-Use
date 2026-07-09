@@ -8,6 +8,16 @@ import { Buyer } from '../models/buyer.model';
 import { MonthlySummary } from '../models/monthly-summary.model';
 import { getMonthName } from '../utils/date.utils';
 
+/** RFC 4180 CSV field escaping: wrap in quotes if field contains comma, quote, or newline */
+function csvField(value: string | number | null | undefined): string {
+  if (value == null || value === '') return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
 function pdfCurrency(amount: number): string {
   const formatted = new Intl.NumberFormat('en-IN', {
     minimumFractionDigits: 0,
@@ -41,9 +51,9 @@ export class ExportService {
     pdf.text(`Period: ${periodLabel}`, 14, 32);
     pdf.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, 14, 40);
 
-    // Summary table — compute from actual transactions for accuracy
-    const totalIncome = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const totalExpense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    // Summary table — use pre-aggregated summaries for accuracy (transactions may be filtered/truncated)
+    const totalIncome = summaries.reduce((s, sm) => s + (sm.totalIncome || 0), 0);
+    const totalExpense = summaries.reduce((s, sm) => s + (sm.totalExpense || 0), 0);
     const netProfit = totalIncome - totalExpense;
 
     autoTable(pdf, {
@@ -309,9 +319,23 @@ export class ExportService {
       .map(
         (t) => {
           const distStr = t.distributions?.length
-            ? `"${t.distributions.map(d => `${d.name}: ${d.amount}`).join('; ')}"`
+            ? t.distributions.map(d => `${d.name}: ${d.amount}`).join('; ')
             : '';
-          return `${t.date.toDate().toLocaleDateString('en-IN')},${t.type},${t.segmentName},${t.categoryName},${t.amount},${t.paidByName || t.createdByName},${t.paymentMethod || 'upi'},"${t.description}",${t.quantity || ''},${t.unit || ''},${t.ratePerUnit || ''},${t.paymentStatus || ''},${distStr}`;
+          return [
+            t.date.toDate().toLocaleDateString('en-IN'),
+            t.type,
+            csvField(t.segmentName),
+            csvField(t.categoryName),
+            t.amount,
+            csvField(t.paidByName || t.createdByName),
+            t.paymentMethod || 'upi',
+            csvField(t.description),
+            t.quantity || '',
+            t.unit || '',
+            t.ratePerUnit || '',
+            t.paymentStatus || '',
+            csvField(distStr),
+          ].join(',');
         }
       )
       .join('\n');
@@ -327,7 +351,7 @@ export class ExportService {
       catMap[t.categoryName] = (catMap[t.categoryName] || 0) + t.amount;
     }
     const catRows = `\n\n,,,,,,,\nCategory,Total Amount,,,,,,\n` +
-      Object.entries(catMap).sort((a, b) => b[1] - a[1]).map(([name, amt]) => `${name},${amt},,,,,,`).join('\n');
+      Object.entries(catMap).sort((a, b) => b[1] - a[1]).map(([name, amt]) => `${csvField(name)},${amt},,,,,,`).join('\n');
 
     // Paid By breakdown
     const personMap: Record<string, number> = {};
@@ -336,7 +360,7 @@ export class ExportService {
       personMap[name] = (personMap[name] || 0) + t.amount;
     }
     const personRows = `\n\n,,,,,,,\nPaid By,Total Amount,,,,,,\n` +
-      Object.entries(personMap).sort((a, b) => b[1] - a[1]).map(([name, amt]) => `${name},${amt},,,,,,`).join('\n');
+      Object.entries(personMap).sort((a, b) => b[1] - a[1]).map(([name, amt]) => `${csvField(name)},${amt},,,,,,`).join('\n');
 
     this.downloadFile(headers + rows + totalsRows + catRows + personRows, `${filename}.csv`, 'text/csv');
   }
@@ -346,9 +370,13 @@ export class ExportService {
     const rows = loans
       .map(
         (l) => {
-          const base = `${l.date.toDate().toLocaleDateString('en-IN')},${l.type},${l.personName},${l.amount},${l.totalRepaid},${l.balanceRemaining},${l.repaymentStatus},"${l.purpose}",${l.segmentName},${l.recordedByName}`;
+          const base = [
+            l.date.toDate().toLocaleDateString('en-IN'), l.type, csvField(l.personName),
+            l.amount, l.totalRepaid, l.balanceRemaining, l.repaymentStatus,
+            csvField(l.purpose), csvField(l.segmentName), csvField(l.recordedByName),
+          ].join(',');
           if (l.loanCategory === 'formal') {
-            return `${base},formal,${l.loanSource ?? ''},${l.loanSourceName ?? ''},${l.accountNumber ?? ''},${l.sanctionedAmount ?? ''},${l.netDisbursedAmount ?? ''},${l.interestRate ?? ''}%,${l.repaymentType ?? ''},${l.tenure ?? ''},${l.emiAmount ?? ''},${l.outstandingBalance ?? ''},${l.totalInterestPaid ?? ''},${l.totalPenaltyPaid ?? ''},${l.closureReason ?? ''}`;
+            return `${base},formal,${csvField(l.loanSource)},${csvField(l.loanSourceName)},${csvField(l.accountNumber)},${l.sanctionedAmount ?? ''},${l.netDisbursedAmount ?? ''},${l.interestRate ?? ''}%,${l.repaymentType ?? ''},${l.tenure ?? ''},${l.emiAmount ?? ''},${l.outstandingBalance ?? ''},${l.totalInterestPaid ?? ''},${l.totalPenaltyPaid ?? ''},${l.closureReason ?? ''}`;
           }
           return `${base},simple,,,,,,,,,,,,`;
         }

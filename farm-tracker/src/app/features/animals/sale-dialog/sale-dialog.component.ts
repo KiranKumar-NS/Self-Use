@@ -56,7 +56,7 @@ export interface SaleDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Date</mat-label>
-          <input matInput [matDatepicker]="picker" [(ngModel)]="saleDate" />
+          <input matInput [matDatepicker]="picker" [(ngModel)]="saleDate" [max]="today" />
           <mat-datepicker-toggle matIconSuffix [for]="picker" />
           <mat-datepicker #picker />
         </mat-form-field>
@@ -137,6 +137,7 @@ export class SaleDialogComponent implements OnInit {
   saving = signal(false);
   error = signal('');
 
+  today = new Date();
   salePrice = 0;
   saleDate = new Date();
   countSold = 1;

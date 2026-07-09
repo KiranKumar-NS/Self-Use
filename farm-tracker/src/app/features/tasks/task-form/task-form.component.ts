@@ -16,13 +16,15 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
 
 @Component({
   selector: 'app-task-form',
   standalone: true,
   imports: [
     FormsModule, MatCardModule, MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatButtonModule, MatIconModule, MatDatepickerModule, MatCheckboxModule,
+    MatButtonModule, MatIconModule, MatDatepickerModule, MatCheckboxModule, MatSnackBarModule,
   ],
   template: `
     <div class="page-header">
@@ -154,16 +156,18 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
     }
   `],
 })
-export class TaskFormComponent implements OnInit {
+export class TaskFormComponent implements OnInit, HasUnsavedChanges {
   private taskService = inject(TaskService);
   private userService = inject(UserService);
   private authService = inject(AuthService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private snackBar = inject(MatSnackBar);
 
   isEdit = signal(false);
   error = signal('');
   saving = signal(false);
+  private saved = false;
   users = signal<AppUser[]>([]);
 
   title = '';
@@ -229,12 +233,24 @@ export class TaskFormComponent implements OnInit {
       } else {
         await this.taskService.create(data);
       }
+      this.snackBar.open(
+        this.isEdit() ? 'Task updated' : 'Task created',
+        '',
+        { duration: 2500 }
+      );
+      this.saved = true;
       this.router.navigate(['/tasks']);
     } catch (err: any) {
       this.error.set(err.message || 'Failed to save');
     } finally {
       this.saving.set(false);
     }
+  }
+
+  hasUnsavedChanges(): boolean {
+    if (this.saved) return false;
+    if (this.isEdit()) return true;
+    return this.title.trim() !== '';
   }
 
   cancel(): void { this.router.navigate(['/tasks']); }

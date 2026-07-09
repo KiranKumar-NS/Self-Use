@@ -24,7 +24,7 @@ export interface WeightLogDialogData {
       <div class="form-grid">
         <mat-form-field appearance="outline">
           <mat-label>Date</mat-label>
-          <input matInput [matDatepicker]="datePicker" [(ngModel)]="date" required />
+          <input matInput [matDatepicker]="datePicker" [(ngModel)]="date" [max]="today" required />
           <mat-datepicker-toggle matSuffix [for]="datePicker" />
           <mat-datepicker #datePicker />
         </mat-form-field>
@@ -67,6 +67,7 @@ export class WeightLogDialogComponent {
   saving = signal(false);
   error = signal('');
 
+  today = new Date();
   date: Date = new Date();
   weight: number | null = null;
   remarks = '';

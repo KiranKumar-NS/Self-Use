@@ -158,7 +158,8 @@ export class HarvestService {
     const newRemaining = harvest.totalQuantity - harvest.totalSold - newWastage;
 
     let newStatus = harvest.status;
-    if (newRemaining <= 0) newStatus = 'fully_sold';
+    if (newRemaining <= 0 && harvest.totalSold > 0) newStatus = 'fully_sold';
+    else if (newRemaining <= 0 && harvest.totalSold === 0) newStatus = 'harvested'; // all wasted, nothing sold
 
     await this.update(harvestId, {
       wastageQuantity: newWastage,

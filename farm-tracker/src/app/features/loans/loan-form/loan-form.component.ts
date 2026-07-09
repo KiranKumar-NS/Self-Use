@@ -24,6 +24,8 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DatePipe, DecimalPipe } from '@angular/common';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
 
 interface DeductionRow {
   type: DeductionType;
@@ -67,7 +69,7 @@ interface DocRow {
   imports: [
     FormsModule, DatePipe, DecimalPipe, CurrencyInrPipe, MatCardModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatDatepickerModule, MatRadioModule,
-    MatIconModule, MatSlideToggleModule, MatChipsModule, MatTooltipModule,
+    MatIconModule, MatSlideToggleModule, MatChipsModule, MatTooltipModule, MatSnackBarModule,
   ],
   template: `
     <div class="page-header">
@@ -648,18 +650,20 @@ interface DocRow {
     }
   `],
 })
-export class LoanFormComponent implements OnInit {
+export class LoanFormComponent implements OnInit, HasUnsavedChanges {
   private loanService = inject(LoanService);
   private authService = inject(AuthService);
   private segmentService = inject(SegmentService);
   private userService = inject(UserService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private snackBar = inject(MatSnackBar);
 
   isEdit = signal(false);
   isFormalEdit = signal(false);
   error = signal('');
   saving = signal(false);
+  private saved = false;
   segments = signal<Segment[]>([]);
 
   // Common
@@ -929,6 +933,12 @@ export class LoanFormComponent implements OnInit {
       } else {
         await this.saveSimpleLoan();
       }
+      this.snackBar.open(
+        this.isEdit() ? 'Loan updated' : 'Loan created',
+        '',
+        { duration: 2500 }
+      );
+      this.saved = true;
       this.router.navigate(['/loans']);
     } catch (err: any) {
       this.error.set(err.message || 'Failed to save loan');
@@ -1064,6 +1074,12 @@ export class LoanFormComponent implements OnInit {
     } else {
       await this.loanService.createFormalLoan(data);
     }
+  }
+
+  hasUnsavedChanges(): boolean {
+    if (this.saved) return false;
+    if (this.isEdit()) return true;
+    return this.amount > 0 || this.personName.trim() !== '';
   }
 
   cancel(): void { this.router.navigate(['/loans']); }

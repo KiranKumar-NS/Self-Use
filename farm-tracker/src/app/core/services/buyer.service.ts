@@ -10,6 +10,7 @@ import {
   where,
   limit,
   writeBatch,
+  runTransaction,
   serverTimestamp,
   increment,
   Timestamp,
@@ -21,6 +22,15 @@ import { AuthService } from './auth.service';
 export class BuyerService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
+
+  private cache: Buyer[] | null = null;
+  private cacheTime = 0;
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  clearCache(): void {
+    this.cache = null;
+    this.cacheTime = 0;
+  }
 
   async create(data: BuyerFormData): Promise<string> {
     const batch = writeBatch(this.firestore);
@@ -42,6 +52,7 @@ export class BuyerService {
     });
 
     await batch.commit();
+    this.clearCache();
     return buyerRef.id;
   }
 
@@ -55,9 +66,13 @@ export class BuyerService {
 
     batch.update(doc(this.firestore, 'buyers', id), updates);
     await batch.commit();
+    this.clearCache();
   }
 
   async getAll(): Promise<Buyer[]> {
+    if (this.cache && Date.now() - this.cacheTime < this.CACHE_TTL) {
+      return this.cache;
+    }
     const q = query(
       collection(this.firestore, 'buyers'),
       where('isDeleted', '==', false),
@@ -65,7 +80,9 @@ export class BuyerService {
       limit(500)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => d.data() as Buyer);
+    this.cache = snapshot.docs.map(d => d.data() as Buyer);
+    this.cacheTime = Date.now();
+    return this.cache;
   }
 
   async getById(id: string): Promise<Buyer | null> {
@@ -76,40 +93,39 @@ export class BuyerService {
   }
 
   async updateStats(buyerId: string, saleAmount: number, count: number, date: Date, segmentId?: string): Promise<void> {
-    const batch = writeBatch(this.firestore);
     const buyerRef = doc(this.firestore, 'buyers', buyerId);
 
-    const updates: Record<string, any> = {
-      totalPurchases: increment(count),
-      totalAmountPaid: increment(saleAmount),
-      lastPurchaseDate: Timestamp.fromDate(date),
-    };
+    await runTransaction(this.firestore, async (transaction) => {
+      const snap = await transaction.get(buyerRef);
+      if (!snap.exists()) return;
 
-    // Track per-segment breakdown
-    if (segmentId) {
-      updates[`purchasesBySegment.${segmentId}`] = increment(count);
-      updates[`amountBySegment.${segmentId}`] = increment(saleAmount);
-    }
-
-    batch.update(buyerRef, updates);
-
-    // Recalculate averageRate after increment
-    const snap = await getDoc(buyerRef);
-    if (snap.exists()) {
       const buyer = snap.data() as Buyer;
-      const newTotal = buyer.totalAmountPaid + saleAmount;
-      const newCount = buyer.totalPurchases + count;
-      batch.update(buyerRef, {
-        averageRate: newCount > 0 ? Math.round((newTotal / newCount) * 100) / 100 : 0,
-      });
-    }
+      const newTotalAmount = (buyer.totalAmountPaid || 0) + saleAmount;
+      const newTotalCount = (buyer.totalPurchases || 0) + count;
 
-    await batch.commit();
+      const updates: Record<string, any> = {
+        totalPurchases: increment(count),
+        totalAmountPaid: increment(saleAmount),
+        lastPurchaseDate: Timestamp.fromDate(date),
+        averageRate: newTotalCount > 0 ? Math.round((newTotalAmount / newTotalCount) * 100) / 100 : 0,
+      };
+
+      // Track per-segment breakdown
+      if (segmentId) {
+        updates[`purchasesBySegment.${segmentId}`] = increment(count);
+        updates[`amountBySegment.${segmentId}`] = increment(saleAmount);
+      }
+
+      transaction.update(buyerRef, updates);
+    });
+
+    this.clearCache();
   }
 
   async softDelete(id: string): Promise<void> {
     const batch = writeBatch(this.firestore);
     batch.update(doc(this.firestore, 'buyers', id), { isDeleted: true });
     await batch.commit();
+    this.clearCache();
   }
 }

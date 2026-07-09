@@ -7,6 +7,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  runTransaction,
   query,
   orderBy,
   where,
@@ -91,7 +92,9 @@ export class ScheduleService {
     await updateDoc(doc(this.firestore, 'schedules', id), { isDeleted: true });
   }
 
-  /** Process all overdue schedules. Called on app startup. */
+  /** Process all overdue schedules. Called on app startup.
+   *  Uses runTransaction to claim each schedule before processing,
+   *  preventing duplicate processing from concurrent tabs/users. */
   async processOverdueSchedules(): Promise<{ transactions: number; tasks: number }> {
     const now = new Date();
     const schedules = await this.getActive();
@@ -108,35 +111,76 @@ export class ScheduleService {
         continue;
       }
 
-      // Per-schedule counters
+      // Use a transaction to atomically claim this schedule for processing.
+      // Re-read the schedule inside the transaction to detect concurrent processing.
+      const scheduleRef = doc(this.firestore, 'schedules', schedule.id);
+      let claimed = false;
+      let freshDueDate = dueDate;
+
+      try {
+        await runTransaction(this.firestore, async (transaction) => {
+          const freshDoc = await transaction.get(scheduleRef);
+          const freshData = freshDoc.data() as Schedule;
+
+          // Another tab/user already processed this — skip
+          if (!freshData.isActive || freshData.isDeleted) {
+            claimed = false;
+            return;
+          }
+
+          freshDueDate = freshData.nextDueDate.toDate();
+          if (freshDueDate > now) {
+            claimed = false;
+            return;
+          }
+
+          // Claim: advance nextDueDate immediately to prevent concurrent processing
+          let nextDue = freshDueDate;
+          let advanceCount = 0;
+          while (nextDue <= now && advanceCount < 12) {
+            nextDue = this.calculateNextDueDate(nextDue, freshData.frequency);
+            advanceCount++;
+          }
+
+          transaction.update(scheduleRef, {
+            nextDueDate: Timestamp.fromDate(nextDue),
+            lastProcessedDate: Timestamp.now(),
+            processedCount: freshData.processedCount + advanceCount,
+          });
+
+          claimed = true;
+        });
+      } catch {
+        // Transaction conflict — another tab is processing this schedule
+        continue;
+      }
+
+      if (!claimed) continue;
+
+      // Now create the actual transactions/tasks outside the transaction
+      // (these are idempotent by nature — if they fail, the schedule is already advanced)
+      let currentDue = freshDueDate;
       let created = 0;
-      let currentDue = dueDate;
 
-      while (currentDue <= now) {
-        if (schedule.type === 'recurring_transaction' && schedule.transactionTemplate) {
-          await this.createTransactionFromTemplate(schedule, currentDue);
-          created++;
-          totalTransactions++;
-        }
+      while (currentDue <= now && created < 12) {
+        try {
+          if (schedule.type === 'recurring_transaction' && schedule.transactionTemplate) {
+            await this.createTransactionFromTemplate(schedule, currentDue);
+            totalTransactions++;
+          }
 
-        if (schedule.type === 'reminder' && schedule.reminderConfig?.autoCreateTask) {
-          await this.createTaskFromReminder(schedule, currentDue);
-          created++;
-          totalTasks++;
+          if (schedule.type === 'reminder' && schedule.reminderConfig?.autoCreateTask) {
+            await this.createTaskFromReminder(schedule, currentDue);
+            totalTasks++;
+          }
+        } catch {
+          // If creation fails, we've already advanced the schedule — skip this occurrence
+          // rather than creating duplicates on retry
         }
 
         currentDue = this.calculateNextDueDate(currentDue, schedule.frequency);
-
-        // Safety: don't process more than 12 missed occurrences per schedule
-        if (created >= 12) break;
+        created++;
       }
-
-      // Update schedule with next due date
-      await updateDoc(doc(this.firestore, 'schedules', schedule.id), {
-        nextDueDate: Timestamp.fromDate(currentDue),
-        lastProcessedDate: Timestamp.now(),
-        processedCount: schedule.processedCount + created,
-      });
     }
 
     return { transactions: totalTransactions, tasks: totalTasks };

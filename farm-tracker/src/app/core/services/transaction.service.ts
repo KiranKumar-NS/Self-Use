@@ -11,7 +11,7 @@ import {
   limit,
   startAfter,
   writeBatch,
-  deleteDoc,
+  runTransaction,
   serverTimestamp,
   increment,
   Timestamp,
@@ -35,6 +35,94 @@ export class TransactionService {
       return normalized.replace(/[.$/\[\]#]/g, '_');
     }
     return paidBy || fallbackUid;
+  }
+
+  /**
+   * Build summary reversal fields for a transaction.
+   * Used by update (reverse old), softDelete, and hardDelete to avoid code duplication.
+   */
+  private buildReversalFields(txn: Transaction): Record<string, any> {
+    const incField = txn.type === 'expense' ? 'totalExpense' : 'totalIncome';
+    const profitDelta = txn.type === 'income' ? -txn.amount : txn.amount;
+    const catField = txn.type === 'expense'
+      ? `expenseByCategory.${txn.category}`
+      : `incomeBySource.${txn.category}`;
+    const catIdField = txn.type === 'expense'
+      ? `expenseByCategoryId.${txn.category}`
+      : `incomeBySourceId.${txn.category}`;
+
+    const fields: Record<string, any> = {
+      [incField]: increment(-txn.amount),
+      netProfit: increment(profitDelta),
+      [catField]: increment(-txn.amount),
+      [catIdField]: increment(-txn.amount),
+      updatedAt: serverTimestamp(),
+    };
+
+    // Reverse per-person
+    const personKey = this.personSummaryKey(txn.paidBy, txn.paidByName, txn.createdBy);
+    const personField = txn.type === 'expense'
+      ? `expenseByPerson.${personKey}`
+      : `incomeByPerson.${personKey}`;
+    fields[personField] = increment(-txn.amount);
+
+    // Reverse pending income
+    if (txn.type === 'income' && (txn.paymentStatus || 'received') === 'pending') {
+      fields['pendingIncome'] = increment(-txn.amount);
+    }
+
+    // Reverse pending expense
+    if (txn.type === 'expense' && (txn.expensePaymentStatus || 'paid') === 'pending') {
+      fields['pendingExpense'] = increment(-txn.amount);
+    }
+
+    // Reverse distributions
+    if (txn.distributions?.length) {
+      const totalDist = txn.distributions.reduce((s, d) => s + d.amount, 0);
+      fields['totalDistributed'] = increment(-totalDist);
+      for (const d of txn.distributions) {
+        fields[`distributionByPerson.${d.uid}`] = increment(-d.amount);
+      }
+    }
+
+    return fields;
+  }
+
+  /**
+   * Build summary application fields for new/updated transaction data.
+   */
+  private buildApplyFields(data: TransactionFormData, userUid: string): Record<string, any> {
+    const incField = data.type === 'expense' ? 'totalExpense' : 'totalIncome';
+    const profitDelta = data.type === 'income' ? data.amount : -data.amount;
+    const catField = data.type === 'expense'
+      ? `expenseByCategory.${data.category}`
+      : `incomeBySource.${data.category}`;
+    const catIdField = data.type === 'expense'
+      ? `expenseByCategoryId.${data.category}`
+      : `incomeBySourceId.${data.category}`;
+
+    const fields: Record<string, any> = {
+      [incField]: increment(data.amount),
+      netProfit: increment(profitDelta),
+      [catField]: increment(data.amount),
+      [catIdField]: increment(data.amount),
+      updatedAt: serverTimestamp(),
+    };
+
+    const personKey = this.personSummaryKey(data.paidBy, data.paidByName, userUid);
+    const personField = data.type === 'expense'
+      ? `expenseByPerson.${personKey}`
+      : `incomeByPerson.${personKey}`;
+    fields[personField] = increment(data.amount);
+
+    if (data.type === 'income' && (data.paymentStatus || 'received') === 'pending') {
+      fields['pendingIncome'] = increment(data.amount);
+    }
+    if (data.type === 'expense' && (data.expensePaymentStatus || 'paid') === 'pending') {
+      fields['pendingExpense'] = increment(data.amount);
+    }
+
+    return fields;
   }
 
   async create(data: TransactionFormData): Promise<string> {
@@ -97,58 +185,26 @@ export class TransactionService {
 
     batch.set(txnRef, txnDoc);
 
-    // Update monthly summary
-    const incField = data.type === 'expense' ? 'totalExpense' : 'totalIncome';
-    const profitDelta = data.type === 'income' ? data.amount : -data.amount;
-    const catField = data.type === 'expense'
-      ? `expenseByCategory.${data.category}`
-      : `incomeBySource.${data.category}`;
-    const catIdField = data.type === 'expense'
-      ? `expenseByCategoryId.${data.category}`
-      : `incomeBySourceId.${data.category}`;
-
+    // Build summary apply fields
+    const applyFields = this.buildApplyFields(data, user.uid);
     const summaryData: Record<string, any> = {
-      [incField]: increment(data.amount),
-      netProfit: increment(profitDelta),
-      [catField]: increment(data.amount),
-      [catIdField]: increment(data.amount),
+      ...applyFields,
       month: data.month,
       year: data.year,
       segment: data.segment,
-      updatedAt: serverTimestamp(),
     };
+
+    batch.set(summaryRef, summaryData, { merge: true });
 
     // Also update yearly summary
     const yearlySummaryId = `${data.year}-${data.segment}`;
     const yearlySummaryRef = doc(this.firestore, 'yearlySummaries', yearlySummaryId);
     const yearlySummaryData: Record<string, any> = {
-      [incField]: increment(data.amount),
-      netProfit: increment(profitDelta),
-      [catField]: increment(data.amount),
-      [catIdField]: increment(data.amount),
+      ...applyFields,
       year: data.year,
       segment: data.segment,
-      updatedAt: serverTimestamp(),
     };
 
-    // Track per-person
-    const personKey = this.personSummaryKey(data.paidBy, data.paidByName, user.uid);
-    const personField = data.type === 'expense'
-      ? `expenseByPerson.${personKey}`
-      : `incomeByPerson.${personKey}`;
-    summaryData[personField] = increment(data.amount);
-    yearlySummaryData[personField] = increment(data.amount);
-
-    if (data.type === 'income' && (data.paymentStatus || 'received') === 'pending') {
-      summaryData['pendingIncome'] = increment(data.amount);
-      yearlySummaryData['pendingIncome'] = increment(data.amount);
-    }
-    if (data.type === 'expense' && (data.expensePaymentStatus || 'paid') === 'pending') {
-      summaryData['pendingExpense'] = increment(data.amount);
-      yearlySummaryData['pendingExpense'] = increment(data.amount);
-    }
-
-    batch.set(summaryRef, summaryData, { merge: true });
     batch.set(yearlySummaryRef, yearlySummaryData, { merge: true });
 
     await batch.commit();
@@ -156,558 +212,475 @@ export class TransactionService {
   }
 
   async update(id: string, data: TransactionFormData): Promise<void> {
-    const batch = writeBatch(this.firestore);
     const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', id);
 
-    const oldDoc = await getDoc(txnRef);
-    const oldData = oldDoc.data() as Transaction;
+    await runTransaction(this.firestore, async (transaction) => {
+      const oldDoc = await transaction.get(txnRef);
+      const oldData = oldDoc.data() as Transaction;
 
-    // Block edit of linked loan transactions
-    if (oldData.linkedLoanId) {
-      throw new Error('This transaction is linked to a loan. Manage it from the loan detail page.');
-    }
-
-    // Build changes description
-    const changesList: string[] = [];
-    if (oldData.amount !== data.amount) changesList.push(`amount: ${oldData.amount}→${data.amount}`);
-    if (oldData.category !== data.category) changesList.push(`category: ${oldData.categoryName}→${data.categoryName}`);
-    if (oldData.segment !== data.segment) changesList.push(`segment: ${oldData.segmentName}→${data.segmentName}`);
-    if (oldData.type !== data.type) changesList.push(`type: ${oldData.type}→${data.type}`);
-    const oldPayStatus = oldData.paymentStatus || 'received';
-    const newPayStatus = data.type === 'income' ? (data.paymentStatus || 'received') : 'received';
-    if (oldData.type === 'income' && data.type === 'income' && oldPayStatus !== newPayStatus) {
-      changesList.push(`payment: ${oldPayStatus}→${newPayStatus}`);
-    }
-    const changesStr = changesList.length > 0 ? changesList.join(', ') : 'details updated';
-
-    // Reverse old summary
-    const oldSummaryId = `${oldData.month}-${oldData.segment}`;
-    const oldSummaryRef = doc(this.firestore, 'monthlySummaries', oldSummaryId);
-    const oldIncField = oldData.type === 'expense' ? 'totalExpense' : 'totalIncome';
-    const oldProfitDelta = oldData.type === 'income' ? -oldData.amount : oldData.amount;
-    const oldCatField = oldData.type === 'expense'
-      ? `expenseByCategory.${oldData.category}`
-      : `incomeBySource.${oldData.category}`;
-    const oldCatIdField = oldData.type === 'expense'
-      ? `expenseByCategoryId.${oldData.category}`
-      : `incomeBySourceId.${oldData.category}`;
-
-    const oldSummaryUpdates: Record<string, any> = {
-      [oldIncField]: increment(-oldData.amount),
-      netProfit: increment(oldProfitDelta),
-      [oldCatField]: increment(-oldData.amount),
-      [oldCatIdField]: increment(-oldData.amount),
-      updatedAt: serverTimestamp(),
-    };
-
-    // Reverse old per-person
-    const oldPersonKey = this.personSummaryKey(oldData.paidBy, oldData.paidByName, oldData.createdBy);
-    const oldPersonField = oldData.type === 'expense'
-      ? `expenseByPerson.${oldPersonKey}`
-      : `incomeByPerson.${oldPersonKey}`;
-    oldSummaryUpdates[oldPersonField] = increment(-oldData.amount);
-
-    // Reverse old pending income
-    if (oldData.type === 'income' && oldPayStatus === 'pending') {
-      oldSummaryUpdates['pendingIncome'] = increment(-oldData.amount);
-    }
-
-    // Reverse old distribution totals if amount/segment/type changed
-    const shouldClearDistributions = oldData.distributions?.length &&
-      (oldData.amount !== data.amount || oldData.segment !== data.segment || oldData.type !== data.type);
-    if (shouldClearDistributions) {
-      const oldTotalDist = oldData.distributions!.reduce((s, d) => s + d.amount, 0);
-      oldSummaryUpdates['totalDistributed'] = increment(-oldTotalDist);
-      for (const d of oldData.distributions!) {
-        oldSummaryUpdates[`distributionByPerson.${d.uid}`] = increment(-d.amount);
-      }
-    }
-
-    // Apply new summary
-    const newSummaryId = `${data.month}-${data.segment}`;
-    const newIncField = data.type === 'expense' ? 'totalExpense' : 'totalIncome';
-    const newProfitDelta = data.type === 'income' ? data.amount : -data.amount;
-    const newCatField = data.type === 'expense'
-      ? `expenseByCategory.${data.category}`
-      : `incomeBySource.${data.category}`;
-    const newCatIdField = data.type === 'expense'
-      ? `expenseByCategoryId.${data.category}`
-      : `incomeBySourceId.${data.category}`;
-    const newPersonKey = this.personSummaryKey(data.paidBy, data.paidByName, user.uid);
-    const newPersonField = data.type === 'expense'
-      ? `expenseByPerson.${newPersonKey}`
-      : `incomeByPerson.${newPersonKey}`;
-
-    if (oldSummaryId === newSummaryId) {
-      // Same summary doc — combine old reversal + new application into single batch.set()
-      // Two batch.set() on the same doc would cause the second to overwrite the first
-      const combinedSummary: Record<string, any> = { updatedAt: serverTimestamp(), month: data.month, year: data.year, segment: data.segment };
-
-      // Total fields: reverse old + apply new
-      if (oldIncField === newIncField) {
-        combinedSummary[oldIncField] = increment(data.amount - oldData.amount);
-      } else {
-        combinedSummary[oldIncField] = increment(-oldData.amount);
-        combinedSummary[newIncField] = increment(data.amount);
-      }
-      combinedSummary['netProfit'] = increment(oldProfitDelta + newProfitDelta);
-
-      // Category fields: reverse old + apply new
-      if (oldCatField === newCatField) {
-        combinedSummary[oldCatField] = increment(data.amount - oldData.amount);
-        combinedSummary[oldCatIdField] = increment(data.amount - oldData.amount);
-      } else {
-        combinedSummary[oldCatField] = increment(-oldData.amount);
-        combinedSummary[newCatField] = increment(data.amount);
-        combinedSummary[oldCatIdField] = increment(-oldData.amount);
-        combinedSummary[newCatIdField] = increment(data.amount);
+      // Block edit of linked loan transactions
+      if (oldData.linkedLoanId) {
+        throw new Error('This transaction is linked to a loan. Manage it from the loan detail page.');
       }
 
-      // Person fields: reverse old + apply new
-      if (oldPersonField === newPersonField) {
-        combinedSummary[oldPersonField] = increment(data.amount - oldData.amount);
-      } else {
-        combinedSummary[oldPersonField] = increment(-oldData.amount);
-        combinedSummary[newPersonField] = increment(data.amount);
+      // Build changes description
+      const changesList: string[] = [];
+      if (oldData.amount !== data.amount) changesList.push(`amount: ${oldData.amount}→${data.amount}`);
+      if (oldData.category !== data.category) changesList.push(`category: ${oldData.categoryName}→${data.categoryName}`);
+      if (oldData.segment !== data.segment) changesList.push(`segment: ${oldData.segmentName}→${data.segmentName}`);
+      if (oldData.type !== data.type) changesList.push(`type: ${oldData.type}→${data.type}`);
+      const oldPayStatus = oldData.paymentStatus || 'received';
+      const newPayStatus = data.type === 'income' ? (data.paymentStatus || 'received') : 'received';
+      if (oldData.type === 'income' && data.type === 'income' && oldPayStatus !== newPayStatus) {
+        changesList.push(`payment: ${oldPayStatus}→${newPayStatus}`);
       }
+      const oldExpPayStatus = oldData.expensePaymentStatus || 'paid';
+      const newExpPayStatus = data.type === 'expense' ? (data.expensePaymentStatus || 'paid') : 'paid';
+      if (oldData.type === 'expense' && data.type === 'expense' && oldExpPayStatus !== newExpPayStatus) {
+        changesList.push(`expense payment: ${oldExpPayStatus}→${newExpPayStatus}`);
+      }
+      const changesStr = changesList.length > 0 ? changesList.join(', ') : 'details updated';
 
-      // Distribution reversal (if applicable)
-      if (shouldClearDistributions) {
-        const oldTotalDist = oldData.distributions!.reduce((s, d) => s + d.amount, 0);
-        combinedSummary['totalDistributed'] = increment(-oldTotalDist);
-        for (const d of oldData.distributions!) {
-          combinedSummary[`distributionByPerson.${d.uid}`] = increment(-d.amount);
+      // Should we clear distributions?
+      const shouldClearDistributions = oldData.distributions?.length &&
+        (oldData.amount !== data.amount || oldData.segment !== data.segment || oldData.type !== data.type);
+
+      // Build reversal fields for old data
+      const reversalFields = this.buildReversalFields(oldData);
+      // Remove distribution reversal if not clearing (it was included by buildReversalFields)
+      if (!shouldClearDistributions && oldData.distributions?.length) {
+        delete reversalFields['totalDistributed'];
+        for (const d of oldData.distributions) {
+          delete reversalFields[`distributionByPerson.${d.uid}`];
         }
       }
 
-      // Pending income: reverse old + apply new
-      const oldPending = oldData.type === 'income' && oldPayStatus === 'pending' ? oldData.amount : 0;
-      const newPending = data.type === 'income' && newPayStatus === 'pending' ? data.amount : 0;
-      if (oldPending !== 0 || newPending !== 0) {
-        combinedSummary['pendingIncome'] = increment(newPending - oldPending);
+      // Build apply fields for new data
+      const applyFields = this.buildApplyFields(data, user.uid);
+
+      // Monthly summaries
+      const oldSummaryId = `${oldData.month}-${oldData.segment}`;
+      const newSummaryId = `${data.month}-${data.segment}`;
+      const oldSummaryRef = doc(this.firestore, 'monthlySummaries', oldSummaryId);
+
+      if (oldSummaryId === newSummaryId) {
+        // Same summary doc — build combined fields manually to avoid double-set
+        const combined: Record<string, any> = { updatedAt: serverTimestamp(), month: data.month, year: data.year, segment: data.segment };
+        const allKeys = new Set([...Object.keys(reversalFields), ...Object.keys(applyFields)]);
+        allKeys.delete('updatedAt');
+
+        // For same-doc, we need to compute net increments
+        // Since both reversal and apply use increment(), and we can't combine FieldValue objects,
+        // we need to compute the raw deltas and create single increment() calls
+        const oldIncField = oldData.type === 'expense' ? 'totalExpense' : 'totalIncome';
+        const newIncField = data.type === 'expense' ? 'totalExpense' : 'totalIncome';
+
+        if (oldIncField === newIncField) {
+          combined[oldIncField] = increment(data.amount - oldData.amount);
+        } else {
+          combined[oldIncField] = increment(-oldData.amount);
+          combined[newIncField] = increment(data.amount);
+        }
+
+        const oldProfitDelta = oldData.type === 'income' ? -oldData.amount : oldData.amount;
+        const newProfitDelta = data.type === 'income' ? data.amount : -data.amount;
+        combined['netProfit'] = increment(oldProfitDelta + newProfitDelta);
+
+        // Category fields
+        const oldCatField = oldData.type === 'expense' ? `expenseByCategory.${oldData.category}` : `incomeBySource.${oldData.category}`;
+        const newCatField = data.type === 'expense' ? `expenseByCategory.${data.category}` : `incomeBySource.${data.category}`;
+        const oldCatIdField = oldData.type === 'expense' ? `expenseByCategoryId.${oldData.category}` : `incomeBySourceId.${oldData.category}`;
+        const newCatIdField = data.type === 'expense' ? `expenseByCategoryId.${data.category}` : `incomeBySourceId.${data.category}`;
+
+        if (oldCatField === newCatField) {
+          combined[oldCatField] = increment(data.amount - oldData.amount);
+          combined[oldCatIdField] = increment(data.amount - oldData.amount);
+        } else {
+          combined[oldCatField] = increment(-oldData.amount);
+          combined[newCatField] = increment(data.amount);
+          combined[oldCatIdField] = increment(-oldData.amount);
+          combined[newCatIdField] = increment(data.amount);
+        }
+
+        // Person fields
+        const oldPersonKey = this.personSummaryKey(oldData.paidBy, oldData.paidByName, oldData.createdBy);
+        const newPersonKey = this.personSummaryKey(data.paidBy, data.paidByName, user.uid);
+        const oldPersonField = oldData.type === 'expense' ? `expenseByPerson.${oldPersonKey}` : `incomeByPerson.${oldPersonKey}`;
+        const newPersonField = data.type === 'expense' ? `expenseByPerson.${newPersonKey}` : `incomeByPerson.${newPersonKey}`;
+
+        if (oldPersonField === newPersonField) {
+          combined[oldPersonField] = increment(data.amount - oldData.amount);
+        } else {
+          combined[oldPersonField] = increment(-oldData.amount);
+          combined[newPersonField] = increment(data.amount);
+        }
+
+        // Pending income
+        const oldPendingInc = oldData.type === 'income' && oldPayStatus === 'pending' ? oldData.amount : 0;
+        const newPendingInc = data.type === 'income' && newPayStatus === 'pending' ? data.amount : 0;
+        if (oldPendingInc !== 0 || newPendingInc !== 0) {
+          combined['pendingIncome'] = increment(newPendingInc - oldPendingInc);
+        }
+
+        // Pending expense
+        const oldPendingExp = oldData.type === 'expense' && oldExpPayStatus === 'pending' ? oldData.amount : 0;
+        const newPendingExp = data.type === 'expense' && newExpPayStatus === 'pending' ? data.amount : 0;
+        if (oldPendingExp !== 0 || newPendingExp !== 0) {
+          combined['pendingExpense'] = increment(newPendingExp - oldPendingExp);
+        }
+
+        // Distribution reversal (if applicable)
+        if (shouldClearDistributions) {
+          const oldTotalDist = oldData.distributions!.reduce((s, d) => s + d.amount, 0);
+          combined['totalDistributed'] = increment(-oldTotalDist);
+          for (const d of oldData.distributions!) {
+            combined[`distributionByPerson.${d.uid}`] = increment(-d.amount);
+          }
+        }
+
+        transaction.set(oldSummaryRef, combined, { merge: true });
+      } else {
+        // Different summary docs — safe to do two separate sets
+        transaction.set(oldSummaryRef, reversalFields, { merge: true });
+
+        const newSummaryRef = doc(this.firestore, 'monthlySummaries', newSummaryId);
+        transaction.set(newSummaryRef, {
+          ...applyFields,
+          month: data.month,
+          year: data.year,
+          segment: data.segment,
+        }, { merge: true });
       }
 
-      batch.set(oldSummaryRef, combinedSummary, { merge: true });
-    } else {
-      // Different summary docs — safe to do two separate sets
-      batch.set(oldSummaryRef, oldSummaryUpdates, { merge: true });
+      // Yearly summaries — same logic
+      const oldYearlyId = `${oldData.year}-${oldData.segment}`;
+      const newYearlyId = `${data.year}-${data.segment}`;
+      const oldYearlyRef = doc(this.firestore, 'yearlySummaries', oldYearlyId);
 
-      const newSummaryRef = doc(this.firestore, 'monthlySummaries', newSummaryId);
-      const newSummaryData: Record<string, any> = {
-        [newIncField]: increment(data.amount),
-        netProfit: increment(newProfitDelta),
-        [newCatField]: increment(data.amount),
-        [newCatIdField]: increment(data.amount),
-        [newPersonField]: increment(data.amount),
+      if (oldYearlyId === newYearlyId) {
+        // Reuse same combined logic as monthly
+        const combined: Record<string, any> = { updatedAt: serverTimestamp(), year: data.year, segment: data.segment };
+
+        const oldIncField = oldData.type === 'expense' ? 'totalExpense' : 'totalIncome';
+        const newIncField = data.type === 'expense' ? 'totalExpense' : 'totalIncome';
+
+        if (oldIncField === newIncField) {
+          combined[oldIncField] = increment(data.amount - oldData.amount);
+        } else {
+          combined[oldIncField] = increment(-oldData.amount);
+          combined[newIncField] = increment(data.amount);
+        }
+
+        combined['netProfit'] = increment(
+          (oldData.type === 'income' ? -oldData.amount : oldData.amount) +
+          (data.type === 'income' ? data.amount : -data.amount)
+        );
+
+        const oldCatField = oldData.type === 'expense' ? `expenseByCategory.${oldData.category}` : `incomeBySource.${oldData.category}`;
+        const newCatField = data.type === 'expense' ? `expenseByCategory.${data.category}` : `incomeBySource.${data.category}`;
+        const oldCatIdField = oldData.type === 'expense' ? `expenseByCategoryId.${oldData.category}` : `incomeBySourceId.${oldData.category}`;
+        const newCatIdField = data.type === 'expense' ? `expenseByCategoryId.${data.category}` : `incomeBySourceId.${data.category}`;
+
+        if (oldCatField === newCatField) {
+          combined[oldCatField] = increment(data.amount - oldData.amount);
+          combined[oldCatIdField] = increment(data.amount - oldData.amount);
+        } else {
+          combined[oldCatField] = increment(-oldData.amount);
+          combined[newCatField] = increment(data.amount);
+          combined[oldCatIdField] = increment(-oldData.amount);
+          combined[newCatIdField] = increment(data.amount);
+        }
+
+        const oldPersonKey = this.personSummaryKey(oldData.paidBy, oldData.paidByName, oldData.createdBy);
+        const newPersonKey = this.personSummaryKey(data.paidBy, data.paidByName, user.uid);
+        const oldPersonField = oldData.type === 'expense' ? `expenseByPerson.${oldPersonKey}` : `incomeByPerson.${oldPersonKey}`;
+        const newPersonField = data.type === 'expense' ? `expenseByPerson.${newPersonKey}` : `incomeByPerson.${newPersonKey}`;
+
+        if (oldPersonField === newPersonField) {
+          combined[oldPersonField] = increment(data.amount - oldData.amount);
+        } else {
+          combined[oldPersonField] = increment(-oldData.amount);
+          combined[newPersonField] = increment(data.amount);
+        }
+
+        const oldPendingInc = oldData.type === 'income' && oldPayStatus === 'pending' ? oldData.amount : 0;
+        const newPendingInc = data.type === 'income' && newPayStatus === 'pending' ? data.amount : 0;
+        if (oldPendingInc !== 0 || newPendingInc !== 0) {
+          combined['pendingIncome'] = increment(newPendingInc - oldPendingInc);
+        }
+
+        const oldPendingExp = oldData.type === 'expense' && oldExpPayStatus === 'pending' ? oldData.amount : 0;
+        const newPendingExp = data.type === 'expense' && newExpPayStatus === 'pending' ? data.amount : 0;
+        if (oldPendingExp !== 0 || newPendingExp !== 0) {
+          combined['pendingExpense'] = increment(newPendingExp - oldPendingExp);
+        }
+
+        if (shouldClearDistributions) {
+          const oldTotalDist = oldData.distributions!.reduce((s, d) => s + d.amount, 0);
+          combined['totalDistributed'] = increment(-oldTotalDist);
+          for (const d of oldData.distributions!) {
+            combined[`distributionByPerson.${d.uid}`] = increment(-d.amount);
+          }
+        }
+
+        transaction.set(oldYearlyRef, combined, { merge: true });
+      } else {
+        const oldYearlyReversal = { ...reversalFields };
+        transaction.set(oldYearlyRef, oldYearlyReversal, { merge: true });
+
+        const newYearlyRef = doc(this.firestore, 'yearlySummaries', newYearlyId);
+        transaction.set(newYearlyRef, {
+          ...applyFields,
+          year: data.year,
+          segment: data.segment,
+        }, { merge: true });
+      }
+
+      // Update transaction + add timeline entry
+      const txnUpdates: Record<string, any> = {
+        type: data.type,
+        date: Timestamp.fromDate(data.date),
+        amount: data.amount,
+        category: data.category,
+        categoryName: data.categoryName,
+        segment: data.segment,
+        segmentName: data.segmentName,
+        description: data.description,
+        paymentMethod: data.paymentMethod || 'upi',
+        paidBy: data.paidBy || user.uid,
+        paidByName: data.paidByName || user.displayName,
+        paymentStatus: data.type === 'income' ? (data.paymentStatus || 'received') : null,
+        expensePaymentStatus: data.type === 'expense' ? (data.expensePaymentStatus || 'paid') : null,
+        quantity: data.quantity || null,
+        unit: data.unit || null,
+        ratePerUnit: data.ratePerUnit || null,
+        tags: data.tags || [],
         month: data.month,
         year: data.year,
-        segment: data.segment,
-        updatedAt: serverTimestamp(),
+        timeline: arrayUnion({
+          action: 'updated',
+          by: user.uid,
+          byName: user.displayName,
+          at: Timestamp.now(),
+          changes: changesStr,
+        }),
       };
-      if (data.type === 'income' && newPayStatus === 'pending') {
-        newSummaryData['pendingIncome'] = increment(data.amount);
-      }
-      batch.set(newSummaryRef, newSummaryData, { merge: true });
-    }
 
-    // Update yearly summaries
-    const oldYearlyId = `${oldData.year}-${oldData.segment}`;
-    const newYearlyId = `${data.year}-${data.segment}`;
-    const oldYearlyRef = doc(this.firestore, 'yearlySummaries', oldYearlyId);
-
-    if (oldYearlyId === newYearlyId) {
-      const combinedYearly: Record<string, any> = { updatedAt: serverTimestamp(), year: data.year, segment: data.segment };
-      if (oldIncField === newIncField) {
-        combinedYearly[oldIncField] = increment(data.amount - oldData.amount);
-      } else {
-        combinedYearly[oldIncField] = increment(-oldData.amount);
-        combinedYearly[newIncField] = increment(data.amount);
-      }
-      combinedYearly['netProfit'] = increment(oldProfitDelta + newProfitDelta);
-      if (oldCatField === newCatField) {
-        combinedYearly[oldCatField] = increment(data.amount - oldData.amount);
-        combinedYearly[oldCatIdField] = increment(data.amount - oldData.amount);
-      } else {
-        combinedYearly[oldCatField] = increment(-oldData.amount);
-        combinedYearly[newCatField] = increment(data.amount);
-        combinedYearly[oldCatIdField] = increment(-oldData.amount);
-        combinedYearly[newCatIdField] = increment(data.amount);
-      }
-      if (oldPersonField === newPersonField) {
-        combinedYearly[oldPersonField] = increment(data.amount - oldData.amount);
-      } else {
-        combinedYearly[oldPersonField] = increment(-oldData.amount);
-        combinedYearly[newPersonField] = increment(data.amount);
-      }
+      // Clear distributions if amount, segment, or type changed (no longer valid)
       if (shouldClearDistributions) {
-        const oldTotalDist = oldData.distributions!.reduce((s, d) => s + d.amount, 0);
-        combinedYearly['totalDistributed'] = increment(-oldTotalDist);
-        for (const d of oldData.distributions!) {
-          combinedYearly[`distributionByPerson.${d.uid}`] = increment(-d.amount);
-        }
+        txnUpdates['distributions'] = [];
       }
-      const oldPendingY = oldData.type === 'income' && oldPayStatus === 'pending' ? oldData.amount : 0;
-      const newPendingY = data.type === 'income' && newPayStatus === 'pending' ? data.amount : 0;
-      if (oldPendingY !== 0 || newPendingY !== 0) {
-        combinedYearly['pendingIncome'] = increment(newPendingY - oldPendingY);
-      }
-      batch.set(oldYearlyRef, combinedYearly, { merge: true });
-    } else {
-      const oldYearlyUpdates: Record<string, any> = {
-        [oldIncField]: increment(-oldData.amount),
-        netProfit: increment(oldProfitDelta),
-        [oldCatField]: increment(-oldData.amount),
-        [oldCatIdField]: increment(-oldData.amount),
-        [oldPersonField]: increment(-oldData.amount),
-        updatedAt: serverTimestamp(),
-      };
-      if (oldData.type === 'income' && oldPayStatus === 'pending') {
-        oldYearlyUpdates['pendingIncome'] = increment(-oldData.amount);
-      }
-      if (shouldClearDistributions) {
-        const oldTotalDist = oldData.distributions!.reduce((s, d) => s + d.amount, 0);
-        oldYearlyUpdates['totalDistributed'] = increment(-oldTotalDist);
-        for (const d of oldData.distributions!) {
-          oldYearlyUpdates[`distributionByPerson.${d.uid}`] = increment(-d.amount);
-        }
-      }
-      batch.set(oldYearlyRef, oldYearlyUpdates, { merge: true });
 
-      const newYearlyRef = doc(this.firestore, 'yearlySummaries', newYearlyId);
-      const newYearlyData: Record<string, any> = {
-        [newIncField]: increment(data.amount),
-        netProfit: increment(newProfitDelta),
-        [newCatField]: increment(data.amount),
-        [newCatIdField]: increment(data.amount),
-        [newPersonField]: increment(data.amount),
-        year: data.year,
-        segment: data.segment,
-        updatedAt: serverTimestamp(),
-      };
-      if (data.type === 'income' && newPayStatus === 'pending') {
-        newYearlyData['pendingIncome'] = increment(data.amount);
-      }
-      batch.set(newYearlyRef, newYearlyData, { merge: true });
-    }
-
-    // Update transaction + add timeline entry
-    const txnUpdates: Record<string, any> = {
-      type: data.type,
-      date: Timestamp.fromDate(data.date),
-      amount: data.amount,
-      category: data.category,
-      categoryName: data.categoryName,
-      segment: data.segment,
-      segmentName: data.segmentName,
-      description: data.description,
-      paymentMethod: data.paymentMethod || 'upi',
-      paidBy: data.paidBy || user.uid,
-      paidByName: data.paidByName || user.displayName,
-      paymentStatus: data.type === 'income' ? (data.paymentStatus || 'received') : null,
-      quantity: data.quantity || null,
-      unit: data.unit || null,
-      ratePerUnit: data.ratePerUnit || null,
-      tags: data.tags || [],
-      month: data.month,
-      year: data.year,
-      timeline: arrayUnion({
-        action: 'updated',
-        by: user.uid,
-        byName: user.displayName,
-        at: Timestamp.now(),
-        changes: changesStr,
-      }),
-    };
-
-    // Clear distributions if amount, segment, or type changed (no longer valid)
-    if (shouldClearDistributions) {
-      txnUpdates['distributions'] = [];
-    }
-
-    batch.update(txnRef, txnUpdates);
-
-    await batch.commit();
+      transaction.update(txnRef, txnUpdates);
+    });
   }
 
   async softDelete(id: string): Promise<void> {
-    const batch = writeBatch(this.firestore);
     const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', id);
 
-    const oldDoc = await getDoc(txnRef);
-    const oldData = oldDoc.data() as Transaction;
+    await runTransaction(this.firestore, async (transaction) => {
+      const oldDoc = await transaction.get(txnRef);
+      const oldData = oldDoc.data() as Transaction;
 
-    // Block delete of linked loan transactions
-    if (oldData.linkedLoanId) {
-      throw new Error('This transaction is linked to a loan. Manage it from the loan detail page.');
-    }
-
-    // Build reversal fields (shared between monthly + yearly)
-    const summaryId = `${oldData.month}-${oldData.segment}`;
-    const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
-    const incField = oldData.type === 'expense' ? 'totalExpense' : 'totalIncome';
-    const profitDelta = oldData.type === 'income' ? -oldData.amount : oldData.amount;
-    const catField = oldData.type === 'expense'
-      ? `expenseByCategory.${oldData.category}`
-      : `incomeBySource.${oldData.category}`;
-    const catIdField = oldData.type === 'expense'
-      ? `expenseByCategoryId.${oldData.category}`
-      : `incomeBySourceId.${oldData.category}`;
-
-    const reversalFields: Record<string, any> = {
-      [incField]: increment(-oldData.amount),
-      netProfit: increment(profitDelta),
-      [catField]: increment(-oldData.amount),
-      [catIdField]: increment(-oldData.amount),
-      updatedAt: serverTimestamp(),
-    };
-
-    const delPersonKey = this.personSummaryKey(oldData.paidBy, oldData.paidByName, oldData.createdBy);
-    const delPersonField = oldData.type === 'expense'
-      ? `expenseByPerson.${delPersonKey}`
-      : `incomeByPerson.${delPersonKey}`;
-    reversalFields[delPersonField] = increment(-oldData.amount);
-
-    if (oldData.type === 'income' && oldData.paymentStatus === 'pending') {
-      reversalFields['pendingIncome'] = increment(-oldData.amount);
-    }
-
-    if (oldData.distributions?.length) {
-      const oldTotalDist = oldData.distributions.reduce((s, d) => s + d.amount, 0);
-      reversalFields['totalDistributed'] = increment(-oldTotalDist);
-      for (const d of oldData.distributions) {
-        reversalFields[`distributionByPerson.${d.uid}`] = increment(-d.amount);
+      // Block delete of linked loan transactions
+      if (oldData.linkedLoanId) {
+        throw new Error('This transaction is linked to a loan. Manage it from the loan detail page.');
       }
-    }
 
-    batch.set(summaryRef, reversalFields, { merge: true });
+      // Build reversal fields using shared helper
+      const reversalFields = this.buildReversalFields(oldData);
 
-    // Reverse yearly summary
-    const yearlyId = `${oldData.year}-${oldData.segment}`;
-    const yearlyRef = doc(this.firestore, 'yearlySummaries', yearlyId);
-    batch.set(yearlyRef, reversalFields, { merge: true });
+      const summaryId = `${oldData.month}-${oldData.segment}`;
+      const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
+      transaction.set(summaryRef, reversalFields, { merge: true });
 
-    batch.update(txnRef, {
-      isDeleted: true,
-      timeline: arrayUnion({
-        action: 'deleted',
-        by: user.uid,
-        byName: user.displayName,
-        at: Timestamp.now(),
-      }),
+      // Reverse yearly summary
+      const yearlyId = `${oldData.year}-${oldData.segment}`;
+      const yearlyRef = doc(this.firestore, 'yearlySummaries', yearlyId);
+      transaction.set(yearlyRef, reversalFields, { merge: true });
+
+      transaction.update(txnRef, {
+        isDeleted: true,
+        timeline: arrayUnion({
+          action: 'deleted',
+          by: user.uid,
+          byName: user.displayName,
+          at: Timestamp.now(),
+        }),
+      });
     });
-
-    await batch.commit();
   }
 
   async hardDelete(id: string): Promise<void> {
-    const batch = writeBatch(this.firestore);
     const txnRef = doc(this.firestore, 'transactions', id);
 
-    const oldDoc = await getDoc(txnRef);
-    const oldData = oldDoc.data() as Transaction;
+    await runTransaction(this.firestore, async (transaction) => {
+      const oldDoc = await transaction.get(txnRef);
+      const oldData = oldDoc.data() as Transaction;
 
-    // Block delete of linked loan transactions
-    if (oldData.linkedLoanId) {
-      throw new Error('This transaction is linked to a loan. Manage it from the loan detail page.');
-    }
-
-    // Build reversal fields (shared between monthly + yearly)
-    const summaryId = `${oldData.month}-${oldData.segment}`;
-    const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
-    const incField = oldData.type === 'expense' ? 'totalExpense' : 'totalIncome';
-    const profitDelta = oldData.type === 'income' ? -oldData.amount : oldData.amount;
-    const catField = oldData.type === 'expense'
-      ? `expenseByCategory.${oldData.category}`
-      : `incomeBySource.${oldData.category}`;
-    const catIdField = oldData.type === 'expense'
-      ? `expenseByCategoryId.${oldData.category}`
-      : `incomeBySourceId.${oldData.category}`;
-
-    const reversalFields: Record<string, any> = {
-      [incField]: increment(-oldData.amount),
-      netProfit: increment(profitDelta),
-      [catField]: increment(-oldData.amount),
-      [catIdField]: increment(-oldData.amount),
-      updatedAt: serverTimestamp(),
-    };
-
-    const delPersonKey = this.personSummaryKey(oldData.paidBy, oldData.paidByName, oldData.createdBy);
-    const delPersonField = oldData.type === 'expense'
-      ? `expenseByPerson.${delPersonKey}`
-      : `incomeByPerson.${delPersonKey}`;
-    reversalFields[delPersonField] = increment(-oldData.amount);
-
-    if (oldData.type === 'income' && oldData.paymentStatus === 'pending') {
-      reversalFields['pendingIncome'] = increment(-oldData.amount);
-    }
-
-    if (oldData.distributions?.length) {
-      const oldTotalDist = oldData.distributions.reduce((s, d) => s + d.amount, 0);
-      reversalFields['totalDistributed'] = increment(-oldTotalDist);
-      for (const d of oldData.distributions) {
-        reversalFields[`distributionByPerson.${d.uid}`] = increment(-d.amount);
+      // Block delete of linked loan transactions
+      if (oldData.linkedLoanId) {
+        throw new Error('This transaction is linked to a loan. Manage it from the loan detail page.');
       }
-    }
 
-    batch.set(summaryRef, reversalFields, { merge: true });
+      // Build reversal fields using shared helper
+      const reversalFields = this.buildReversalFields(oldData);
 
-    // Reverse yearly summary
-    const yearlyId = `${oldData.year}-${oldData.segment}`;
-    const yearlyRef = doc(this.firestore, 'yearlySummaries', yearlyId);
-    batch.set(yearlyRef, reversalFields, { merge: true });
+      const summaryId = `${oldData.month}-${oldData.segment}`;
+      const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
+      transaction.set(summaryRef, reversalFields, { merge: true });
 
-    batch.delete(txnRef);
+      // Reverse yearly summary
+      const yearlyId = `${oldData.year}-${oldData.segment}`;
+      const yearlyRef = doc(this.firestore, 'yearlySummaries', yearlyId);
+      transaction.set(yearlyRef, reversalFields, { merge: true });
 
-    await batch.commit();
+      transaction.delete(txnRef);
+    });
   }
 
   async updateDistribution(transactionId: string, distributions: DistributionEntry[]): Promise<void> {
-    const batch = writeBatch(this.firestore);
     const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', transactionId);
 
-    const oldDoc = await getDoc(txnRef);
-    const oldData = oldDoc.data() as Transaction;
+    await runTransaction(this.firestore, async (transaction) => {
+      const oldDoc = await transaction.get(txnRef);
+      const oldData = oldDoc.data() as Transaction;
 
-    if (oldData.isDeleted) throw new Error('Cannot distribute a deleted transaction');
-    if (oldData.type !== 'income') throw new Error('Can only distribute income');
+      if (oldData.isDeleted) throw new Error('Cannot distribute a deleted transaction');
+      if (oldData.type !== 'income') throw new Error('Can only distribute income');
 
-    const totalDist = distributions.reduce((s, d) => s + d.amount, 0);
-    if (totalDist > oldData.amount) throw new Error('Distribution exceeds income amount');
+      const totalDist = distributions.reduce((s, d) => s + d.amount, 0);
+      if (totalDist > oldData.amount) throw new Error('Distribution exceeds income amount');
 
-    // Filter out zero-amount entries
-    const nonZero = distributions.filter(d => d.amount > 0);
+      // Filter out zero-amount entries
+      const nonZero = distributions.filter(d => d.amount > 0);
 
-    // Build changes description
-    const oldDist = oldData.distributions || [];
-    const changesList: string[] = [];
-    for (const d of nonZero) {
-      const old = oldDist.find(o => o.uid === d.uid);
-      const oldAmt = old?.amount || 0;
-      if (oldAmt !== d.amount) changesList.push(`${d.name}: ${oldAmt}→${d.amount}`);
-    }
-    // Check for removed entries
-    for (const old of oldDist) {
-      if (!nonZero.find(d => d.uid === old.uid)) {
-        changesList.push(`${old.name}: ${old.amount}→0`);
+      // Build changes description
+      const oldDist = oldData.distributions || [];
+      const changesList: string[] = [];
+      for (const d of nonZero) {
+        const old = oldDist.find(o => o.uid === d.uid);
+        const oldAmt = old?.amount || 0;
+        if (oldAmt !== d.amount) changesList.push(`${d.name}: ${oldAmt}→${d.amount}`);
       }
-    }
+      for (const old of oldDist) {
+        if (!nonZero.find(d => d.uid === old.uid)) {
+          changesList.push(`${old.name}: ${old.amount}→0`);
+        }
+      }
 
-    // Update transaction
-    batch.update(txnRef, {
-      distributions: nonZero,
-      timeline: arrayUnion({
-        action: 'distributed' as const,
-        by: user.uid,
-        byName: user.displayName,
-        at: Timestamp.now(),
-        changes: changesList.join(', ') || 'distribution updated',
-      }),
+      // Update transaction
+      transaction.update(txnRef, {
+        distributions: nonZero,
+        timeline: arrayUnion({
+          action: 'distributed' as const,
+          by: user.uid,
+          byName: user.displayName,
+          at: Timestamp.now(),
+          changes: changesList.join(', ') || 'distribution updated',
+        }),
+      });
+
+      // Update summary distribution totals
+      const summaryId = `${oldData.month}-${oldData.segment}`;
+      const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
+
+      const summaryUpdates: Record<string, any> = {
+        updatedAt: serverTimestamp(),
+      };
+
+      // Reverse old distributions
+      const oldTotalDist = oldDist.reduce((s, d) => s + d.amount, 0);
+      for (const d of oldDist) {
+        summaryUpdates[`distributionByPerson.${d.uid}`] = increment(-d.amount);
+      }
+
+      // Apply new distributions
+      const newTotalDist = nonZero.reduce((s, d) => s + d.amount, 0);
+      for (const d of nonZero) {
+        const existing = summaryUpdates[`distributionByPerson.${d.uid}`];
+        if (existing) {
+          summaryUpdates[`distributionByPerson.${d.uid}`] = increment(d.amount - (oldDist.find(o => o.uid === d.uid)?.amount || 0));
+        } else {
+          summaryUpdates[`distributionByPerson.${d.uid}`] = increment(d.amount);
+        }
+      }
+
+      summaryUpdates['totalDistributed'] = increment(newTotalDist - oldTotalDist);
+
+      transaction.set(summaryRef, summaryUpdates, { merge: true });
+
+      // Also update yearly summary distribution totals
+      const yearlyId = `${oldData.year}-${oldData.segment}`;
+      const yearlyRef = doc(this.firestore, 'yearlySummaries', yearlyId);
+      transaction.set(yearlyRef, summaryUpdates, { merge: true });
     });
-
-    // Update monthly summary distribution totals
-    const summaryId = `${oldData.month}-${oldData.segment}`;
-    const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
-
-    const summaryUpdates: Record<string, any> = {
-      updatedAt: serverTimestamp(),
-    };
-
-    // Reverse old distributions
-    const oldTotalDist = oldDist.reduce((s, d) => s + d.amount, 0);
-    for (const d of oldDist) {
-      summaryUpdates[`distributionByPerson.${d.uid}`] = increment(-d.amount);
-    }
-
-    // Apply new distributions
-    const newTotalDist = nonZero.reduce((s, d) => s + d.amount, 0);
-    for (const d of nonZero) {
-      const existing = summaryUpdates[`distributionByPerson.${d.uid}`];
-      if (existing) {
-        // Already has a reverse increment, add net
-        summaryUpdates[`distributionByPerson.${d.uid}`] = increment(d.amount - (oldDist.find(o => o.uid === d.uid)?.amount || 0));
-      } else {
-        summaryUpdates[`distributionByPerson.${d.uid}`] = increment(d.amount);
-      }
-    }
-
-    summaryUpdates['totalDistributed'] = increment(newTotalDist - oldTotalDist);
-
-    batch.set(summaryRef, summaryUpdates, { merge: true });
-
-    // Also update yearly summary distribution totals
-    const yearlyId = `${oldData.year}-${oldData.segment}`;
-    const yearlyRef = doc(this.firestore, 'yearlySummaries', yearlyId);
-    batch.set(yearlyRef, summaryUpdates, { merge: true });
-
-    await batch.commit();
   }
 
   async markAsReceived(transactionId: string): Promise<void> {
-    const batch = writeBatch(this.firestore);
     const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', transactionId);
 
-    const oldDoc = await getDoc(txnRef);
-    const oldData = oldDoc.data() as Transaction;
+    await runTransaction(this.firestore, async (transaction) => {
+      const oldDoc = await transaction.get(txnRef);
+      const oldData = oldDoc.data() as Transaction;
 
-    if (oldData.isDeleted) throw new Error('Cannot update a deleted transaction');
-    if (oldData.type !== 'income') throw new Error('Only income transactions have payment status');
-    if (oldData.paymentStatus !== 'pending') throw new Error('Transaction is already received');
+      if (oldData.isDeleted) throw new Error('Cannot update a deleted transaction');
+      if (oldData.type !== 'income') throw new Error('Only income transactions have payment status');
+      if (oldData.paymentStatus !== 'pending') throw new Error('Transaction is already received');
 
-    batch.update(txnRef, {
-      paymentStatus: 'received' as IncomePaymentStatus,
-      timeline: arrayUnion({
-        action: 'payment_received',
-        by: user.uid,
-        byName: user.displayName,
-        at: Timestamp.now(),
-      }),
+      transaction.update(txnRef, {
+        paymentStatus: 'received' as IncomePaymentStatus,
+        timeline: arrayUnion({
+          action: 'payment_received',
+          by: user.uid,
+          byName: user.displayName,
+          at: Timestamp.now(),
+        }),
+      });
+
+      // Decrement pendingIncome in monthly + yearly summaries
+      const summaryId = `${oldData.month}-${oldData.segment}`;
+      const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
+      const pendingUpdate = { pendingIncome: increment(-oldData.amount), updatedAt: serverTimestamp() };
+      transaction.set(summaryRef, pendingUpdate, { merge: true });
+      const yearlyRef = doc(this.firestore, 'yearlySummaries', `${oldData.year}-${oldData.segment}`);
+      transaction.set(yearlyRef, pendingUpdate, { merge: true });
     });
-
-    // Decrement pendingIncome in monthly + yearly summaries
-    const summaryId = `${oldData.month}-${oldData.segment}`;
-    const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
-    const pendingUpdate = { pendingIncome: increment(-oldData.amount), updatedAt: serverTimestamp() };
-    batch.set(summaryRef, pendingUpdate, { merge: true });
-    const yearlyRef = doc(this.firestore, 'yearlySummaries', `${oldData.year}-${oldData.segment}`);
-    batch.set(yearlyRef, pendingUpdate, { merge: true });
-
-    await batch.commit();
   }
 
   async markAsPaid(transactionId: string): Promise<void> {
-    const batch = writeBatch(this.firestore);
     const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', transactionId);
 
-    const oldDoc = await getDoc(txnRef);
-    const oldData = oldDoc.data() as Transaction;
+    await runTransaction(this.firestore, async (transaction) => {
+      const oldDoc = await transaction.get(txnRef);
+      const oldData = oldDoc.data() as Transaction;
 
-    if (oldData.isDeleted) throw new Error('Cannot update a deleted transaction');
-    if (oldData.type !== 'expense') throw new Error('Only expense transactions have expense payment status');
-    if (oldData.expensePaymentStatus !== 'pending') throw new Error('Expense is already paid');
+      if (oldData.isDeleted) throw new Error('Cannot update a deleted transaction');
+      if (oldData.type !== 'expense') throw new Error('Only expense transactions have expense payment status');
+      if (oldData.expensePaymentStatus !== 'pending') throw new Error('Expense is already paid');
 
-    batch.update(txnRef, {
-      expensePaymentStatus: 'paid' as ExpensePaymentStatus,
-      timeline: arrayUnion({
-        action: 'payment_paid',
-        by: user.uid,
-        byName: user.displayName,
-        at: Timestamp.now(),
-      }),
+      transaction.update(txnRef, {
+        expensePaymentStatus: 'paid' as ExpensePaymentStatus,
+        timeline: arrayUnion({
+          action: 'payment_paid',
+          by: user.uid,
+          byName: user.displayName,
+          at: Timestamp.now(),
+        }),
+      });
+
+      const summaryId = `${oldData.month}-${oldData.segment}`;
+      const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
+      const pendingUpdate = { pendingExpense: increment(-oldData.amount), updatedAt: serverTimestamp() };
+      transaction.set(summaryRef, pendingUpdate, { merge: true });
+      const yearlyRef = doc(this.firestore, 'yearlySummaries', `${oldData.year}-${oldData.segment}`);
+      transaction.set(yearlyRef, pendingUpdate, { merge: true });
     });
-
-    const summaryId = `${oldData.month}-${oldData.segment}`;
-    const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
-    const pendingUpdate = { pendingExpense: increment(-oldData.amount), updatedAt: serverTimestamp() };
-    batch.set(summaryRef, pendingUpdate, { merge: true });
-    const yearlyRef = doc(this.firestore, 'yearlySummaries', `${oldData.year}-${oldData.segment}`);
-    batch.set(yearlyRef, pendingUpdate, { merge: true });
-
-    await batch.commit();
   }
 
   async getAll(
