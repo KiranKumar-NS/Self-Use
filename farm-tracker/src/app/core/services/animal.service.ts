@@ -340,10 +340,12 @@ export class AnimalService {
     if (deathCause) updates['deathCause'] = deathCause;
     if (note) updates['deathNote'] = note;
 
-    // Compute age at death in days
-    const originMs = animal.originDate.toDate().getTime();
-    const deathMs = date.getTime();
-    updates['ageAtDeathDays'] = Math.max(0, Math.floor((deathMs - originMs) / (1000 * 60 * 60 * 24)));
+    // Compute age at death in days (legacy docs may lack originDate)
+    const originMs = animal.originDate?.toDate?.()?.getTime();
+    if (originMs != null) {
+      const deathMs = date.getTime();
+      updates['ageAtDeathDays'] = Math.max(0, Math.floor((deathMs - originMs) / (1000 * 60 * 60 * 24)));
+    }
 
     batch.update(animalRef, updates);
     await batch.commit();

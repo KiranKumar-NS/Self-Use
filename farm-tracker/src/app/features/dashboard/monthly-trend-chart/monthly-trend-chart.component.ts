@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/core';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
 import { MonthlySummary } from '../../../core/models/monthly-summary.model';
@@ -8,6 +8,7 @@ import { getMonthName } from '../../../core/utils/date.utils';
 @Component({
   selector: 'app-monthly-trend-chart',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [BaseChartDirective, MatCardModule],
   template: `
     <mat-card class="chart-card">

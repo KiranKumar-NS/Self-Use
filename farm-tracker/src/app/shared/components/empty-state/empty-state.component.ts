@@ -1,10 +1,11 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, Output, EventEmitter } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 
 @Component({
   selector: 'app-empty-state',
   standalone: true,
   imports: [MatButtonModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="empty-state">
       <span class="empty-icon">{{ icon }}</span>

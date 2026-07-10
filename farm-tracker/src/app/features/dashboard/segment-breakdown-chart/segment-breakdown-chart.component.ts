@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/core';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration, TooltipItem } from 'chart.js';
 import { MonthlySummary } from '../../../core/models/monthly-summary.model';
@@ -8,6 +8,7 @@ import { formatCurrency } from '../../../core/utils/firestore.utils';
 @Component({
   selector: 'app-segment-breakdown-chart',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [BaseChartDirective, MatCardModule],
   template: `
     <mat-card class="chart-card">

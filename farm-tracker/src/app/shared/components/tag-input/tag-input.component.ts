@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, input, model, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { COMMA, ENTER } from '@angular/cdk/keycodes';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -12,11 +12,12 @@ import { TagService } from '../../../core/services/tag.service';
   selector: 'app-tag-input',
   standalone: true,
   imports: [FormsModule, MatFormFieldModule, MatInputModule, MatChipsModule, MatAutocompleteModule, MatIconModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>Tags (optional)</mat-label>
       <mat-chip-grid #chipGrid>
-        @for (tag of tags; track tag) {
+        @for (tag of tags(); track tag) {
           <mat-chip-row (removed)="removeTag(tag)">
             {{ tag }}
             <button matChipRemove><mat-icon>cancel</mat-icon></button>
@@ -31,7 +32,7 @@ import { TagService } from '../../../core/services/tag.service';
         [matAutocomplete]="tagAuto"
         [(ngModel)]="inputValue"
         (ngModelChange)="filterSuggestions()"
-        [placeholder]="placeholder" />
+        [placeholder]="placeholder()" />
       <mat-autocomplete #tagAuto="matAutocomplete" (optionSelected)="addSuggestedTag($event)">
         @for (s of filtered(); track s) {
           <mat-option [value]="s">{{ s }}</mat-option>
@@ -44,14 +45,13 @@ import { TagService } from '../../../core/services/tag.service';
   `],
 })
 export class TagInputComponent implements OnInit {
-  @Input() tags: string[] = [];
-  @Input() placeholder = 'Add tags...';
-  @Output() tagsChange = new EventEmitter<string[]>();
+  tags = model<string[]>([]);
+  placeholder = input('Add tags...');
 
   private tagService = inject(TagService);
 
   readonly separatorKeys = [ENTER, COMMA];
-  inputValue = '';
+  inputValue = signal('');
   filtered = signal<string[]>([]);
   private allSuggestions: string[] = [];
 
@@ -61,8 +61,8 @@ export class TagInputComponent implements OnInit {
   }
 
   filterSuggestions() {
-    const term = this.inputValue.trim().toLowerCase();
-    const selected = new Set(this.tags.map((t) => t.toLowerCase()));
+    const term = this.inputValue().trim().toLowerCase();
+    const selected = new Set(this.tags().map((t) => t.toLowerCase()));
     let results = this.allSuggestions.filter((s) => !selected.has(s));
     if (term) {
       results = results.filter((s) => s.includes(term));
@@ -72,28 +72,25 @@ export class TagInputComponent implements OnInit {
 
   addCustomTag(event: MatChipInputEvent) {
     const value = (event.value || '').trim().toLowerCase();
-    if (value && !this.tags.includes(value)) {
-      this.tags = [...this.tags, value];
-      this.tagsChange.emit(this.tags);
+    if (value && !this.tags().includes(value)) {
+      this.tags.update((tags) => [...tags, value]);
     }
     event.chipInput.clear();
-    this.inputValue = '';
+    this.inputValue.set('');
     this.filterSuggestions();
   }
 
   addSuggestedTag(event: MatAutocompleteSelectedEvent) {
     const value = event.option.value as string;
-    if (value && !this.tags.includes(value)) {
-      this.tags = [...this.tags, value];
-      this.tagsChange.emit(this.tags);
+    if (value && !this.tags().includes(value)) {
+      this.tags.update((tags) => [...tags, value]);
     }
-    this.inputValue = '';
+    this.inputValue.set('');
     this.filterSuggestions();
   }
 
   removeTag(tag: string) {
-    this.tags = this.tags.filter((t) => t !== tag);
-    this.tagsChange.emit(this.tags);
+    this.tags.update((tags) => tags.filter((t) => t !== tag));
     this.filterSuggestions();
   }
 }

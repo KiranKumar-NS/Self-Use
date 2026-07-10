@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -12,6 +12,7 @@ import { CropActivity, CropActivityType } from '../../../core/models/crop-activi
 import { SegmentService } from '../../../core/services/segment.service';
 import { Segment } from '../../../core/models/segment.model';
 import { Timestamp } from '@angular/fire/firestore';
+import { ToastService } from '../../../core/services/toast.service';
 
 export interface CropActivityFormDialogData {
   activity?: CropActivity;
@@ -20,6 +21,7 @@ export interface CropActivityFormDialogData {
 @Component({
   selector: 'app-crop-activity-form-dialog',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule],
   template: `
     <h2 mat-dialog-title>{{ data.activity ? 'Edit' : 'Add' }} Crop Activity</h2>
@@ -113,7 +115,7 @@ export interface CropActivityFormDialogData {
 
     <mat-dialog-actions align="end">
       <button mat-button (click)="dialogRef.close()">Cancel</button>
-      <button mat-flat-button color="primary" [disabled]="saving() || !segment || !activityType" (click)="save()">
+      <button mat-flat-button color="primary" [disabled]="saving() || !segment() || !activityType()" (click)="save()">
         {{ saving() ? 'Saving...' : (data.activity ? 'Update' : 'Add Activity') }}
       </button>
     </mat-dialog-actions>
@@ -130,6 +132,7 @@ export class CropActivityFormDialogComponent implements OnInit {
   dialogRef = inject(MatDialogRef<CropActivityFormDialogComponent>);
   private cropActivityService = inject(CropActivityService);
   private segmentService = inject(SegmentService);
+  private toast = inject(ToastService);
 
   saving = signal(false);
   error = signal('');
@@ -141,41 +144,46 @@ export class CropActivityFormDialogComponent implements OnInit {
   ];
 
   today = new Date();
-  segment = '';
-  activityType: CropActivityType = 'other';
-  date: Date = new Date();
-  description = '';
-  productUsed = '';
-  quantity: number | null = null;
-  unit = '';
-  area = '';
-  duration: number | null = null;
-  laborCount: number | null = null;
-  cost: number | null = null;
-  weather = '';
-  temperature: number | null = null;
-  note = '';
+  segment = signal('');
+  activityType = signal<CropActivityType>('other');
+  date = signal<Date>(new Date());
+  description = signal('');
+  productUsed = signal('');
+  quantity = signal<number | null>(null);
+  unit = signal('');
+  area = signal('');
+  duration = signal<number | null>(null);
+  laborCount = signal<number | null>(null);
+  cost = signal<number | null>(null);
+  weather = signal('');
+  temperature = signal<number | null>(null);
+  note = signal('');
 
   async ngOnInit(): Promise<void> {
-    const allSegments = await this.segmentService.getAll();
-    this.cropSegments.set(allSegments.filter(s => s.segmentType === 'crop'));
+    try {
+      const allSegments = await this.segmentService.getAll();
+      this.cropSegments.set(allSegments.filter(s => s.segmentType === 'crop'));
+    } catch (err) {
+      console.error('Failed to load segments', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load segments');
+    }
 
     if (this.data?.activity) {
       const a = this.data.activity;
-      this.segment = a.segment;
-      this.activityType = a.activityType;
-      this.date = a.date?.toDate() || new Date();
-      this.description = a.description || '';
-      this.productUsed = a.productUsed || '';
-      this.quantity = a.quantity ?? null;
-      this.unit = a.unit || '';
-      this.area = a.area || '';
-      this.duration = a.duration ?? null;
-      this.laborCount = a.laborCount ?? null;
-      this.cost = a.cost ?? null;
-      this.weather = a.weather || '';
-      this.temperature = a.temperature ?? null;
-      this.note = a.note || '';
+      this.segment.set(a.segment);
+      this.activityType.set(a.activityType);
+      this.date.set(a.date?.toDate() || new Date());
+      this.description.set(a.description || '');
+      this.productUsed.set(a.productUsed || '');
+      this.quantity.set(a.quantity ?? null);
+      this.unit.set(a.unit || '');
+      this.area.set(a.area || '');
+      this.duration.set(a.duration ?? null);
+      this.laborCount.set(a.laborCount ?? null);
+      this.cost.set(a.cost ?? null);
+      this.weather.set(a.weather || '');
+      this.temperature.set(a.temperature ?? null);
+      this.note.set(a.note || '');
     }
   }
 
@@ -187,23 +195,23 @@ export class CropActivityFormDialogComponent implements OnInit {
     this.saving.set(true);
     this.error.set('');
     try {
-      const selectedSegment = this.cropSegments().find(s => s.id === this.segment);
+      const selectedSegment = this.cropSegments().find(s => s.id === this.segment());
       const formData: Partial<CropActivity> = {
-        segment: this.segment,
+        segment: this.segment(),
         segmentName: selectedSegment?.name || '',
-        activityType: this.activityType,
-        date: Timestamp.fromDate(this.date),
-        description: this.description,
-        productUsed: this.productUsed || undefined,
-        quantity: this.quantity ?? undefined,
-        unit: this.unit || undefined,
-        area: this.area || undefined,
-        duration: this.duration ?? undefined,
-        laborCount: this.laborCount ?? undefined,
-        cost: this.cost ?? undefined,
-        weather: this.weather || undefined,
-        temperature: this.temperature ?? undefined,
-        note: this.note || undefined,
+        activityType: this.activityType(),
+        date: Timestamp.fromDate(this.date()),
+        description: this.description(),
+        productUsed: this.productUsed() || undefined,
+        quantity: this.quantity() ?? undefined,
+        unit: this.unit() || undefined,
+        area: this.area() || undefined,
+        duration: this.duration() ?? undefined,
+        laborCount: this.laborCount() ?? undefined,
+        cost: this.cost() ?? undefined,
+        weather: this.weather() || undefined,
+        temperature: this.temperature() ?? undefined,
+        note: this.note() || undefined,
       };
 
       if (this.data?.activity) {

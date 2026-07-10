@@ -1,7 +1,8 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BreedingService } from '../../../core/services/breeding.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { BreedingRecord } from '../../../core/models/breeding.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
@@ -12,14 +13,15 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { safeLoad } from '../../../core/utils/async.utils';
 
 @Component({
   selector: 'app-breeding-list',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DatePipe, FormsModule, LoadingSpinnerComponent, EmptyStateComponent,
-    MatCardModule, MatButtonModule, MatIconModule, MatChipsModule, MatSnackBarModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatChipsModule,
   ],
   template: `
     <div class="page-header">
@@ -94,7 +96,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 export class BreedingListComponent implements OnInit {
   private breedingService = inject(BreedingService);
   private dialog = inject(MatDialog);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
 
   records = signal<BreedingRecord[]>([]);
   loading = signal(true);
@@ -104,9 +106,9 @@ export class BreedingListComponent implements OnInit {
   }
 
   async loadData(): Promise<void> {
-    this.loading.set(true);
-    this.records.set(await this.breedingService.getAll());
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      this.records.set(await this.breedingService.getAll());
+    }, this.toast);
   }
 
   formatStatus(status: string): string {
@@ -117,7 +119,7 @@ export class BreedingListComponent implements OnInit {
     const ref = this.dialog.open(BreedingFormDialogComponent, { width: '90vw', maxWidth: '600px', data: {} });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Breeding recorded', '', { duration: 2500 });
+        this.toast.success('Breeding recorded');
         await this.loadData();
       }
     });
@@ -127,7 +129,7 @@ export class BreedingListComponent implements OnInit {
     const ref = this.dialog.open(BreedingFormDialogComponent, { width: '90vw', maxWidth: '600px', data: { record } });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Record updated', '', { duration: 2500 });
+        this.toast.success('Record updated');
         await this.loadData();
       }
     });
@@ -139,9 +141,14 @@ export class BreedingListComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        await this.breedingService.softDelete(record.id);
-        this.snackBar.open('Record deleted', '', { duration: 2500 });
-        await this.loadData();
+        try {
+          await this.breedingService.softDelete(record.id);
+          this.toast.success('Record deleted');
+          await this.loadData();
+        } catch (err) {
+          console.error('Failed to delete breeding record', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete record');
+        }
       }
     });
   }

@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { Segment } from '../../../core/models/segment.model';
 import { MonthlySummary } from '../../../core/models/monthly-summary.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
@@ -9,6 +9,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 @Component({
   selector: 'app-budget-widget',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CurrencyInrPipe, MatCardModule, MatIconModule, MatProgressBarModule],
   template: `
     @if (budgetItems().length > 0) {

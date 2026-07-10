@@ -1,10 +1,11 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../../core/services/auth.service';
 import { SegmentService } from '../../../core/services/segment.service';
 import { Segment } from '../../../core/models/segment.model';
 import { UserRole } from '../../../core/models/user.model';
+import { ToastService } from '../../../core/services/toast.service';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -15,6 +16,7 @@ import { MatChipsModule } from '@angular/material/chips';
 @Component({
   selector: 'app-register',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, MatCardModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatSelectModule, MatChipsModule],
   template: `
     <div class="register-container">
@@ -96,10 +98,11 @@ export class RegisterComponent implements OnInit {
   private authService = inject(AuthService);
   private segmentService = inject(SegmentService);
   private router = inject(Router);
+  private toast = inject(ToastService);
 
-  displayName = '';
-  email = '';
-  password = '';
+  displayName = signal('');
+  email = signal('');
+  password = signal('');
   role: UserRole = 'manager';
   selectedSegments: string[] = [];
   segments = signal<Segment[]>([]);
@@ -108,7 +111,12 @@ export class RegisterComponent implements OnInit {
   loading = signal(false);
 
   async ngOnInit(): Promise<void> {
-    this.segments.set(await this.segmentService.getAll());
+    try {
+      this.segments.set(await this.segmentService.getAll());
+    } catch (err) {
+      console.error('[Register] ngOnInit', err);
+      this.toast.error('Failed to load data. Check your connection and try again.');
+    }
   }
 
   async register(): Promise<void> {
@@ -121,13 +129,13 @@ export class RegisterComponent implements OnInit {
         : this.selectedSegments;
 
       await this.authService.register(
-        this.email, this.password, this.displayName,
+        this.email(), this.password(), this.displayName(),
         this.role, assignedSegments
       );
-      this.success.set(`User "${this.displayName}" created successfully!`);
-      this.displayName = '';
-      this.email = '';
-      this.password = '';
+      this.success.set(`User "${this.displayName()}" created successfully!`);
+      this.displayName.set('');
+      this.email.set('');
+      this.password.set('');
     } catch (err: any) {
       this.error.set(err.message || 'Registration failed');
     } finally {

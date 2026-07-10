@@ -1,9 +1,10 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AnimalService } from '../../../core/services/animal.service';
 import { SegmentService } from '../../../core/services/segment.service';
 import { InventoryService } from '../../../core/services/inventory.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { Segment } from '../../../core/models/segment.model';
 import { TrackingMode } from '../../../core/models/animal.model';
 import { MatCardModule } from '@angular/material/card';
@@ -16,16 +17,16 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatIconModule } from '@angular/material/icon';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
 
 @Component({
   selector: 'app-animal-form',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, MatCardModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatDatepickerModule, MatRadioModule,
-    MatIconModule, MatAutocompleteModule, MatSnackBarModule,
+    MatIconModule, MatAutocompleteModule,
   ],
   template: `
     <div class="page-header">
@@ -63,7 +64,7 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
         </div>
 
         <!-- Individual fields -->
-        @if (trackingMode === 'individual') {
+        @if (trackingMode() === 'individual') {
           <div class="form-row">
             <mat-form-field appearance="outline">
               <mat-label>Tag / ID</mat-label>
@@ -100,7 +101,7 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
         }
 
         <!-- Batch fields -->
-        @if (trackingMode === 'batch') {
+        @if (trackingMode() === 'batch') {
           <div class="form-row">
             <mat-form-field appearance="outline">
               <mat-label>Batch Label</mat-label>
@@ -140,14 +141,14 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
 
         <div class="form-row">
           <mat-form-field appearance="outline">
-            <mat-label>{{ origin === 'birth' ? 'Birth Date' : 'Purchase Date' }}</mat-label>
+            <mat-label>{{ origin() === 'birth' ? 'Birth Date' : 'Purchase Date' }}</mat-label>
             <input matInput [matDatepicker]="picker" [(ngModel)]="originDate" name="originDate" [max]="today" required />
             <mat-datepicker-toggle matIconSuffix [for]="picker" />
             <mat-datepicker #picker />
             <mat-error>Required</mat-error>
           </mat-form-field>
 
-          @if (origin === 'purchase') {
+          @if (origin() === 'purchase') {
             <mat-form-field appearance="outline">
               <mat-label>Purchase Price (INR)</mat-label>
               <input matInput type="number" [(ngModel)]="purchasePrice" name="purchasePrice" min="0" />
@@ -194,7 +195,7 @@ export class AnimalFormComponent implements OnInit, HasUnsavedChanges {
   private inventoryService = inject(InventoryService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
 
   isEdit = signal(false);
   error = signal('');
@@ -204,94 +205,99 @@ export class AnimalFormComponent implements OnInit, HasUnsavedChanges {
   allSegments = signal<Segment[]>([]);
 
   today = new Date();
-  segment = '';
-  trackingMode: TrackingMode = 'individual';
-  tag = '';
-  name = '';
-  breed = '';
-  gender: '' | 'male' | 'female' | 'unknown' = '';
-  batchLabel = '';
-  batchSize = 1;
-  origin: 'birth' | 'purchase' = 'purchase';
-  originDate = new Date();
-  purchasePrice: number | null = null;
-  note = '';
+  segment = signal('');
+  trackingMode = signal<TrackingMode>('individual');
+  tag = signal('');
+  name = signal('');
+  breed = signal('');
+  gender = signal<'' | 'male' | 'female' | 'unknown'>('');
+  batchLabel = signal('');
+  batchSize = signal(1);
+  origin = signal<'birth' | 'purchase'>('purchase');
+  originDate = signal(new Date());
+  purchasePrice = signal<number | null>(null);
+  note = signal('');
 
   private editId = '';
-  private allBreeds: string[] = [];
+  private allBreeds = signal<string[]>([]);
 
   async ngOnInit(): Promise<void> {
-    this.allSegments.set(await this.segmentService.getAll());
+    try {
+      this.allSegments.set(await this.segmentService.getAll());
 
-    this.editId = this.route.snapshot.params['id'];
-    if (this.editId) {
-      this.isEdit.set(true);
-      const animal = await this.animalService.getById(this.editId);
-      if (animal) {
-        this.segment = animal.segment;
-        this.trackingMode = animal.trackingMode;
-        this.tag = animal.tag || '';
-        this.name = animal.name || '';
-        this.breed = animal.breed || '';
-        this.gender = animal.gender || '';
-        this.batchLabel = animal.batchLabel || '';
-        this.batchSize = animal.batchSize;
-        this.origin = animal.origin;
-        this.originDate = animal.originDate.toDate();
-        this.purchasePrice = animal.purchasePrice || null;
-        this.note = animal.note || '';
-        this.loadBreeds(animal.segment);
+      this.editId = this.route.snapshot.params['id'];
+      if (this.editId) {
+        this.isEdit.set(true);
+        const animal = await this.animalService.getById(this.editId);
+        if (animal) {
+          this.segment.set(animal.segment);
+          this.trackingMode.set(animal.trackingMode);
+          this.tag.set(animal.tag || '');
+          this.name.set(animal.name || '');
+          this.breed.set(animal.breed || '');
+          this.gender.set(animal.gender || '');
+          this.batchLabel.set(animal.batchLabel || '');
+          this.batchSize.set(animal.batchSize);
+          this.origin.set(animal.origin);
+          this.originDate.set(animal.originDate.toDate());
+          this.purchasePrice.set(animal.purchasePrice || null);
+          this.note.set(animal.note || '');
+          this.loadBreeds(animal.segment);
+        }
       }
+    } catch (err) {
+      console.error('Failed to load animal form data', err);
+      this.toast.error('Failed to load data. Check your connection and try again.');
     }
   }
 
-  animalSegments(): Segment[] {
-    return this.allSegments().filter(s => s.segmentType !== 'crop');
-  }
+  animalSegments = computed<Segment[]>(() =>
+    this.allSegments().filter(s => s.segmentType !== 'crop')
+  );
 
   onSegmentChange(): void {
-    this.breed = '';
-    if (this.segment) {
-      this.loadBreeds(this.segment);
+    this.breed.set('');
+    if (this.segment()) {
+      this.loadBreeds(this.segment());
       // Auto-set tracking mode based on segment
-      const seg = this.allSegments().find(s => s.id === this.segment);
-      if (seg?.id === 'goats') this.trackingMode = 'individual';
-      else if (seg?.id === 'chickens') this.trackingMode = 'batch';
+      const seg = this.allSegments().find(s => s.id === this.segment());
+      if (seg?.id === 'goats') this.trackingMode.set('individual');
+      else if (seg?.id === 'chickens') this.trackingMode.set('batch');
     }
   }
 
   private loadBreeds(segmentId: string): void {
     const seg = this.allSegments().find(s => s.id === segmentId);
-    this.allBreeds = seg?.breeds || [];
+    this.allBreeds.set(seg?.breeds || []);
   }
 
-  filteredBreeds(): string[] {
-    if (!this.breed) return this.allBreeds;
-    const term = this.breed.toLowerCase();
-    return this.allBreeds.filter(b => b.toLowerCase().includes(term));
-  }
+  filteredBreeds = computed<string[]>(() => {
+    if (!this.breed()) return this.allBreeds();
+    const term = this.breed().toLowerCase();
+    return this.allBreeds().filter(b => b.toLowerCase().includes(term));
+  });
 
   async save(): Promise<void> {
     this.error.set('');
     this.saving.set(true);
 
     try {
-      const seg = this.allSegments().find(s => s.id === this.segment);
+      const seg = this.allSegments().find(s => s.id === this.segment());
 
       const formData = {
-        segment: this.segment,
-        segmentName: seg?.name || this.segment,
-        trackingMode: this.trackingMode,
-        tag: this.tag.trim() || undefined,
-        name: this.name.trim() || undefined,
-        breed: this.breed.trim() || undefined,
-        gender: this.gender || undefined,
-        batchLabel: this.batchLabel.trim() || undefined,
-        batchSize: this.trackingMode === 'batch' ? this.batchSize : 1,
-        origin: this.origin,
-        originDate: this.originDate,
-        purchasePrice: this.origin === 'purchase' ? (this.purchasePrice || 0) : 0,
-        note: this.note.trim() || undefined,
+        segment: this.segment(),
+        segmentName: seg?.name || this.segment(),
+        trackingMode: this.trackingMode(),
+        tag: this.tag().trim() || undefined,
+        name: this.name().trim() || undefined,
+        breed: this.breed().trim() || undefined,
+        gender: this.gender() || undefined,
+        batchLabel: this.batchLabel().trim() || undefined,
+        batchSize: this.trackingMode() === 'batch' ? this.batchSize() : 1,
+        origin: this.origin(),
+        originDate: this.originDate(),
+        purchasePrice: this.origin() === 'purchase' ? (this.purchasePrice() || 0) : 0,
+        note: this.note().trim() || undefined,
       };
 
       if (this.isEdit()) {
@@ -300,24 +306,20 @@ export class AnimalFormComponent implements OnInit, HasUnsavedChanges {
         const animalId = await this.animalService.create(formData);
 
         // Create inventory event to keep stock counts in sync
-        const count = this.trackingMode === 'batch' ? this.batchSize : 1;
+        const count = this.trackingMode() === 'batch' ? this.batchSize() : 1;
         await this.inventoryService.recordEvent({
-          segment: this.segment,
-          segmentName: seg?.name || this.segment,
-          eventType: this.origin === 'purchase' ? 'purchase' : 'birth',
+          segment: this.segment(),
+          segmentName: seg?.name || this.segment(),
+          eventType: this.origin() === 'purchase' ? 'purchase' : 'birth',
           count,
-          breed: this.breed.trim() || undefined,
-          note: `Registered: ${this.name.trim() || this.tag.trim() || this.batchLabel.trim() || formData.segmentName}`,
-          date: this.originDate,
-          month: getMonthString(this.originDate),
-          year: getYear(this.originDate),
+          breed: this.breed().trim() || undefined,
+          note: `Registered: ${this.name().trim() || this.tag().trim() || this.batchLabel().trim() || formData.segmentName}`,
+          date: this.originDate(),
+          month: getMonthString(this.originDate()),
+          year: getYear(this.originDate()),
         });
       }
-      this.snackBar.open(
-        this.isEdit() ? 'Animal updated' : 'Animal created',
-        '',
-        { duration: 2500 }
-      );
+      this.toast.success(this.isEdit() ? 'Animal updated' : 'Animal created');
       this.saved = true;
       this.router.navigate(['/stock']);
     } catch (err: any) {
@@ -330,7 +332,7 @@ export class AnimalFormComponent implements OnInit, HasUnsavedChanges {
   hasUnsavedChanges(): boolean {
     if (this.saved) return false;
     if (this.isEdit()) return true;
-    return this.segment !== '' || this.tag.trim() !== '' || this.name.trim() !== '';
+    return this.segment() !== '' || this.tag().trim() !== '' || this.name().trim() !== '';
   }
 
   cancel(): void {

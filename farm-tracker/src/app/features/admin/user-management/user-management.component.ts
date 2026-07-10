@@ -1,10 +1,12 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { UserService } from '../../../core/services/user.service';
 import { AppUser } from '../../../core/models/user.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -14,6 +16,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 @Component({
   selector: 'app-user-management',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, LoadingSpinnerComponent, MatCardModule, MatButtonModule, MatIconModule, MatChipsModule, MatSlideToggleModule],
   template: `
     <div class="page-header">
@@ -102,6 +105,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 export class UserManagementComponent implements OnInit {
   private userService = inject(UserService);
   private router = inject(Router);
+  private toast = inject(ToastService);
 
   users = signal<AppUser[]>([]);
   loading = signal(true);
@@ -112,8 +116,9 @@ export class UserManagementComponent implements OnInit {
   currentPage = 1;
 
   async ngOnInit(): Promise<void> {
-    this.users.set(await this.userService.getAll());
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      this.users.set(await this.userService.getAll());
+    }, this.toast);
   }
 
   sortedUsers(): AppUser[] {
@@ -148,7 +153,12 @@ export class UserManagementComponent implements OnInit {
   }
 
   async toggleActive(user: AppUser): Promise<void> {
-    await this.userService.toggleActive(user.uid, !user.isActive);
-    this.users.set(await this.userService.getAll());
+    try {
+      await this.userService.toggleActive(user.uid, !user.isActive);
+      this.users.set(await this.userService.getAll());
+    } catch (err) {
+      console.error('[UserManagement] toggleActive', err);
+      this.toast.error('Failed to update user status. Check your connection and try again.');
+    }
   }
 }

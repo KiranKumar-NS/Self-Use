@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { CdkDragDrop, DragDropModule, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
 import { TaskService } from '../../../core/services/task.service';
@@ -9,14 +9,15 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSelectModule } from '@angular/material/select';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-kanban-board',
   standalone: true,
-  imports: [DragDropModule, FormsModule, DatePipe, MatCardModule, MatButtonModule, MatIconModule, MatButtonToggleModule, MatTabsModule, MatSelectModule, MatSnackBarModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DragDropModule, FormsModule, DatePipe, MatCardModule, MatButtonModule, MatIconModule, MatButtonToggleModule, MatTabsModule, MatSelectModule],
   template: `
     <div class="page-header">
       <div>
@@ -194,7 +195,7 @@ import { DatePipe } from '@angular/common';
 export class KanbanBoardComponent implements OnInit {
   private taskService = inject(TaskService);
   private router = inject(Router);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
 
   columns = signal<Record<TaskStatus, Task[]>>({ backlog: [], todo: [], in_progress: [], done: [] });
   viewFilter: 'all' | 'mine' = 'all';
@@ -212,7 +213,12 @@ export class KanbanBoardComponent implements OnInit {
   }
 
   async loadTasks(): Promise<void> {
-    this.columns.set(await this.taskService.getByStatus(this.viewFilter));
+    try {
+      this.columns.set(await this.taskService.getByStatus(this.viewFilter));
+    } catch (err) {
+      console.error('Failed to load tasks', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load tasks');
+    }
   }
 
   getColumn(status: TaskStatus): Task[] {
@@ -229,7 +235,12 @@ export class KanbanBoardComponent implements OnInit {
     } else {
       transferArrayItem(event.previousContainer.data, event.container.data, event.previousIndex, event.currentIndex);
       const task = event.container.data[event.currentIndex];
-      await this.taskService.updateStatus(task.id, newStatus);
+      try {
+        await this.taskService.updateStatus(task.id, newStatus);
+      } catch (err) {
+        console.error('Failed to update task status', err);
+        this.toast.error(err instanceof Error ? err.message : 'Failed to update task status');
+      }
     }
     this.columns.set({ ...this.columns() });
   }
@@ -243,9 +254,14 @@ export class KanbanBoardComponent implements OnInit {
     task.status = newStatus;
     cols[newStatus] = [...cols[newStatus], task];
     this.columns.set(cols);
-    await this.taskService.updateStatus(task.id, newStatus);
-    const label = this.columnDefs.find(c => c.id === newStatus)?.label || newStatus;
-    this.snackBar.open(`Moved to ${label}`, '', { duration: 2000 });
+    try {
+      await this.taskService.updateStatus(task.id, newStatus);
+      const label = this.columnDefs.find(c => c.id === newStatus)?.label || newStatus;
+      this.toast.success(`Moved to ${label}`);
+    } catch (err) {
+      console.error('Failed to update task status', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to update task status');
+    }
   }
 
   addTask(): void { this.router.navigate(['/tasks/new']); }

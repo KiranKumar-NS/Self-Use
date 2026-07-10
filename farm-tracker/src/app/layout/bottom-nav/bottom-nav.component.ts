@@ -1,4 +1,4 @@
-import { Component, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, output } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 
@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
   selector: 'app-bottom-nav',
   standalone: true,
   imports: [RouterLink, RouterLinkActive, MatIconModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <nav class="bottom-nav" aria-label="Mobile navigation">
       <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">

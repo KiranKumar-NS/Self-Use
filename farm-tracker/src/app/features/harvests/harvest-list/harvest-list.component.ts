@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
@@ -9,19 +9,21 @@ import { LoadingSpinnerComponent } from '../../../shared/components/loading-spin
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { HarvestFormDialogComponent } from '../harvest-form-dialog/harvest-form-dialog.component';
 import { sortData, toggleSortState, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 @Component({
   selector: 'app-harvest-list',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, DatePipe, CurrencyInrPipe,
     LoadingSpinnerComponent, EmptyStateComponent,
-    MatCardModule, MatButtonModule, MatIconModule, MatSnackBarModule,
+    MatCardModule, MatButtonModule, MatIconModule,
   ],
   template: `
     <div class="page-header">
@@ -74,7 +76,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
         <div class="pagination">
           <div class="page-size">
             <span>Rows per page:</span>
-            <select [(ngModel)]="pageSize" (change)="currentPage = 1">
+            <select [(ngModel)]="pageSize" (change)="currentPage.set(1)">
               <option [ngValue]="10">10</option>
               <option [ngValue]="20">20</option>
               <option [ngValue]="50">50</option>
@@ -82,10 +84,10 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
           </div>
           <span class="page-info">{{ pageStartNum() }}-{{ pageEndNum() }} of {{ displayedHarvests().length }}</span>
           <div class="page-buttons">
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" aria-label="First"><mat-icon>first_page</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" aria-label="Prev"><mat-icon>chevron_left</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage >= totalPagesNum()" (click)="currentPage = currentPage + 1" aria-label="Next"><mat-icon>chevron_right</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage >= totalPagesNum()" (click)="currentPage = totalPagesNum()" aria-label="Last"><mat-icon>last_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(1)" aria-label="First"><mat-icon>first_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(currentPage() - 1)" aria-label="Prev"><mat-icon>chevron_left</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() >= totalPagesNum()" (click)="currentPage.set(currentPage() + 1)" aria-label="Next"><mat-icon>chevron_right</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() >= totalPagesNum()" (click)="currentPage.set(totalPagesNum())" aria-label="Last"><mat-icon>last_page</mat-icon></button>
           </div>
         </div>
       </mat-card>
@@ -110,40 +112,40 @@ export class HarvestListComponent implements OnInit {
   private harvestService = inject(HarvestService);
   private router = inject(Router);
   private dialog = inject(MatDialog);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
 
   harvests = signal<Harvest[]>([]);
   loading = signal(true);
 
-  sortColumn = '';
-  sortDirection: SortDirection = 'asc';
-  pageSize = 20;
-  currentPage = 1;
+  sortColumn = signal('');
+  sortDirection = signal<SortDirection>('asc');
+  pageSize = signal(20);
+  currentPage = signal(1);
 
   async ngOnInit(): Promise<void> {
     await this.loadData();
   }
 
   async loadData(): Promise<void> {
-    this.loading.set(true);
-    this.harvests.set(await this.harvestService.getAll());
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      this.harvests.set(await this.harvestService.getAll());
+    }, this.toast);
   }
 
-  displayedHarvests(): Harvest[] {
-    return sortData(this.harvests(), this.sortColumn, this.sortDirection);
-  }
+  displayedHarvests = computed<Harvest[]>(() =>
+    sortData(this.harvests(), this.sortColumn(), this.sortDirection())
+  );
 
-  paginatedHarvests(): Harvest[] { return paginate(this.displayedHarvests(), this.currentPage, this.pageSize); }
-  totalPagesNum(): number { return totalPages(this.displayedHarvests().length, this.pageSize); }
-  pageStartNum(): number { return pageStart(this.displayedHarvests().length, this.currentPage, this.pageSize); }
-  pageEndNum(): number { return pageEnd(this.displayedHarvests().length, this.currentPage, this.pageSize); }
+  paginatedHarvests = computed<Harvest[]>(() => paginate(this.displayedHarvests(), this.currentPage(), this.pageSize()));
+  totalPagesNum = computed<number>(() => totalPages(this.displayedHarvests().length, this.pageSize()));
+  pageStartNum = computed<number>(() => pageStart(this.displayedHarvests().length, this.currentPage(), this.pageSize()));
+  pageEndNum = computed<number>(() => pageEnd(this.displayedHarvests().length, this.currentPage(), this.pageSize()));
 
   toggleSort(column: string): void {
-    const state = toggleSortState({ column: this.sortColumn, direction: this.sortDirection }, column);
-    this.sortColumn = state.column;
-    this.sortDirection = state.direction;
-    this.currentPage = 1;
+    const state = toggleSortState({ column: this.sortColumn(), direction: this.sortDirection() }, column);
+    this.sortColumn.set(state.column);
+    this.sortDirection.set(state.direction);
+    this.currentPage.set(1);
   }
 
   formatStatus(status: string): string {
@@ -156,7 +158,7 @@ export class HarvestListComponent implements OnInit {
     const ref = this.dialog.open(HarvestFormDialogComponent, { width: '90vw', maxWidth: '600px', data: {} });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Harvest recorded', '', { duration: 2500 });
+        this.toast.success('Harvest recorded');
         await this.loadData();
       }
     });
@@ -166,7 +168,7 @@ export class HarvestListComponent implements OnInit {
     const ref = this.dialog.open(HarvestFormDialogComponent, { width: '90vw', maxWidth: '600px', data: { harvest } });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Harvest updated', '', { duration: 2500 });
+        this.toast.success('Harvest updated');
         await this.loadData();
       }
     });

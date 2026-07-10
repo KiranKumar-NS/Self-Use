@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -10,6 +10,7 @@ import { InventoryItemService } from '../../../core/services/inventory-item.serv
 import { InventoryItem } from '../../../core/models/inventory-item.model';
 import { SupplierService } from '../../../core/services/supplier.service';
 import { Supplier } from '../../../core/models/supplier.model';
+import { ToastService } from '../../../core/services/toast.service';
 
 export interface StockMovementDialogData {
   item: InventoryItem;
@@ -19,6 +20,7 @@ export interface StockMovementDialogData {
 @Component({
   selector: 'app-stock-movement-dialog',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
   template: `
     <h2 mat-dialog-title>{{ titleLabel }}</h2>
@@ -106,6 +108,7 @@ export class StockMovementDialogComponent implements OnInit {
   dialogRef = inject(MatDialogRef<StockMovementDialogComponent>);
   private inventoryService = inject(InventoryItemService);
   private supplierService = inject(SupplierService);
+  private toast = inject(ToastService);
 
   saving = signal(false);
   error = signal('');
@@ -124,7 +127,12 @@ export class StockMovementDialogComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     if (this.data.type === 'purchase') {
-      this.suppliers.set(await this.supplierService.getAll());
+      try {
+        this.suppliers.set(await this.supplierService.getAll());
+      } catch (err) {
+        console.error('Failed to load suppliers', err);
+        this.toast.error(err instanceof Error ? err.message : 'Failed to load suppliers');
+      }
     }
   }
 

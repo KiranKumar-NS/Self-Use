@@ -1,8 +1,9 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DatePipe } from '@angular/common';
 import { AnimalService } from '../../../core/services/animal.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { Animal } from '../../../core/models/animal.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
@@ -16,12 +17,13 @@ import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { safeLoad } from '../../../core/utils/async.utils';
 
 @Component({
   selector: 'app-animal-detail',
   standalone: true,
-  imports: [DatePipe, CurrencyInrPipe, LoadingSpinnerComponent, RouterLink, WeightChartComponent, MatCardModule, MatButtonModule, MatIconModule, MatSnackBarModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DatePipe, CurrencyInrPipe, LoadingSpinnerComponent, RouterLink, WeightChartComponent, MatCardModule, MatButtonModule, MatIconModule],
   template: `
     @if (loading()) {
       <app-loading-spinner />
@@ -373,7 +375,7 @@ export class AnimalDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private dialog = inject(MatDialog);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
 
   animal = signal<Animal | null>(null);
   loading = signal(true);
@@ -385,9 +387,9 @@ export class AnimalDetailComponent implements OnInit {
   }
 
   async loadAnimal(): Promise<void> {
-    this.loading.set(true);
-    this.animal.set(await this.animalService.getById(this.animalId));
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      this.animal.set(await this.animalService.getById(this.animalId));
+    }, this.toast);
   }
 
   openSaleDialog(): void {
@@ -398,7 +400,7 @@ export class AnimalDetailComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Sale recorded', '', { duration: 2500 });
+        this.toast.success('Sale recorded');
         await this.loadAnimal();
       }
     });
@@ -417,10 +419,15 @@ export class AnimalDetailComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        const cause = result.inputValue || 'unknown';
-        await this.animalService.recordDeath(this.animalId, new Date(), cause, undefined, cause);
-        this.snackBar.open('Death recorded', '', { duration: 2500 });
-        await this.loadAnimal();
+        try {
+          const cause = result.inputValue || 'unknown';
+          await this.animalService.recordDeath(this.animalId, new Date(), cause, undefined, cause);
+          this.toast.success('Death recorded');
+          await this.loadAnimal();
+        } catch (err) {
+          console.error('Failed to record death', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to record death');
+        }
       }
     });
   }
@@ -431,7 +438,7 @@ export class AnimalDetailComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Vaccination recorded', '', { duration: 2500 });
+        this.toast.success('Vaccination recorded');
         await this.loadAnimal();
       }
     });
@@ -443,7 +450,7 @@ export class AnimalDetailComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Medical record added', '', { duration: 2500 });
+        this.toast.success('Medical record added');
         await this.loadAnimal();
       }
     });
@@ -455,7 +462,7 @@ export class AnimalDetailComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Weight logged', '', { duration: 2500 });
+        this.toast.success('Weight logged');
         await this.loadAnimal();
       }
     });

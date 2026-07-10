@@ -35,7 +35,7 @@ import { authGuard } from './auth.guard';
 describe('authGuard', () => {
   beforeEach(() => {
     mockAuthService = {
-      isLoading: vi.fn(() => false),
+      whenReady: vi.fn(() => Promise.resolve()),
       currentUser: vi.fn(() => null),
       userProfile: vi.fn(() => null),
       logout: vi.fn(),
@@ -47,34 +47,48 @@ describe('authGuard', () => {
     };
   });
 
-  it('should allow authenticated active user', () => {
+  it('should allow authenticated active user', async () => {
     mockAuthService.currentUser.mockReturnValue({ uid: 'test' });
     mockAuthService.userProfile.mockReturnValue({ isActive: true });
 
-    const result = authGuard({} as any, {} as any);
+    const result = await authGuard({} as any, {} as any);
     expect(result).toBe(true);
   });
 
-  it('should redirect unauthenticated user to login', () => {
+  it('should redirect unauthenticated user to login', async () => {
     mockAuthService.currentUser.mockReturnValue(null);
 
-    const result = authGuard({} as any, {} as any);
+    await authGuard({} as any, {} as any);
     expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/auth/login']);
   });
 
-  it('should logout and redirect inactive user', () => {
+  it('should logout and redirect inactive user', async () => {
     mockAuthService.currentUser.mockReturnValue({ uid: 'test' });
     mockAuthService.userProfile.mockReturnValue({ isActive: false });
 
-    authGuard({} as any, {} as any);
+    await authGuard({} as any, {} as any);
     expect(mockAuthService.logout).toHaveBeenCalled();
     expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/auth/login']);
   });
 
-  it('should return a promise when loading', () => {
-    mockAuthService.isLoading.mockReturnValue(true);
+  it('should wait for auth readiness before deciding', async () => {
+    let resolveReady!: () => void;
+    mockAuthService.whenReady.mockReturnValue(new Promise<void>((r) => (resolveReady = r)));
 
-    const result = authGuard({} as any, {} as any);
-    expect(result).toBeInstanceOf(Promise);
+    let settled = false;
+    const promise = (authGuard({} as any, {} as any) as Promise<unknown>).then((r) => {
+      settled = true;
+      return r;
+    });
+
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    mockAuthService.currentUser.mockReturnValue({ uid: 'test' });
+    mockAuthService.userProfile.mockReturnValue({ isActive: true });
+    resolveReady();
+
+    const result = await promise;
+    expect(result).toBe(true);
   });
 });

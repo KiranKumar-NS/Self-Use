@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { InventoryItemService } from '../../../core/services/inventory-item.service';
 import { InventoryItem, ConsumableCategory } from '../../../core/models/inventory-item.model';
@@ -12,8 +12,9 @@ import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatInputModule } from '@angular/material/input';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
@@ -32,10 +33,11 @@ const CATEGORY_LABELS: Record<ConsumableCategory, string> = {
 @Component({
   selector: 'app-consumable-list',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, CurrencyInrPipe,
     LoadingSpinnerComponent, EmptyStateComponent,
-    MatCardModule, MatButtonModule, MatIconModule, MatSnackBarModule, MatInputModule, MatFormFieldModule, MatProgressBarModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatInputModule, MatFormFieldModule, MatProgressBarModule,
   ],
   template: `
     <div class="page-header">
@@ -206,7 +208,7 @@ const CATEGORY_LABELS: Record<ConsumableCategory, string> = {
 export class ConsumableListComponent implements OnInit {
   private inventoryService = inject(InventoryItemService);
   private dialog = inject(MatDialog);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
 
   items = signal<InventoryItem[]>([]);
   loading = signal(true);
@@ -217,9 +219,9 @@ export class ConsumableListComponent implements OnInit {
   }
 
   async loadData(): Promise<void> {
-    this.loading.set(true);
-    this.items.set(await this.inventoryService.getAll());
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      this.items.set(await this.inventoryService.getAll());
+    }, this.toast);
   }
 
   filteredItems(): InventoryItem[] {
@@ -250,7 +252,7 @@ export class ConsumableListComponent implements OnInit {
     const ref = this.dialog.open(ConsumableFormDialogComponent, { width: '90vw', maxWidth: '500px', data: {} });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Item added', '', { duration: 2500 });
+        this.toast.success('Item added');
         await this.loadData();
       }
     });
@@ -260,7 +262,7 @@ export class ConsumableListComponent implements OnInit {
     const ref = this.dialog.open(ConsumableFormDialogComponent, { width: '90vw', maxWidth: '500px', data: { item } });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Item updated', '', { duration: 2500 });
+        this.toast.success('Item updated');
         await this.loadData();
       }
     });
@@ -271,7 +273,7 @@ export class ConsumableListComponent implements OnInit {
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
         const labels = { purchase: 'Purchase recorded', used: 'Usage recorded', wastage: 'Wastage recorded' };
-        this.snackBar.open(labels[type], '', { duration: 2500 });
+        this.toast.success(labels[type]);
         await this.loadData();
       }
     });
@@ -283,8 +285,13 @@ export class ConsumableListComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        await this.inventoryService.softDelete(item.id);
-        this.snackBar.open('Item deleted', '', { duration: 2500 });
+        try {
+          await this.inventoryService.softDelete(item.id);
+          this.toast.success('Item deleted');
+        } catch (err) {
+          console.error('Failed to delete item', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete item');
+        }
         await this.loadData();
       }
     });

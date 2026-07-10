@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -19,6 +19,7 @@ import { Buyer } from '../../../core/models/buyer.model';
 import { InventoryEvent, InventoryEventType } from '../../../core/models/inventory.model';
 import { ANIMAL_EVENT_TYPES } from '../../../core/models/segment.model';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
+import { ToastService } from '../../../core/services/toast.service';
 
 export interface InventoryEventDialogData {
   event?: InventoryEvent; // if provided, edit mode
@@ -27,12 +28,13 @@ export interface InventoryEventDialogData {
 @Component({
   selector: 'app-inventory-event-dialog',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule,
     MatInputModule, MatSelectModule, MatDatepickerModule, MatAutocompleteModule, MatCheckboxModule,
   ],
   template: `
-    <h2 mat-dialog-title>{{ isEdit ? 'Edit' : 'Record' }} Inventory Event</h2>
+    <h2 mat-dialog-title>{{ isEdit() ? 'Edit' : 'Record' }} Inventory Event</h2>
     <mat-dialog-content>
       <div class="form-grid">
         <mat-form-field appearance="outline">
@@ -55,7 +57,7 @@ export interface InventoryEventDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Count</mat-label>
-          <input matInput type="number" [(ngModel)]="count" [min]="eventType === 'adjustment' ? null : 1" step="1" required />
+          <input matInput type="number" [(ngModel)]="count" [min]="eventType() === 'adjustment' ? null : 1" step="1" required />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -82,7 +84,7 @@ export interface InventoryEventDialogData {
         </mat-form-field>
 
         <!-- Link to Animal (sale/death) -->
-        @if (eventType === 'sale' || eventType === 'death') {
+        @if (eventType() === 'sale' || eventType() === 'death') {
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Link to Animal (optional)</mat-label>
             <mat-select [(ngModel)]="linkedAnimalId">
@@ -95,7 +97,7 @@ export interface InventoryEventDialogData {
         }
 
         <!-- Buyer (sale only) -->
-        @if (eventType === 'sale') {
+        @if (eventType() === 'sale') {
           <mat-form-field appearance="outline">
             <mat-label>Buyer (optional)</mat-label>
             <mat-select [(ngModel)]="buyerId">
@@ -113,7 +115,7 @@ export interface InventoryEventDialogData {
         }
 
         <!-- Estimated value (death only - for mortality loss tracking) -->
-        @if (eventType === 'death') {
+        @if (eventType() === 'death') {
           <mat-form-field appearance="outline">
             <mat-label>Estimated Value (optional)</mat-label>
             <input matInput type="number" [(ngModel)]="estimatedValue" min="0"
@@ -122,23 +124,23 @@ export interface InventoryEventDialogData {
         }
 
         <!-- Auto-create animal record (purchase/birth only, not edit mode) -->
-        @if (!isEdit && (eventType === 'purchase' || eventType === 'birth')) {
+        @if (!isEdit() && (eventType() === 'purchase' || eventType() === 'birth')) {
           <div class="full-width animal-record-section">
             <mat-checkbox [(ngModel)]="createAnimalRecord">
               Also create animal record
             </mat-checkbox>
-            <span class="hint">{{ count > 1 ? 'Creates a batch record' : 'Creates an individual record' }}</span>
+            <span class="hint">{{ count() > 1 ? 'Creates a batch record' : 'Creates an individual record' }}</span>
           </div>
 
           @if (createAnimalRecord) {
-            @if (eventType === 'purchase') {
+            @if (eventType() === 'purchase') {
               <mat-form-field appearance="outline">
                 <mat-label>Purchase Price (total)</mat-label>
                 <input matInput type="number" [(ngModel)]="purchasePrice" min="0" />
               </mat-form-field>
             }
 
-            @if (count > 1) {
+            @if (count() > 1) {
               <mat-form-field appearance="outline">
                 <mat-label>Batch Label</mat-label>
                 <input matInput [(ngModel)]="batchLabel" [placeholder]="suggestedBatchLabel()" />
@@ -165,9 +167,9 @@ export interface InventoryEventDialogData {
     <mat-dialog-actions align="end">
       <button mat-button (click)="dialogRef.close()">Cancel</button>
       <button mat-flat-button color="primary"
-        [disabled]="saving() || !segment || !eventType || !count"
+        [disabled]="saving() || !segment() || !eventType() || !count()"
         (click)="save()">
-        {{ saving() ? 'Saving...' : (isEdit ? 'Update' : 'Record Event') }}
+        {{ saving() ? 'Saving...' : (isEdit() ? 'Update' : 'Record Event') }}
       </button>
     </mat-dialog-actions>
   `,
@@ -189,6 +191,7 @@ export class InventoryEventDialogComponent implements OnInit {
   private segmentService = inject(SegmentService);
   animalService = inject(AnimalService);
   private buyerService = inject(BuyerService);
+  private toast = inject(ToastService);
 
   segments = signal<Segment[]>([]);
   activeAnimals = signal<Animal[]>([]);
@@ -197,13 +200,13 @@ export class InventoryEventDialogComponent implements OnInit {
   error = signal('');
 
   today = new Date();
-  isEdit = false;
-  segment = '';
-  eventType: InventoryEventType = 'birth';
-  count = 1;
-  breed = '';
-  date = new Date();
-  note = '';
+  isEdit = signal(false);
+  segment = signal('');
+  eventType = signal<InventoryEventType>('birth');
+  count = signal(1);
+  breed = signal('');
+  date = signal(new Date());
+  note = signal('');
   linkedAnimalId = '';
   buyerId = '';
   salePrice: number | null = null;
@@ -214,23 +217,28 @@ export class InventoryEventDialogComponent implements OnInit {
   animalTag = '';
   animalName = '';
   eventTypeOptions = ANIMAL_EVENT_TYPES;
-  private allBreeds: string[] = [];
+  private allBreeds = signal<string[]>([]);
 
   async ngOnInit(): Promise<void> {
-    const [segs, buyers] = await Promise.all([this.segmentService.getAll(), this.buyerService.getAll()]);
-    this.segments.set(segs);
-    this.buyers.set(buyers);
+    try {
+      const [segs, buyers] = await Promise.all([this.segmentService.getAll(), this.buyerService.getAll()]);
+      this.segments.set(segs);
+      this.buyers.set(buyers);
+    } catch (err) {
+      console.error('Failed to load data', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load data');
+    }
 
     // Pre-fill if editing
     if (this.data?.event) {
-      this.isEdit = true;
+      this.isEdit.set(true);
       const ev = this.data.event;
-      this.segment = ev.segment;
-      this.eventType = ev.eventType;
-      this.count = ev.eventType === 'adjustment' ? ev.count : Math.abs(ev.count);
-      this.breed = ev.breed || '';
-      this.date = ev.date.toDate();
-      this.note = ev.note;
+      this.segment.set(ev.segment);
+      this.eventType.set(ev.eventType);
+      this.count.set(ev.eventType === 'adjustment' ? ev.count : Math.abs(ev.count));
+      this.breed.set(ev.breed || '');
+      this.date.set(ev.date.toDate());
+      this.note.set(ev.note);
       this.loadBreeds(ev.segment);
     }
   }
@@ -240,95 +248,100 @@ export class InventoryEventDialogComponent implements OnInit {
   }
 
   onSegmentChange(): void {
-    this.breed = '';
+    this.breed.set('');
     this.linkedAnimalId = '';
-    if (this.segment) {
-      this.loadBreeds(this.segment);
-      this.loadAnimals(this.segment);
+    if (this.segment()) {
+      this.loadBreeds(this.segment());
+      this.loadAnimals(this.segment());
     }
   }
 
   private async loadAnimals(segmentId: string): Promise<void> {
-    this.activeAnimals.set(await this.animalService.getActiveBySegment(segmentId));
+    try {
+      this.activeAnimals.set(await this.animalService.getActiveBySegment(segmentId));
+    } catch (err) {
+      console.error('Failed to load animals', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load animals');
+    }
   }
 
   private loadBreeds(segmentId: string): void {
     const seg = this.segments().find(s => s.id === segmentId);
-    this.allBreeds = seg?.breeds || [];
+    this.allBreeds.set(seg?.breeds || []);
   }
 
   suggestedBatchLabel(): string {
-    const seg = this.segments().find(s => s.id === this.segment);
+    const seg = this.segments().find(s => s.id === this.segment());
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${seg?.name || 'Batch'} ${monthNames[this.date.getMonth()]}-${this.date.getFullYear()}`;
+    return `${seg?.name || 'Batch'} ${monthNames[this.date().getMonth()]}-${this.date().getFullYear()}`;
   }
 
   filteredBreeds(): string[] {
-    if (!this.breed) return this.allBreeds;
-    const term = this.breed.toLowerCase();
-    return this.allBreeds.filter(b => b.toLowerCase().includes(term));
+    if (!this.breed()) return this.allBreeds();
+    const term = this.breed().toLowerCase();
+    return this.allBreeds().filter(b => b.toLowerCase().includes(term));
   }
 
   async save(): Promise<void> {
     this.saving.set(true);
     this.error.set('');
     try {
-      const seg = this.segments().find(s => s.id === this.segment);
+      const seg = this.segments().find(s => s.id === this.segment());
       const formData = {
-        segment: this.segment,
-        segmentName: seg?.name || this.segment,
-        eventType: this.eventType,
-        count: this.count,
-        breed: this.breed.trim() || undefined,
-        note: this.note,
-        date: this.date,
-        month: getMonthString(this.date),
-        year: getYear(this.date),
-        estimatedValue: this.eventType === 'death' && this.estimatedValue ? this.estimatedValue : undefined,
+        segment: this.segment(),
+        segmentName: seg?.name || this.segment(),
+        eventType: this.eventType(),
+        count: this.count(),
+        breed: this.breed().trim() || undefined,
+        note: this.note(),
+        date: this.date(),
+        month: getMonthString(this.date()),
+        year: getYear(this.date()),
+        estimatedValue: this.eventType() === 'death' && this.estimatedValue ? this.estimatedValue : undefined,
       };
 
-      if (this.isEdit && this.data.event) {
+      if (this.isEdit() && this.data.event) {
         await this.inventoryService.updateEvent(this.data.event.id, this.data.event, formData);
       } else {
         const eventId = await this.inventoryService.recordEvent(formData);
 
         // Auto-create animal record for purchase/birth
-        if (this.createAnimalRecord && (this.eventType === 'purchase' || this.eventType === 'birth')) {
-          const seg = this.segments().find(s => s.id === this.segment);
-          const isBatch = this.count > 1;
+        if (this.createAnimalRecord && (this.eventType() === 'purchase' || this.eventType() === 'birth')) {
+          const seg = this.segments().find(s => s.id === this.segment());
+          const isBatch = this.count() > 1;
           await this.animalService.create({
-            segment: this.segment,
-            segmentName: seg?.name || this.segment,
+            segment: this.segment(),
+            segmentName: seg?.name || this.segment(),
             trackingMode: isBatch ? 'batch' : 'individual',
-            batchSize: this.count,
+            batchSize: this.count(),
             batchLabel: isBatch ? (this.batchLabel.trim() || this.suggestedBatchLabel()) : undefined,
             tag: !isBatch ? this.animalTag.trim() || undefined : undefined,
             name: !isBatch ? this.animalName.trim() || undefined : undefined,
-            breed: this.breed.trim() || undefined,
-            origin: this.eventType as 'purchase' | 'birth',
-            originDate: this.date,
-            purchasePrice: this.eventType === 'purchase' ? (this.purchasePrice || 0) : undefined,
+            breed: this.breed().trim() || undefined,
+            origin: this.eventType() as 'purchase' | 'birth',
+            originDate: this.date(),
+            purchasePrice: this.eventType() === 'purchase' ? (this.purchasePrice || 0) : undefined,
             originInventoryEventId: eventId,
           });
         }
 
         // Update linked animal on sale/death
         if (this.linkedAnimalId) {
-          if (this.eventType === 'sale') {
+          if (this.eventType() === 'sale') {
             const buyer = this.buyerId ? this.buyers().find(b => b.id === this.buyerId) : null;
             await this.animalService.recordSale(this.linkedAnimalId, {
               salePrice: this.salePrice || 0,
               buyerId: this.buyerId || undefined,
               buyerName: buyer?.name || undefined,
               saleInventoryEventId: eventId,
-              date: this.date,
-              countSold: this.count,
+              date: this.date(),
+              countSold: this.count(),
             });
             if (this.buyerId && this.salePrice) {
-              await this.buyerService.updateStats(this.buyerId, this.salePrice, this.count, this.date, this.segment);
+              await this.buyerService.updateStats(this.buyerId, this.salePrice, this.count(), this.date(), this.segment());
             }
-          } else if (this.eventType === 'death') {
-            await this.animalService.recordDeath(this.linkedAnimalId, this.date, this.note, this.count);
+          } else if (this.eventType() === 'death') {
+            await this.animalService.recordDeath(this.linkedAnimalId, this.date(), this.note(), this.count());
           }
         }
       }

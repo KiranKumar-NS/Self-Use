@@ -1,10 +1,11 @@
-import { Component, inject, signal, computed, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { AnimalService } from '../../../core/services/animal.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { SegmentService } from '../../../core/services/segment.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { Animal } from '../../../core/models/animal.model';
 import { Segment } from '../../../core/models/segment.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
@@ -12,6 +13,7 @@ import { LoadingSpinnerComponent } from '../../../shared/components/loading-spin
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
+import { safeLoad } from '../../../core/utils/async.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -19,15 +21,15 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatInputModule } from '@angular/material/input';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 @Component({
   selector: 'app-animal-list',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, DatePipe, CurrencyInrPipe,
     LoadingSpinnerComponent, EmptyStateComponent,
-    MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule, MatSnackBarModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule,
   ],
   template: `
     <!-- Header -->
@@ -68,18 +70,18 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
     <!-- Filters -->
     <mat-card class="filter-card">
-      <div class="filter-header" (click)="filtersOpen = !filtersOpen">
+      <div class="filter-header" (click)="filtersOpen.set(!filtersOpen())">
         <mat-icon>filter_list</mat-icon>
         <span>Filters</span>
         @if (activeFilterCount() > 0) {
           <span class="filter-count">{{ activeFilterCount() }} active</span>
         }
-        @if (filterSegment || filterStatus || searchTerm) {
+        @if (filterSegment() || filterStatus() || searchTerm()) {
           <button mat-button class="clear-btn" (click)="clearFilters(); $event.stopPropagation()">Clear All</button>
         }
-        <mat-icon class="toggle-icon" [class.expanded]="filtersOpen">expand_more</mat-icon>
+        <mat-icon class="toggle-icon" [class.expanded]="filtersOpen()">expand_more</mat-icon>
       </div>
-      <div class="filters" [class.collapsed]="!filtersOpen">
+      <div class="filters" [class.collapsed]="!filtersOpen()">
         <mat-form-field appearance="outline" class="filter-field">
           <mat-label>Segment</mat-label>
           <mat-select [(ngModel)]="filterSegment" (selectionChange)="loadData()">
@@ -103,8 +105,8 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
         <mat-form-field appearance="outline" class="filter-field">
           <mat-label>Search</mat-label>
           <input matInput [(ngModel)]="searchTerm" placeholder="Tag, name, breed..." />
-          @if (searchTerm) {
-            <button matSuffix mat-icon-button (click)="searchTerm = ''"><mat-icon>close</mat-icon></button>
+          @if (searchTerm()) {
+            <button matSuffix mat-icon-button (click)="searchTerm.set('')"><mat-icon>close</mat-icon></button>
           }
         </mat-form-field>
       </div>
@@ -181,7 +183,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
         <div class="pagination">
           <div class="page-size">
             <span>Rows per page:</span>
-            <select [(ngModel)]="pageSize" (change)="currentPage = 1">
+            <select [(ngModel)]="pageSize" (change)="currentPage.set(1)">
               <option [ngValue]="10">10</option>
               <option [ngValue]="20">20</option>
               <option [ngValue]="50">50</option>
@@ -189,10 +191,10 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
           </div>
           <span class="page-info">{{ pageStartNum() }}-{{ pageEndNum() }} of {{ displayedAnimals().length }}</span>
           <div class="page-buttons">
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" aria-label="First page"><mat-icon>first_page</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage >= totalPagesNum()" (click)="currentPage = currentPage + 1" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage >= totalPagesNum()" (click)="currentPage = totalPagesNum()" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(1)" aria-label="First page"><mat-icon>first_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(currentPage() - 1)" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() >= totalPagesNum()" (click)="currentPage.set(currentPage() + 1)" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() >= totalPagesNum()" (click)="currentPage.set(totalPagesNum())" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
           </div>
         </div>
       </mat-card>
@@ -254,28 +256,28 @@ export class AnimalListComponent implements OnInit {
   private segmentService = inject(SegmentService);
   private router = inject(Router);
   private dialog = inject(MatDialog);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
   auth = inject(AuthService);
 
   animals = signal<Animal[]>([]);
   segments = signal<Segment[]>([]);
   loading = signal(true);
 
-  filtersOpen = window.innerWidth > 768;
-  filterSegment = '';
-  filterStatus = '';
-  searchTerm = '';
+  filtersOpen = signal(window.innerWidth > 768);
+  filterSegment = signal('');
+  filterStatus = signal('');
+  searchTerm = signal('');
 
-  sortColumn = '';
-  sortDirection: SortDirection = 'asc';
-  pageSize = 20;
-  currentPage = 1;
+  sortColumn = signal('');
+  sortDirection = signal<SortDirection>('asc');
+  pageSize = signal(20);
+  currentPage = signal(1);
 
   activeFilterCount = computed(() => {
     let count = 0;
-    if (this.filterSegment) count++;
-    if (this.filterStatus) count++;
-    if (this.searchTerm) count++;
+    if (this.filterSegment()) count++;
+    if (this.filterStatus()) count++;
+    if (this.searchTerm()) count++;
     return count;
   });
 
@@ -287,14 +289,14 @@ export class AnimalListComponent implements OnInit {
     return Math.round(sold.reduce((s, a) => s + (a.profit || 0), 0) / sold.length);
   });
 
-  animalSegments(): Segment[] {
-    return this.segments().filter(s => s.segmentType !== 'crop');
-  }
+  animalSegments = computed<Segment[]>(() =>
+    this.segments().filter(s => s.segmentType !== 'crop')
+  );
 
-  displayedAnimals(): Animal[] {
+  displayedAnimals = computed<Animal[]>(() => {
     let filtered = this.animals();
 
-    const term = this.searchTerm.toLowerCase().trim();
+    const term = this.searchTerm().toLowerCase().trim();
     if (term) {
       filtered = filtered.filter(a =>
         a.name?.toLowerCase().includes(term) ||
@@ -306,43 +308,47 @@ export class AnimalListComponent implements OnInit {
       );
     }
 
-    return sortData(filtered, this.sortColumn, this.sortDirection);
-  }
+    return sortData(filtered, this.sortColumn(), this.sortDirection());
+  });
+
+  paginatedAnimals = computed<Animal[]>(() =>
+    paginate(this.displayedAnimals(), this.currentPage(), this.pageSize())
+  );
+
+  totalPagesNum = computed<number>(() => totalPages(this.displayedAnimals().length, this.pageSize()));
+  pageStartNum = computed<number>(() => pageStart(this.displayedAnimals().length, this.currentPage(), this.pageSize()));
+  pageEndNum = computed<number>(() => pageEnd(this.displayedAnimals().length, this.currentPage(), this.pageSize()));
 
   async ngOnInit(): Promise<void> {
-    this.segments.set(await this.segmentService.getAll());
+    try {
+      this.segments.set(await this.segmentService.getAll());
+    } catch (err) {
+      console.error('Failed to load segments', err);
+    }
     await this.loadData();
   }
 
   async loadData(): Promise<void> {
-    this.loading.set(true);
-    this.currentPage = 1;
-    const filters: any = {};
-    if (this.filterSegment) filters.segment = this.filterSegment;
-    if (this.filterStatus) filters.status = this.filterStatus;
-    this.animals.set(await this.animalService.getAll(filters));
-    this.loading.set(false);
+    this.currentPage.set(1);
+    await safeLoad(this.loading, async () => {
+      const filters: any = {};
+      if (this.filterSegment()) filters.segment = this.filterSegment();
+      if (this.filterStatus()) filters.status = this.filterStatus();
+      this.animals.set(await this.animalService.getAll(filters));
+    }, this.toast);
   }
-
-  paginatedAnimals(): Animal[] {
-    return paginate(this.displayedAnimals(), this.currentPage, this.pageSize);
-  }
-
-  totalPagesNum(): number { return totalPages(this.displayedAnimals().length, this.pageSize); }
-  pageStartNum(): number { return pageStart(this.displayedAnimals().length, this.currentPage, this.pageSize); }
-  pageEndNum(): number { return pageEnd(this.displayedAnimals().length, this.currentPage, this.pageSize); }
 
   toggleSort(column: string): void {
-    const state = toggleSortState({ column: this.sortColumn, direction: this.sortDirection }, column);
-    this.sortColumn = state.column;
-    this.sortDirection = state.direction;
-    this.currentPage = 1;
+    const state = toggleSortState({ column: this.sortColumn(), direction: this.sortDirection() }, column);
+    this.sortColumn.set(state.column);
+    this.sortDirection.set(state.direction);
+    this.currentPage.set(1);
   }
 
   clearFilters(): void {
-    this.filterSegment = '';
-    this.filterStatus = '';
-    this.searchTerm = '';
+    this.filterSegment.set('');
+    this.filterStatus.set('');
+    this.searchTerm.set('');
     this.loadData();
   }
 
@@ -362,13 +368,18 @@ export class AnimalListComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        if (result.deleteType === 'hard') {
-          await this.animalService.hardDelete(animal.id);
-        } else {
-          await this.animalService.softDelete(animal.id);
+        try {
+          if (result.deleteType === 'hard') {
+            await this.animalService.hardDelete(animal.id);
+          } else {
+            await this.animalService.softDelete(animal.id);
+          }
+          this.toast.success('Animal deleted');
+          await this.loadData();
+        } catch (err) {
+          console.error('Failed to delete animal', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete animal');
         }
-        this.snackBar.open('Animal deleted', '', { duration: 2500 });
-        await this.loadData();
       }
     });
   }

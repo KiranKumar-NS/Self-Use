@@ -1,4 +1,4 @@
-import { Component, inject, signal, Input, OnChanges, SimpleChanges, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, Input, OnChanges, SimpleChanges, OnInit } from '@angular/core';
 import { Transaction } from '../../../core/models/transaction.model';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { LoanService } from '../../../core/services/loan.service';
@@ -10,6 +10,8 @@ import { Segment } from '../../../core/models/segment.model';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { WhatsappShareDialogComponent, WhatsappShareData, ShareTransaction } from './whatsapp-share-dialog.component';
 import { getMonthRange } from '../../../core/utils/date.utils';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 import { normalizeName } from '../../../core/utils/name.utils';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
@@ -22,6 +24,7 @@ import { MatIconModule } from '@angular/material/icon';
 @Component({
   selector: 'app-analytics-tab',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CurrencyInrPipe, LoadingSpinnerComponent,
     BaseChartDirective,
@@ -171,20 +174,20 @@ import { MatIconModule } from '@angular/material/icon';
       <div class="charts-grid desktop-only">
         <mat-card class="chart-card">
           <h3>Expense by Person</h3>
-          @if (personChartData.labels!.length > 0) {
+          @if (personChartData().labels!.length > 0) {
             <canvas baseChart
-              [datasets]="personChartData.datasets"
-              [labels]="personChartData.labels"
+              [datasets]="personChartData().datasets"
+              [labels]="personChartData().labels"
               [options]="barOptions"
               type="bar"></canvas>
           }
         </mat-card>
         <mat-card class="chart-card">
           <h3>Expense by Category</h3>
-          @if (categoryChartData.labels!.length > 0) {
+          @if (categoryChartData().labels!.length > 0) {
             <canvas baseChart
-              [datasets]="categoryChartData.datasets"
-              [labels]="categoryChartData.labels"
+              [datasets]="categoryChartData().datasets"
+              [labels]="categoryChartData().labels"
               [options]="pieOptions"
               type="doughnut"></canvas>
           }
@@ -206,20 +209,20 @@ import { MatIconModule } from '@angular/material/icon';
       <div class="charts-grid desktop-only">
         <mat-card class="chart-card">
           <h3>Expense by Segment</h3>
-          @if (segmentChartData.labels!.length > 0) {
+          @if (segmentChartData().labels!.length > 0) {
             <canvas baseChart
-              [datasets]="segmentChartData.datasets"
-              [labels]="segmentChartData.labels"
+              [datasets]="segmentChartData().datasets"
+              [labels]="segmentChartData().labels"
               [options]="pieOptions"
               type="doughnut"></canvas>
           }
         </mat-card>
         <mat-card class="chart-card">
           <h3>Monthly Expense Trend</h3>
-          @if (monthlyChartData.labels!.length > 0) {
+          @if (monthlyChartData().labels!.length > 0) {
             <canvas baseChart
-              [datasets]="monthlyChartData.datasets"
-              [labels]="monthlyChartData.labels"
+              [datasets]="monthlyChartData().datasets"
+              [labels]="monthlyChartData().labels"
               [options]="barOptions"
               type="bar"></canvas>
           }
@@ -318,6 +321,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   private userService = inject(UserService);
   private loanService = inject(LoanService);
   private dialog = inject(MatDialog);
+  private toast = inject(ToastService);
 
   loading = signal(true);
   allTransactions = signal<Transaction[]>([]);
@@ -372,10 +376,10 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   private cachedLoans: Loan[] = [];
 
   // Charts
-  segmentChartData: ChartConfiguration<'doughnut'>['data'] = { labels: [], datasets: [] };
-  categoryChartData: ChartConfiguration<'doughnut'>['data'] = { labels: [], datasets: [] };
-  personChartData: ChartConfiguration<'bar'>['data'] = { labels: [], datasets: [] };
-  monthlyChartData: ChartConfiguration<'bar'>['data'] = { labels: [], datasets: [] };
+  segmentChartData = signal<ChartConfiguration<'doughnut'>['data']>({ labels: [], datasets: [] });
+  categoryChartData = signal<ChartConfiguration<'doughnut'>['data']>({ labels: [], datasets: [] });
+  personChartData = signal<ChartConfiguration<'bar'>['data']>({ labels: [], datasets: [] });
+  monthlyChartData = signal<ChartConfiguration<'bar'>['data']>({ labels: [], datasets: [] });
 
   pieOptions: ChartConfiguration<'doughnut'>['options'] = {
     responsive: true,
@@ -393,69 +397,74 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   private colors = ['#4f46e5', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#be123c', '#65a30d'];
 
   async ngOnInit(): Promise<void> {
-    const [segs, users] = await Promise.all([
-      this.segmentService.getAll(),
-      this.userService.getAll(),
-    ]);
-    this.segments.set(segs);
-    // Always show all active segments and users in filter chips
-    this.allSegments.set(segs.filter(s => s.isActive).map(s => s.name).sort());
-    this.allPaidBy.set(users.filter(u => u.isActive).map(u => u.displayName).sort());
+    try {
+      const [segs, users] = await Promise.all([
+        this.segmentService.getAll(),
+        this.userService.getAll(),
+      ]);
+      this.segments.set(segs);
+      // Always show all active segments and users in filter chips
+      this.allSegments.set(segs.filter(s => s.isActive).map(s => s.name).sort());
+      this.allPaidBy.set(users.filter(u => u.isActive).map(u => u.displayName).sort());
+    } catch (err) {
+      console.error('[AnalyticsTab] ngOnInit', err);
+      this.toast.error('Failed to load data. Check your connection and try again.');
+    }
   }
 
   async ngOnChanges(changes: SimpleChanges): Promise<void> {
     if (changes['dateSelection'] && this.dateSelection) {
       this.currentSelection = this.dateSelection;
       await this.loadTransactions();
-      this.loading.set(false);
     }
   }
 
   async loadTransactions(): Promise<void> {
-    this.loading.set(true);
-    // Clear cache on fresh data load
-    this.cachedUidToName = {};
-    this.cachedLoans = [];
-    const filters: any = { type: 'expense' as const };
+    await safeLoad(this.loading, async () => {
+      // Clear cache on fresh data load
+      this.cachedUidToName = {};
+      this.cachedLoans = [];
+      const filters: any = { type: 'expense' as const };
 
-    if (this.currentSelection.mode === 'monthly') {
-      filters.month = this.currentSelection.month;
-    }
+      if (this.currentSelection.mode === 'monthly') {
+        filters.month = this.currentSelection.month;
+      }
 
-    // Fetch transactions AND pre-aggregated summaries in parallel
-    // Summaries give accurate totals; transactions are for breakdowns/charts
-    const [result, summaryTotals] = await Promise.all([
-      this.transactionService.getAll(filters, 200),
-      this.loadSummaryTotals(),
-    ]);
+      // Fetch transactions AND pre-aggregated summaries in parallel
+      // Summaries give accurate totals; transactions are for breakdowns/charts
+      const [result, summaryTotals] = await Promise.all([
+        this.transactionService.getAll(filters, 200),
+        this.loadSummaryTotals(),
+      ]);
 
-    // Set accurate totals from summaries
-    this.summaryTotalExpense.set(summaryTotals.totalExpense);
-    this.summaryTotalIncome.set(summaryTotals.totalIncome);
-    this.summaryNetProfit.set(summaryTotals.netProfit);
+      // Set accurate totals from summaries
+      this.summaryTotalExpense.set(summaryTotals.totalExpense);
+      this.summaryTotalIncome.set(summaryTotals.totalIncome);
+      this.summaryNetProfit.set(summaryTotals.netProfit);
 
-    let txns = result.transactions;
+      let txns = result.transactions;
 
-    if (this.currentSelection.mode === 'custom') {
-      txns = txns.filter(t => t.month >= this.currentSelection.fromMonth! && t.month <= this.currentSelection.toMonth!);
-    }
+      if (this.currentSelection.mode === 'custom') {
+        txns = txns.filter(t => t.month >= this.currentSelection.fromMonth! && t.month <= this.currentSelection.toMonth!);
+      }
 
-    this.allTransactions.set(txns);
+      this.allTransactions.set(txns);
 
-    // Extract unique tags from expense transactions (income tags added below)
-    const tagSet = new Set<string>(txns.flatMap(t => t.tags || []));
+      // Extract unique tags from expense transactions (income tags added below)
+      const tagSet = new Set<string>(txns.flatMap(t => t.tags || []));
 
-    // Merge transaction names with base reference data (adds external/non-registered persons)
-    const txnPersons = txns.map(t => normalizeName(t.paidByName || 'Unknown'));
-    this.allPaidBy.set([...new Set([...this.allPaidBy(), ...txnPersons])].sort());
-    this.allCategories.set([...new Set(txns.map((t) => t.categoryName))].sort());
+      // Merge transaction names with base reference data (adds external/non-registered persons)
+      const txnPersons = txns.map(t => normalizeName(t.paidByName || 'Unknown'));
+      this.allPaidBy.set([...new Set([...this.allPaidBy(), ...txnPersons])].sort());
+      this.allCategories.set([...new Set(txns.map((t) => t.categoryName))].sort());
 
-    this.applyFilters();
-    await this.buildInvestmentSummary(txns);
+      this.applyFilters();
+      await this.buildInvestmentSummary(txns);
 
-    // Merge income tags and set allTags
-    this.incomeTransactions().forEach(t => (t.tags || []).forEach(tag => tagSet.add(tag)));
-    this.allTags.set([...tagSet].sort());
+      // Merge income tags and set allTags
+      this.incomeTransactions().forEach(t => (t.tags || []).forEach(tag => tagSet.add(tag)));
+      this.allTags.set([...tagSet].sort());
+    }, this.toast);
   }
 
   /** Load accurate totals from pre-aggregated monthly/yearly summaries */
@@ -805,27 +814,37 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   }
 
   async exportPdf(): Promise<void> {
-    let months: string[] = [];
-    if (this.currentSelection.mode === 'monthly' && this.currentSelection.month) {
-      months = [this.currentSelection.month];
-    } else if (this.currentSelection.mode === 'custom') {
-      months = getMonthRange(this.currentSelection.fromMonth!, this.currentSelection.toMonth!);
-    }
+    try {
+      let months: string[] = [];
+      if (this.currentSelection.mode === 'monthly' && this.currentSelection.month) {
+        months = [this.currentSelection.month];
+      } else if (this.currentSelection.mode === 'custom') {
+        months = getMonthRange(this.currentSelection.fromMonth!, this.currentSelection.toMonth!);
+      }
 
-    const summaryChunks = [];
-    for (let i = 0; i < months.length; i += 30) {
-      summaryChunks.push(this.summaryService.getForMonths(months.slice(i, i + 30)));
+      const summaryChunks = [];
+      for (let i = 0; i < months.length; i += 30) {
+        summaryChunks.push(this.summaryService.getForMonths(months.slice(i, i + 30)));
+      }
+      const [summaries, exportService] = await Promise.all([
+        Promise.all(summaryChunks).then(chunks => chunks.flat()),
+        this.getExportService(),
+      ]);
+      exportService.exportTransactionsPdf(this.filtered(), summaries, this.rangeLabel);
+    } catch (err) {
+      console.error('[AnalyticsTab] exportPdf', err);
+      this.toast.error('Failed to export PDF report. Check your connection and try again.');
     }
-    const [summaries, exportService] = await Promise.all([
-      Promise.all(summaryChunks).then(chunks => chunks.flat()),
-      this.getExportService(),
-    ]);
-    exportService.exportTransactionsPdf(this.filtered(), summaries, this.rangeLabel);
   }
 
   async exportCsv(): Promise<void> {
-    const exportService = await this.getExportService();
-    exportService.exportTransactionsCsv(this.filtered(), `transactions-${this.rangeLabel}`);
+    try {
+      const exportService = await this.getExportService();
+      exportService.exportTransactionsCsv(this.filtered(), `transactions-${this.rangeLabel}`);
+    } catch (err) {
+      console.error('[AnalyticsTab] exportCsv', err);
+      this.toast.error('Failed to export CSV. Check your connection and try again.');
+    }
   }
 
   shareWhatsApp(): void {
@@ -894,35 +913,35 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     // Segment doughnut
     const segLabels = this.segmentTotals().map((s) => s.name);
     const segData = this.segmentTotals().map((s) => s.total);
-    this.segmentChartData = {
+    this.segmentChartData.set({
       labels: segLabels,
       datasets: [{ data: segData, backgroundColor: this.colors.slice(0, segLabels.length) }],
-    };
+    });
 
     // Category doughnut
     const catMap = new Map<string, number>();
     txns.forEach((t) => catMap.set(t.categoryName, (catMap.get(t.categoryName) || 0) + t.amount));
     const catEntries = Array.from(catMap.entries()).sort((a, b) => b[1] - a[1]);
-    this.categoryChartData = {
+    this.categoryChartData.set({
       labels: catEntries.map(([k]) => k),
       datasets: [{ data: catEntries.map(([, v]) => v), backgroundColor: this.colors.slice(0, catEntries.length) }],
-    };
+    });
 
     // Person bar
     const persons = this.personTotals();
-    this.personChartData = {
+    this.personChartData.set({
       labels: persons.map((p) => p.name),
       datasets: [{
         data: persons.map((p) => p.total),
         backgroundColor: this.colors.slice(0, persons.length),
       }],
-    };
+    });
 
     // Monthly bar
     const monthMap = new Map<string, number>();
     txns.forEach((t) => monthMap.set(t.month, (monthMap.get(t.month) || 0) + t.amount));
     const monthEntries = Array.from(monthMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-    this.monthlyChartData = {
+    this.monthlyChartData.set({
       labels: monthEntries.map(([m]) => {
         const [y, mo] = m.split('-');
         return new Date(parseInt(y), parseInt(mo) - 1).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
@@ -931,6 +950,6 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
         data: monthEntries.map(([, v]) => v),
         backgroundColor: '#4f46e5',
       }],
-    };
+    });
   }
 }

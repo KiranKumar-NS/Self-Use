@@ -11,6 +11,7 @@ import {
   query,
   orderBy,
   where,
+  limit,
   serverTimestamp,
   Timestamp,
 } from '@angular/fire/firestore';
@@ -43,6 +44,7 @@ export class TaskService {
       subtasks: data.subtasks || [],
       tags: data.tags || [],
       kanbanOrder: data.kanbanOrder || Date.now(),
+      isDeleted: false,
       createdBy: user.uid,
       createdByName: user.displayName,
       createdAt: serverTimestamp(),
@@ -54,7 +56,9 @@ export class TaskService {
 
   async getAll(filter: 'all' | 'mine' = 'all'): Promise<Task[]> {
     const uid = this.authService.currentUser()!.uid;
-    const q = query(this.tasksRef, orderBy('kanbanOrder', 'asc'));
+    // isDeleted stays client-side: legacy task docs lack the field, and a
+    // server-side equality filter would exclude them entirely
+    const q = query(this.tasksRef, orderBy('kanbanOrder', 'asc'), limit(300));
     const snapshot = await getDocs(q);
     let tasks = snapshot.docs.map((d) => d.data() as Task).filter(t => !t.isDeleted);
 

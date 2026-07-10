@@ -1,5 +1,7 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { MortalityService, MortalityStats } from '../../../core/services/mortality.service';
+import { ToastService } from '../../../core/services/toast.service';
+import { safeLoad } from '../../../core/utils/async.utils';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { BaseChartDirective } from 'ng2-charts';
@@ -12,6 +14,7 @@ import { Router } from '@angular/router';
 @Component({
   selector: 'app-mortality-dashboard',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CurrencyInrPipe, LoadingSpinnerComponent, BaseChartDirective, MatCardModule, MatIconModule, MatButtonModule],
   template: `
     <div class="page-header">
@@ -138,6 +141,7 @@ import { Router } from '@angular/router';
 export class MortalityDashboardComponent implements OnInit {
   private mortalityService = inject(MortalityService);
   private router = inject(Router);
+  private toast = inject(ToastService);
 
   stats = signal<MortalityStats | null>(null);
   loading = signal(true);
@@ -154,9 +158,9 @@ export class MortalityDashboardComponent implements OnInit {
   };
 
   async ngOnInit(): Promise<void> {
-    this.loading.set(true);
-    this.stats.set(await this.mortalityService.getMortalityStats());
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      this.stats.set(await this.mortalityService.getMortalityStats());
+    }, this.toast);
   }
 
   causeChartData(): ChartConfiguration<'doughnut'>['data'] | null {

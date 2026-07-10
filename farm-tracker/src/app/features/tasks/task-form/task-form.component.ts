@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../core/services/task.service';
@@ -16,17 +16,18 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 
 import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
 import { TagInputComponent } from '../../../shared/components/tag-input/tag-input.component';
 import { TagService } from '../../../core/services/tag.service';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-task-form',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, MatCardModule, MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatButtonModule, MatIconModule, MatDatepickerModule, MatCheckboxModule, MatSnackBarModule,
+    MatButtonModule, MatIconModule, MatDatepickerModule, MatCheckboxModule,
     TagInputComponent,
   ],
   template: `
@@ -104,7 +105,7 @@ import { TagService } from '../../../core/services/tag.service';
         <!-- Subtasks -->
         <div class="subtasks-section">
           <h3>Subtasks / Checklist</h3>
-          @for (sub of subtasks; track sub.id; let i = $index) {
+          @for (sub of subtasks(); track sub.id; let i = $index) {
             <div class="subtask-row">
               <mat-checkbox [(ngModel)]="sub.done" [name]="'sub_' + i" />
               <input class="subtask-input" [(ngModel)]="sub.title" [name]="'subtitle_' + i" />
@@ -120,7 +121,7 @@ import { TagService } from '../../../core/services/tag.service';
         </div>
 
         <!-- Tags -->
-        <app-tag-input [tags]="tags" (tagsChange)="tags = $event" placeholder="e.g. farm, urgent, weekly" />
+        <app-tag-input [tags]="tags()" (tagsChange)="tags.set($event)" placeholder="e.g. farm, urgent, weekly" />
 
         <div class="form-actions">
           <button mat-button type="button" (click)="cancel()">Cancel</button>
@@ -163,7 +164,7 @@ export class TaskFormComponent implements OnInit, HasUnsavedChanges {
   private tagService = inject(TagService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
 
   isEdit = signal(false);
   error = signal('');
@@ -171,60 +172,65 @@ export class TaskFormComponent implements OnInit, HasUnsavedChanges {
   private saved = false;
   users = signal<AppUser[]>([]);
 
-  title = '';
-  description = '';
-  priority: TaskPriority = 'medium';
-  status: TaskStatus = 'todo';
-  visibility: TaskVisibility = 'shared';
-  assignee = '';
-  dueDate: Date | null = null;
-  subtasks: Subtask[] = [];
-  tags: string[] = [];
+  title = signal('');
+  description = signal('');
+  priority = signal<TaskPriority>('medium');
+  status = signal<TaskStatus>('todo');
+  visibility = signal<TaskVisibility>('shared');
+  assignee = signal('');
+  dueDate = signal<Date | null>(null);
+  subtasks = signal<Subtask[]>([]);
+  tags = signal<string[]>([]);
   private editId = '';
 
   async ngOnInit(): Promise<void> {
-    const allUsers = await this.userService.getAll();
-    this.users.set(allUsers.filter((u) => u.isActive));
-    this.assignee = this.authService.currentUser()?.uid || '';
+    try {
+      const allUsers = await this.userService.getAll();
+      this.users.set(allUsers.filter((u) => u.isActive));
+      this.assignee.set(this.authService.currentUser()?.uid || '');
 
-    this.editId = this.route.snapshot.params['id'];
-    if (this.editId) {
-      this.isEdit.set(true);
-      const task = await this.taskService.getById(this.editId);
-      if (task) {
-        this.title = task.title;
-        this.description = task.description;
-        this.priority = task.priority;
-        this.status = task.status;
-        this.visibility = task.visibility || 'shared';
-        this.assignee = task.assignee || '';
-        this.dueDate = task.dueDate?.toDate() || null;
-        this.subtasks = [...task.subtasks];
-        this.tags = [...task.tags];
+      this.editId = this.route.snapshot.params['id'];
+      if (this.editId) {
+        this.isEdit.set(true);
+        const task = await this.taskService.getById(this.editId);
+        if (task) {
+          this.title.set(task.title);
+          this.description.set(task.description);
+          this.priority.set(task.priority);
+          this.status.set(task.status);
+          this.visibility.set(task.visibility || 'shared');
+          this.assignee.set(task.assignee || '');
+          this.dueDate.set(task.dueDate?.toDate() || null);
+          this.subtasks.set([...task.subtasks]);
+          this.tags.set([...task.tags]);
+        }
       }
+    } catch (err) {
+      console.error('Failed to load task data', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load task data');
     }
   }
 
-  addSubtask(): void { this.subtasks.push({ id: Date.now().toString(), title: '', done: false, dueDate: null }); }
-  removeSubtask(i: number): void { this.subtasks.splice(i, 1); }
+  addSubtask(): void { this.subtasks.update((list) => [...list, { id: Date.now().toString(), title: '', done: false, dueDate: null }]); }
+  removeSubtask(i: number): void { this.subtasks.update((list) => list.filter((_, idx) => idx !== i)); }
 
   async save(): Promise<void> {
-    if (!this.title.trim()) { this.error.set('Title is required'); return; }
+    if (!this.title().trim()) { this.error.set('Title is required'); return; }
     this.error.set('');
     this.saving.set(true);
 
-    const assigneeUser = this.users().find((u) => u.uid === this.assignee);
+    const assigneeUser = this.users().find((u) => u.uid === this.assignee());
     const data: Partial<Task> = {
-      title: this.title,
-      description: this.description,
-      priority: this.priority,
-      status: this.status,
-      visibility: this.visibility,
-      assignee: this.assignee || null,
+      title: this.title(),
+      description: this.description(),
+      priority: this.priority(),
+      status: this.status(),
+      visibility: this.visibility(),
+      assignee: this.assignee() || null,
       assigneeName: assigneeUser?.displayName || null,
-      dueDate: this.dueDate ? Timestamp.fromDate(this.dueDate) : null,
-      subtasks: this.subtasks.filter((s) => s.title.trim()),
-      tags: this.tags,
+      dueDate: this.dueDate() ? Timestamp.fromDate(this.dueDate()!) : null,
+      subtasks: this.subtasks().filter((s) => s.title.trim()),
+      tags: this.tags(),
     };
 
     try {
@@ -233,12 +239,8 @@ export class TaskFormComponent implements OnInit, HasUnsavedChanges {
       } else {
         await this.taskService.create(data);
       }
-      if (this.tags.length) this.tagService.addTags(this.tags);
-      this.snackBar.open(
-        this.isEdit() ? 'Task updated' : 'Task created',
-        '',
-        { duration: 2500 }
-      );
+      if (this.tags().length) this.tagService.addTags(this.tags());
+      this.toast.success(this.isEdit() ? 'Task updated' : 'Task created');
       this.saved = true;
       this.router.navigate(['/tasks']);
     } catch (err: any) {
@@ -251,7 +253,7 @@ export class TaskFormComponent implements OnInit, HasUnsavedChanges {
   hasUnsavedChanges(): boolean {
     if (this.saved) return false;
     if (this.isEdit()) return true;
-    return this.title.trim() !== '';
+    return this.title().trim() !== '';
   }
 
   cancel(): void { this.router.navigate(['/tasks']); }

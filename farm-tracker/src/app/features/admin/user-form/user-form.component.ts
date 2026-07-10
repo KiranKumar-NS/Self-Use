@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { UserService } from '../../../core/services/user.service';
@@ -6,6 +6,8 @@ import { SegmentService } from '../../../core/services/segment.service';
 import { AppUser, UserRole } from '../../../core/models/user.model';
 import { Segment } from '../../../core/models/segment.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -15,6 +17,7 @@ import { MatButtonModule } from '@angular/material/button';
 @Component({
   selector: 'app-user-form',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, LoadingSpinnerComponent,
     MatCardModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule,
@@ -50,7 +53,7 @@ import { MatButtonModule } from '@angular/material/button';
             </mat-select>
           </mat-form-field>
 
-          @if (role === 'manager') {
+          @if (role() === 'manager') {
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>Assigned Segments</mat-label>
               <mat-select [(ngModel)]="assignedSegments" name="segments" multiple>
@@ -89,6 +92,7 @@ export class UserFormComponent implements OnInit {
   private segmentService = inject(SegmentService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private toast = inject(ToastService);
 
   loading = signal(true);
   saving = signal(false);
@@ -96,25 +100,26 @@ export class UserFormComponent implements OnInit {
   success = signal('');
   segments = signal<Segment[]>([]);
 
-  displayName = '';
-  role: UserRole = 'manager';
-  assignedSegments: string[] = [];
+  displayName = signal('');
+  role = signal<UserRole>('manager');
+  assignedSegments = signal<string[]>([]);
   private userId = '';
 
   async ngOnInit(): Promise<void> {
-    this.userId = this.route.snapshot.params['id'];
-    const [user, segments] = await Promise.all([
-      this.userService.getById(this.userId),
-      this.segmentService.getAll(),
-    ]);
+    await safeLoad(this.loading, async () => {
+      this.userId = this.route.snapshot.params['id'];
+      const [user, segments] = await Promise.all([
+        this.userService.getById(this.userId),
+        this.segmentService.getAll(),
+      ]);
 
-    this.segments.set(segments);
-    if (user) {
-      this.displayName = user.displayName;
-      this.role = user.role;
-      this.assignedSegments = user.assignedSegments || [];
-    }
-    this.loading.set(false);
+      this.segments.set(segments);
+      if (user) {
+        this.displayName.set(user.displayName);
+        this.role.set(user.role);
+        this.assignedSegments.set(user.assignedSegments || []);
+      }
+    }, this.toast);
   }
 
   async save(): Promise<void> {
@@ -123,11 +128,11 @@ export class UserFormComponent implements OnInit {
     this.saving.set(true);
     try {
       await this.userService.update(this.userId, {
-        displayName: this.displayName,
-        role: this.role,
-        assignedSegments: this.role === 'admin'
+        displayName: this.displayName(),
+        role: this.role(),
+        assignedSegments: this.role() === 'admin'
           ? this.segments().map((s) => s.id)
-          : this.assignedSegments,
+          : this.assignedSegments(),
       });
       this.success.set('User updated successfully!');
     } catch (err: any) {

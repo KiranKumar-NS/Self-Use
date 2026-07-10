@@ -34,7 +34,7 @@ import { roleGuard } from './role.guard';
 describe('roleGuard', () => {
   beforeEach(() => {
     mockAuthService = {
-      isLoading: vi.fn(() => false),
+      whenReady: vi.fn(() => Promise.resolve()),
       userRole: vi.fn(() => null),
     };
 
@@ -44,38 +44,52 @@ describe('roleGuard', () => {
     };
   });
 
-  it('should allow user with matching role', () => {
+  it('should allow user with matching role', async () => {
     mockAuthService.userRole.mockReturnValue('admin');
     const guard = roleGuard(['admin', 'manager']);
-    const result = guard({} as any, {} as any);
+    const result = await guard({} as any, {} as any);
     expect(result).toBe(true);
   });
 
-  it('should allow manager role when permitted', () => {
+  it('should allow manager role when permitted', async () => {
     mockAuthService.userRole.mockReturnValue('manager');
     const guard = roleGuard(['admin', 'manager']);
-    const result = guard({} as any, {} as any);
+    const result = await guard({} as any, {} as any);
     expect(result).toBe(true);
   });
 
-  it('should redirect viewer to dashboard when not allowed', () => {
+  it('should redirect viewer to dashboard when not allowed', async () => {
     mockAuthService.userRole.mockReturnValue('viewer');
     const guard = roleGuard(['admin', 'manager']);
-    guard({} as any, {} as any);
+    await guard({} as any, {} as any);
     expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/dashboard']);
   });
 
-  it('should redirect when role is null', () => {
+  it('should redirect when role is null', async () => {
     mockAuthService.userRole.mockReturnValue(null);
     const guard = roleGuard(['admin']);
-    guard({} as any, {} as any);
+    await guard({} as any, {} as any);
     expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/dashboard']);
   });
 
-  it('should return promise when loading', () => {
-    mockAuthService.isLoading.mockReturnValue(true);
+  it('should wait for auth readiness before checking the role', async () => {
+    let resolveReady!: () => void;
+    mockAuthService.whenReady.mockReturnValue(new Promise<void>((r) => (resolveReady = r)));
+
     const guard = roleGuard(['admin']);
-    const result = guard({} as any, {} as any);
-    expect(result).toBeInstanceOf(Promise);
+    let settled = false;
+    const promise = (guard({} as any, {} as any) as Promise<unknown>).then((r) => {
+      settled = true;
+      return r;
+    });
+
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    mockAuthService.userRole.mockReturnValue('admin');
+    resolveReady();
+
+    const result = await promise;
+    expect(result).toBe(true);
   });
 });

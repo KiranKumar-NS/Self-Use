@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { NotificationService } from '../../core/services/notification.service';
 import { MatButtonModule } from '@angular/material/button';
@@ -10,6 +10,7 @@ import { MatMenuModule } from '@angular/material/menu';
   selector: 'app-notification-bell',
   standalone: true,
   imports: [MatButtonModule, MatIconModule, MatBadgeModule, MatMenuModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <button mat-icon-button [matMenuTriggerFor]="menu"
       [matBadge]="notificationService.unreadCount() || null"

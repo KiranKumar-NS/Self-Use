@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { Router } from '@angular/router';
 import { Transaction } from '../../../core/models/transaction.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
@@ -9,6 +9,7 @@ import { MatButtonModule } from '@angular/material/button';
 @Component({
   selector: 'app-recent-transactions',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CurrencyInrPipe, RelativeTimePipe, MatCardModule, MatButtonModule],
   template: `
     <mat-card class="recent-card">

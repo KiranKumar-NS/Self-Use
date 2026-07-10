@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 
@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
   selector: 'app-not-found',
   standalone: true,
   imports: [RouterLink, MatButtonModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="not-found">
       <h1>404</h1>

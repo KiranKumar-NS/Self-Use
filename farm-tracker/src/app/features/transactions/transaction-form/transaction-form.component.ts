@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TransactionService } from '../../../core/services/transaction.service';
@@ -26,19 +26,21 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 
 import { MatRadioModule } from '@angular/material/radio';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
 import { TagInputComponent } from '../../../shared/components/tag-input/tag-input.component';
 import { TagService } from '../../../core/services/tag.service';
+import { ToastService } from '../../../core/services/toast.service';
+import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
 
 @Component({
   selector: 'app-transaction-form',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, MatCardModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatDatepickerModule, MatRadioModule,
-    MatIconModule, MatCheckboxModule, MatAutocompleteModule, MatSnackBarModule,
-    TagInputComponent,
+    MatIconModule, MatCheckboxModule, MatAutocompleteModule,
+    TagInputComponent, ErrorMessagePipe,
   ],
   template: `
     <div class="page-header">
@@ -61,16 +63,16 @@ import { TagService } from '../../../core/services/tag.service';
         <div class="form-row">
           <mat-form-field appearance="outline">
             <mat-label>Date</mat-label>
-            <input matInput [matDatepicker]="picker" [(ngModel)]="date" name="date" [max]="today" required />
+            <input matInput [matDatepicker]="picker" [(ngModel)]="date" name="date" [max]="today" required #dateModel="ngModel" />
             <mat-datepicker-toggle matIconSuffix [for]="picker" />
             <mat-datepicker #picker />
-            <mat-error>Required</mat-error>
+            <mat-error>{{ dateModel.errors | errorMessage }}</mat-error>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
             <mat-label>Amount (INR)</mat-label>
-            <input matInput type="number" [(ngModel)]="amount" name="amount" required min="1" />
-            <mat-error>Required</mat-error>
+            <input matInput type="number" [(ngModel)]="amount" name="amount" required min="1" #amountModel="ngModel" />
+            <mat-error>{{ amountModel.errors | errorMessage }}</mat-error>
           </mat-form-field>
         </div>
 
@@ -99,27 +101,35 @@ import { TagService } from '../../../core/services/tag.service';
             <mat-label>Rate/Unit (₹)</mat-label>
             <input matInput type="number" [(ngModel)]="ratePerUnit" name="ratePerUnit" min="0" step="0.5" (ngModelChange)="onQtyRateChange()" />
           </mat-form-field>
+
+          @if (type === 'income') {
+            <mat-form-field appearance="outline">
+              <mat-label>Product (optional)</mat-label>
+              <input matInput [(ngModel)]="product" name="product" placeholder="e.g. tomato, goat, milk" />
+              <mat-hint>Enables product-wise sales & market-rate analytics</mat-hint>
+            </mat-form-field>
+          }
         </div>
 
         <div class="form-row">
           <mat-form-field appearance="outline">
             <mat-label>Segment</mat-label>
-            <mat-select [(ngModel)]="segment" name="segment" required (selectionChange)="loadActiveAnimals()">
+            <mat-select [(ngModel)]="segment" name="segment" required (selectionChange)="loadActiveAnimals()" #segmentModel="ngModel">
               @for (seg of filteredSegments(); track seg.id) {
                 <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
               }
             </mat-select>
-            <mat-error>Required</mat-error>
+            <mat-error>{{ segmentModel.errors | errorMessage }}</mat-error>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
             <mat-label>Category</mat-label>
-            <mat-select [(ngModel)]="category" name="category" required>
+            <mat-select [(ngModel)]="category" name="category" required #categoryModel="ngModel">
               @for (cat of filteredCategories(); track cat.id) {
                 <mat-option [value]="cat.id">{{ cat.name }}</mat-option>
               }
             </mat-select>
-            <mat-error>Required</mat-error>
+            <mat-error>{{ categoryModel.errors | errorMessage }}</mat-error>
           </mat-form-field>
         </div>
 
@@ -306,8 +316,9 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   animalService = inject(AnimalService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
   private tagService = inject(TagService);
+  private cdr = inject(ChangeDetectorRef);
 
   isEdit = signal(false);
   error = signal('');
@@ -321,6 +332,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   quantity: number | null = null;
   unit: SaleUnit | '' = '';
   ratePerUnit: number | null = null;
+  product = '';
   segment = '';
   category = '';
   description = '';
@@ -349,6 +361,19 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   animalSplitMode: 'equal' | 'by_days' = 'equal';
 
   async ngOnInit(): Promise<void> {
+    try {
+      await this.loadFormData();
+    } catch (err) {
+      console.error('Failed to load transaction form data', err);
+      this.toast.error('Failed to load data. Check your connection and try again.');
+    } finally {
+      // Form model fields are plain properties populated after awaits; with
+      // OnPush we must explicitly mark the view for check once loaded.
+      this.cdr.markForCheck();
+    }
+  }
+
+  private async loadFormData(): Promise<void> {
     const [categories, segments, users] = await Promise.all([
       this.categoryService.getAll(),
       this.segmentService.getAll(),
@@ -400,6 +425,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         this.quantity = txn.quantity || null;
         this.unit = txn.unit || '';
         this.ratePerUnit = txn.ratePerUnit || null;
+        this.product = txn.product || '';
         this.paymentMethod = txn.paymentMethod || 'cash';
         this.paymentStatus = txn.paymentStatus || 'received';
         this.expensePaymentStatus = txn.expensePaymentStatus || 'paid';
@@ -542,6 +568,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         quantity: this.quantity || undefined,
         unit: this.unit || undefined,
         ratePerUnit: this.ratePerUnit || undefined,
+        product: (this.type === 'income' && this.product.trim()) ? this.product.trim() : undefined,
         category: this.category,
         categoryName: selectedCategory?.name || this.category,
         segment: this.segment,
@@ -602,15 +629,14 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         }
       }
       if (this.tags.length) this.tagService.addTags(this.tags);
-      this.snackBar.open(
-        this.isEdit() ? 'Transaction updated' : 'Transaction created',
-        '',
-        { duration: 2500 }
-      );
+      this.toast.success(this.isEdit() ? 'Transaction updated' : 'Transaction created');
       this.saved = true;
       this.router.navigate(['/transactions']);
-    } catch (err: any) {
-      this.error.set(err.message || 'Failed to save transaction');
+    } catch (err) {
+      console.error('Failed to save transaction', err);
+      const message = err instanceof Error ? err.message : 'Failed to save transaction';
+      this.error.set(message);
+      this.toast.error(message);
     } finally {
       this.saving.set(false);
     }

@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
@@ -13,16 +13,18 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-harvest-detail',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, DatePipe, RouterLink, CurrencyInrPipe, LoadingSpinnerComponent,
-    MatCardModule, MatButtonModule, MatIconModule, MatProgressBarModule, MatSnackBarModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatProgressBarModule,
     MatFormFieldModule, MatInputModule,
   ],
   template: `
@@ -230,7 +232,7 @@ export class HarvestDetailComponent implements OnInit {
   private router = inject(Router);
   private harvestService = inject(HarvestService);
   private dialog = inject(MatDialog);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
 
   harvest = signal<Harvest | null>(null);
   loading = signal(true);
@@ -248,9 +250,9 @@ export class HarvestDetailComponent implements OnInit {
   }
 
   async loadData(id: string): Promise<void> {
-    this.loading.set(true);
-    this.harvest.set(await this.harvestService.getById(id));
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      this.harvest.set(await this.harvestService.getById(id));
+    }, this.toast);
   }
 
   soldPercentage(): number {
@@ -269,7 +271,7 @@ export class HarvestDetailComponent implements OnInit {
     const ref = this.dialog.open(HarvestSaleDialogComponent, { width: '90vw', maxWidth: '500px', data: { harvest: h } });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Sale recorded', '', { duration: 2500 });
+        this.toast.success('Sale recorded');
         await this.loadData(h.id);
       }
     });
@@ -294,11 +296,16 @@ export class HarvestDetailComponent implements OnInit {
       if (result?.confirmed && result?.inputValue) {
         const qty = parseFloat(result.inputValue);
         if (qty > 0 && qty <= h.remainingQuantity) {
-          await this.harvestService.recordWastage(h.id, qty);
-          this.snackBar.open('Wastage recorded', '', { duration: 2500 });
+          try {
+            await this.harvestService.recordWastage(h.id, qty);
+            this.toast.success('Wastage recorded');
+          } catch (err) {
+            console.error('Failed to record wastage', err);
+            this.toast.error(err instanceof Error ? err.message : 'Failed to record wastage');
+          }
           await this.loadData(h.id);
         } else {
-          this.snackBar.open('Invalid quantity', '', { duration: 2500 });
+          this.toast.error('Invalid quantity');
         }
       }
     });

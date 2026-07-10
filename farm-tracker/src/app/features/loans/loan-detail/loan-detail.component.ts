@@ -1,10 +1,12 @@
-import { Component, inject, signal, OnInit, computed } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, OnInit, computed } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { LoanService, LiveEMIEntry } from '../../../core/services/loan.service';
 import { UserService } from '../../../core/services/user.service';
 import { SegmentService } from '../../../core/services/segment.service';
 import { CategoryService } from '../../../core/services/category.service';
+import { ToastService } from '../../../core/services/toast.service';
+import { safeLoad } from '../../../core/utils/async.utils';
 import { Loan, Repayment } from '../../../core/models/loan.model';
 import { Transaction } from '../../../core/models/transaction.model';
 import { AppUser } from '../../../core/models/user.model';
@@ -28,6 +30,7 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
 @Component({
   selector: 'app-loan-detail',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, DatePipe, TitleCasePipe, DecimalPipe, RouterLink, CurrencyInrPipe, LoadingSpinnerComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
@@ -893,6 +896,8 @@ export class LoanDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private dialog = inject(MatDialog);
+  private toast = inject(ToastService);
+  private cdr = inject(ChangeDetectorRef);
 
   loan = signal<Loan | null>(null);
   repayments = signal<Repayment[]>([]);
@@ -957,46 +962,53 @@ export class LoanDetailComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.loanId = this.route.snapshot.params['id'];
-    const [users, segments, categories] = await Promise.all([
-      this.userService.getAll(),
-      this.segmentService.getAll(),
-      this.categoryService.getByType('expense'),
-    ]);
-    this.activeUsers.set(users.filter(u => u.isActive));
-    this.allSegments.set(segments);
-    this.expenseCategories.set(categories);
-    this.repaymentPaidBy = this.activeUsers()[0]?.uid || '';
+    try {
+      const [users, segments, categories] = await Promise.all([
+        this.userService.getAll(),
+        this.segmentService.getAll(),
+        this.categoryService.getByType('expense'),
+      ]);
+      this.activeUsers.set(users.filter(u => u.isActive));
+      this.allSegments.set(segments);
+      this.expenseCategories.set(categories);
+      this.repaymentPaidBy = this.activeUsers()[0]?.uid || '';
+    } catch (err) {
+      console.error('Failed to load loan reference data', err);
+      this.toast.error('Failed to load data. Check your connection and try again.');
+    }
     await this.loadData();
   }
 
   async loadData(): Promise<void> {
-    this.loading.set(true);
-    const loan = await this.loanService.getById(this.loanId);
-    this.loan.set(loan);
+    await safeLoad(this.loading, async () => {
+      const loan = await this.loanService.getById(this.loanId);
+      this.loan.set(loan);
 
-    const repayments = await this.loanService.getRepayments(this.loanId);
-    this.repayments.set(repayments);
+      const repayments = await this.loanService.getRepayments(this.loanId);
+      this.repayments.set(repayments);
 
-    if (loan?.loanCategory === 'formal') {
-      const [txns, simpleLoans] = await Promise.all([
-        this.loanService.getLinkedTransactions(this.loanId),
-        this.loanService.getLinkedSimpleLoans(this.loanId),
-      ]);
-      this.linkedTransactions.set(txns as Transaction[]);
-      this.linkedSimpleLoans.set(simpleLoans);
+      if (loan?.loanCategory === 'formal') {
+        const [txns, simpleLoans] = await Promise.all([
+          this.loanService.getLinkedTransactions(this.loanId),
+          this.loanService.getLinkedSimpleLoans(this.loanId),
+        ]);
+        this.linkedTransactions.set(txns as Transaction[]);
+        this.linkedSimpleLoans.set(simpleLoans);
 
-      if (loan.repaymentType === 'emi') {
-        this.emiSchedule.set(this.loanService.buildLiveEMISchedule(loan, repayments));
+        if (loan.repaymentType === 'emi') {
+          this.emiSchedule.set(this.loanService.buildLiveEMISchedule(loan, repayments));
+        }
+
+        // Pre-fill defaults
+        this.preCloseAmount = loan.outstandingBalance ?? loan.balanceRemaining;
+        this.closePrincipalAmount = loan.outstandingBalance ?? loan.balanceRemaining;
+        this.interestPayAmount = loan.interestAmountPerPeriod ?? 0;
+        this.paymentSegment = loan.segment;
       }
-
-      // Pre-fill defaults
-      this.preCloseAmount = loan.outstandingBalance ?? loan.balanceRemaining;
-      this.closePrincipalAmount = loan.outstandingBalance ?? loan.balanceRemaining;
-      this.interestPayAmount = loan.interestAmountPerPeriod ?? 0;
-      this.paymentSegment = loan.segment;
-    }
-
-    this.loading.set(false);
+    }, this.toast);
+    // Plain form-model fields ([(ngModel)] plumbing) are populated after
+    // awaits above; with OnPush the view must be explicitly marked for check.
+    this.cdr.markForCheck();
   }
 
   // --- Simple loan actions (existing) ---
@@ -1156,8 +1168,13 @@ export class LoanDetailComponent implements OnInit {
   }
 
   async releaseCollateral(itemId: string): Promise<void> {
-    await this.loanService.releaseCollateral(this.loanId, itemId, new Date());
-    await this.loadData();
+    try {
+      await this.loanService.releaseCollateral(this.loanId, itemId, new Date());
+      await this.loadData();
+    } catch (err) {
+      console.error('Failed to release collateral', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to save');
+    }
   }
 
   balanceTransfer(): void {
@@ -1170,7 +1187,15 @@ export class LoanDetailComponent implements OnInit {
       data: { title: 'Permanently Delete Loan', message: `Delete loan to ${loan.personName} (${loan.amount.toLocaleString('en-IN')})? This cannot be undone.`, confirmText: 'Delete Forever' } as ConfirmDialogData,
     });
     ref.afterClosed().subscribe(async (confirmed) => {
-      if (confirmed) { await this.loanService.hardDelete(this.loanId); this.router.navigate(['/loans']); }
+      if (confirmed) {
+        try {
+          await this.loanService.hardDelete(this.loanId);
+          this.router.navigate(['/loans']);
+        } catch (err) {
+          console.error('Failed to delete loan', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete loan');
+        }
+      }
     });
   }
 

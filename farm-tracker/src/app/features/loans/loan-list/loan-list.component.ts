@@ -1,9 +1,10 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { LoanService } from '../../../core/services/loan.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { SegmentService } from '../../../core/services/segment.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { Loan } from '../../../core/models/loan.model';
 import { Segment } from '../../../core/models/segment.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
@@ -11,6 +12,7 @@ import { LoadingSpinnerComponent } from '../../../shared/components/loading-spin
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
+import { safeLoad } from '../../../core/utils/async.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -23,6 +25,7 @@ import { DatePipe } from '@angular/common';
 @Component({
   selector: 'app-loan-list',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, DatePipe, CurrencyInrPipe, LoadingSpinnerComponent, EmptyStateComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatChipsModule,
@@ -36,12 +39,12 @@ import { DatePipe } from '@angular/common';
     </div>
 
     <mat-card class="filter-card">
-      <div class="filter-header" (click)="filtersOpen = !filtersOpen">
+      <div class="filter-header" (click)="filtersOpen.set(!filtersOpen())">
         <mat-icon>filter_list</mat-icon>
         <span>Filters</span>
-        <mat-icon class="toggle-icon" [class.expanded]="filtersOpen">expand_more</mat-icon>
+        <mat-icon class="toggle-icon" [class.expanded]="filtersOpen()">expand_more</mat-icon>
       </div>
-      <div class="filters" [class.collapsed]="!filtersOpen">
+      <div class="filters" [class.collapsed]="!filtersOpen()">
         <mat-form-field appearance="outline">
           <mat-label>Type</mat-label>
           <mat-select [(ngModel)]="filterType" (selectionChange)="loadData()">
@@ -143,7 +146,7 @@ import { DatePipe } from '@angular/common';
         <div class="pagination">
           <div class="page-size">
             <span>Rows per page:</span>
-            <select [(ngModel)]="pageSize" (change)="currentPage = 1">
+            <select [(ngModel)]="pageSize" (change)="currentPage.set(1)">
               <option [ngValue]="10">10</option>
               <option [ngValue]="20">20</option>
               <option [ngValue]="50">50</option>
@@ -151,10 +154,10 @@ import { DatePipe } from '@angular/common';
           </div>
           <span class="page-info">{{ pageStart() }}–{{ pageEnd() }} of {{ sortedLoans().length }}</span>
           <div class="page-buttons">
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" aria-label="First page"><mat-icon>first_page</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(1)" aria-label="First page"><mat-icon>first_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(currentPage() - 1)" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() >= totalPages()" (click)="currentPage.set(currentPage() + 1)" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() >= totalPages()" (click)="currentPage.set(totalPages())" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
           </div>
         </div>
       </div>
@@ -211,6 +214,7 @@ export class LoanListComponent implements OnInit {
   private segmentService = inject(SegmentService);
   private router = inject(Router);
   private dialog = inject(MatDialog);
+  private toast = inject(ToastService);
   auth = inject(AuthService);
 
   loans = signal<Loan[]>([]);
@@ -219,71 +223,74 @@ export class LoanListComponent implements OnInit {
   hasMore = signal(false);
   private lastDoc: any = null;
 
-  filtersOpen = window.innerWidth > 768;
-  filterType = '';
-  filterStatus = '';
-  filterSegment = '';
+  filtersOpen = signal(window.innerWidth > 768);
+  filterType = signal('');
+  filterStatus = signal('');
+  filterSegment = signal('');
 
-  sortColumn = '';
-  sortDirection: SortDirection = 'asc';
-  pageSize = 20;
-  currentPage = 1;
+  sortColumn = signal('');
+  sortDirection = signal<SortDirection>('asc');
+  pageSize = signal(20);
+  currentPage = signal(1);
+
+  sortedLoans = computed<Loan[]>(() => sortData(this.loans(), this.sortColumn(), this.sortDirection()));
+
+  paginatedLoans = computed<Loan[]>(() => paginate(this.sortedLoans(), this.currentPage(), this.pageSize()));
+
+  totalPages = computed<number>(() => totalPages(this.sortedLoans().length, this.pageSize()));
+  pageStart = computed<number>(() => pageStart(this.sortedLoans().length, this.currentPage(), this.pageSize()));
+  pageEnd = computed<number>(() => pageEnd(this.sortedLoans().length, this.currentPage(), this.pageSize()));
 
   async ngOnInit(): Promise<void> {
-    this.segments.set(await this.segmentService.getAll());
+    try {
+      this.segments.set(await this.segmentService.getAll());
+    } catch (err) {
+      console.error('Failed to load segments', err);
+    }
     await this.loadData();
   }
 
-  async loadData(): Promise<void> {
-    this.loading.set(true);
-    this.lastDoc = null;
-    this.currentPage = 1;
+  private buildFilters(): any {
     const filters: any = {};
-    if (this.filterType) filters.type = this.filterType;
-    if (this.filterStatus) filters.repaymentStatus = this.filterStatus;
-    if (this.filterSegment) filters.segment = this.filterSegment;
+    if (this.filterType()) filters.type = this.filterType();
+    if (this.filterStatus()) filters.repaymentStatus = this.filterStatus();
+    if (this.filterSegment()) filters.segment = this.filterSegment();
+    return filters;
+  }
 
-    const result = await this.loanService.getAll(filters, 20);
-    this.loans.set(result.loans);
-    this.lastDoc = result.lastDoc;
-    this.hasMore.set(result.loans.length === 20);
-    this.loading.set(false);
+  async loadData(): Promise<void> {
+    this.lastDoc = null;
+    this.currentPage.set(1);
+    await safeLoad(this.loading, async () => {
+      const result = await this.loanService.getAll(this.buildFilters(), 20);
+      this.loans.set(result.loans);
+      this.lastDoc = result.lastDoc;
+      this.hasMore.set(result.loans.length === 20);
+    }, this.toast);
   }
 
   async loadMore(): Promise<void> {
     if (this.loading()) return;
-    const filters: any = {};
-    if (this.filterType) filters.type = this.filterType;
-    if (this.filterStatus) filters.repaymentStatus = this.filterStatus;
-    if (this.filterSegment) filters.segment = this.filterSegment;
-
-    const result = await this.loanService.getAll(filters, 20, this.lastDoc);
-    this.loans.update((prev) => [...prev, ...result.loans]);
-    this.lastDoc = result.lastDoc;
-    this.hasMore.set(result.loans.length === 20);
+    try {
+      const result = await this.loanService.getAll(this.buildFilters(), 20, this.lastDoc);
+      this.loans.update((prev) => [...prev, ...result.loans]);
+      this.lastDoc = result.lastDoc;
+      this.hasMore.set(result.loans.length === 20);
+    } catch (err) {
+      console.error('Failed to load more loans', err);
+      this.toast.error('Failed to load more. Please try again.');
+    }
   }
-
-  sortedLoans(): Loan[] {
-    return sortData(this.loans(), this.sortColumn, this.sortDirection);
-  }
-
-  paginatedLoans(): Loan[] {
-    return paginate(this.sortedLoans(), this.currentPage, this.pageSize);
-  }
-
-  totalPages(): number { return totalPages(this.sortedLoans().length, this.pageSize); }
-  pageStart(): number { return pageStart(this.sortedLoans().length, this.currentPage, this.pageSize); }
-  pageEnd(): number { return pageEnd(this.sortedLoans().length, this.currentPage, this.pageSize); }
 
   toggleSort(column: string): void {
-    const state = toggleSortState({ column: this.sortColumn, direction: this.sortDirection }, column);
-    this.sortColumn = state.column;
-    this.sortDirection = state.direction;
-    this.currentPage = 1;
+    const state = toggleSortState({ column: this.sortColumn(), direction: this.sortDirection() }, column);
+    this.sortColumn.set(state.column);
+    this.sortDirection.set(state.direction);
+    this.currentPage.set(1);
   }
 
   getSortIcon(column: string): string {
-    return getSortIndicator(this.sortColumn, this.sortDirection, column);
+    return getSortIndicator(this.sortColumn(), this.sortDirection(), column);
   }
 
   addNew(): void { this.router.navigate(['/loans/new']); }
@@ -296,12 +303,17 @@ export class LoanListComponent implements OnInit {
     });
     dialogRef.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        if (result.deleteType === 'hard') {
-          await this.loanService.hardDelete(loan.id);
-        } else {
-          await this.loanService.softDelete(loan.id);
+        try {
+          if (result.deleteType === 'hard') {
+            await this.loanService.hardDelete(loan.id);
+          } else {
+            await this.loanService.softDelete(loan.id);
+          }
+          await this.loadData();
+        } catch (err) {
+          console.error('Failed to delete entry', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete entry');
         }
-        await this.loadData();
       }
     });
   }

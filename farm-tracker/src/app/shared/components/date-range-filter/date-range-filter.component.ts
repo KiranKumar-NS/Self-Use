@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -23,18 +23,19 @@ interface YearOption { value: number; }
   selector: 'app-date-range-filter',
   standalone: true,
   imports: [FormsModule, MatButtonModule, MatButtonToggleModule, MatIconModule, MatFormFieldModule, MatSelectModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="date-range-filter">
-      <mat-button-toggle-group [value]="viewMode" (change)="onViewModeChange($event.value)" class="view-toggle">
+      <mat-button-toggle-group [value]="viewMode()" (change)="onViewModeChange($event.value)" class="view-toggle">
         <mat-button-toggle value="monthly">Monthly</mat-button-toggle>
         <mat-button-toggle value="custom">Custom</mat-button-toggle>
         <mat-button-toggle value="alltime">All Time</mat-button-toggle>
       </mat-button-toggle-group>
 
-      @if (viewMode === 'monthly') {
+      @if (viewMode() === 'monthly') {
         <div class="month-nav">
           <button mat-icon-button (click)="prevMonth()" aria-label="Previous month"><mat-icon>chevron_left</mat-icon></button>
-          <span class="month-label">{{ currentMonthLabel }}</span>
+          <span class="month-label">{{ currentMonthLabel() }}</span>
           <button mat-icon-button (click)="nextMonth()" [disabled]="isCurrentMonth()" aria-label="Next month"><mat-icon>chevron_right</mat-icon></button>
           @if (!isCurrentMonth()) {
             <button mat-button class="today-btn" (click)="goToCurrentMonth()">Today</button>
@@ -42,21 +43,21 @@ interface YearOption { value: number; }
         </div>
       }
 
-      @if (viewMode === 'custom') {
+      @if (viewMode() === 'custom') {
         <div class="range-picker">
           <div class="range-group">
             <span class="range-group-label">From</span>
             <mat-form-field appearance="outline" class="year-field">
               <mat-label>Year</mat-label>
-              <mat-select [value]="fromYear" (selectionChange)="fromYear = $event.value; emitCustomRange()">
-                @for (y of years; track y.value) {
+              <mat-select [value]="fromYear()" (selectionChange)="fromYear.set($event.value); emitCustomRange()">
+                @for (y of years(); track y.value) {
                   <mat-option [value]="y.value">{{ y.value }}</mat-option>
                 }
               </mat-select>
             </mat-form-field>
             <mat-form-field appearance="outline" class="month-field">
               <mat-label>Month</mat-label>
-              <mat-select [value]="fromMonthNum" (selectionChange)="fromMonthNum = $event.value; emitCustomRange()">
+              <mat-select [value]="fromMonthNum()" (selectionChange)="fromMonthNum.set($event.value); emitCustomRange()">
                 @for (m of months; track m.value) {
                   <mat-option [value]="m.value">{{ m.label }}</mat-option>
                 }
@@ -67,15 +68,15 @@ interface YearOption { value: number; }
             <span class="range-group-label">To</span>
             <mat-form-field appearance="outline" class="year-field">
               <mat-label>Year</mat-label>
-              <mat-select [value]="toYear" (selectionChange)="toYear = $event.value; emitCustomRange()">
-                @for (y of years; track y.value) {
+              <mat-select [value]="toYear()" (selectionChange)="toYear.set($event.value); emitCustomRange()">
+                @for (y of years(); track y.value) {
                   <mat-option [value]="y.value">{{ y.value }}</mat-option>
                 }
               </mat-select>
             </mat-form-field>
             <mat-form-field appearance="outline" class="month-field">
               <mat-label>Month</mat-label>
-              <mat-select [value]="toMonthNum" (selectionChange)="toMonthNum = $event.value; emitCustomRange()">
+              <mat-select [value]="toMonthNum()" (selectionChange)="toMonthNum.set($event.value); emitCustomRange()">
                 @for (m of months; track m.value) {
                   <mat-option [value]="m.value">{{ m.label }}</mat-option>
                 }
@@ -85,7 +86,7 @@ interface YearOption { value: number; }
         </div>
       }
 
-      @if (viewMode === 'alltime') {
+      @if (viewMode() === 'alltime') {
         <div class="alltime-label">
           <span class="month-label">All Time</span>
         </div>
@@ -119,21 +120,21 @@ interface YearOption { value: number; }
   `],
 })
 export class DateRangeFilterComponent implements OnInit {
-  @Input() defaultMode: ViewMode = 'alltime';
-  @Input() startYear = 2024;
-  @Output() rangeChange = new EventEmitter<DateRangeSelection>();
+  defaultMode = input<ViewMode>('alltime');
+  startYear = input(2024);
+  rangeChange = output<DateRangeSelection>();
 
-  viewMode: ViewMode = 'monthly';
-  selectedMonth = getMonthString(new Date());
-  currentMonthLabel = '';
+  viewMode = signal<ViewMode>('monthly');
+  selectedMonth = signal(getMonthString(new Date()));
+  currentMonthLabel = signal('');
 
   // Custom range state
-  fromYear = new Date().getFullYear();
-  fromMonthNum = 1;
-  toYear = new Date().getFullYear();
-  toMonthNum = new Date().getMonth() + 1;
+  fromYear = signal(new Date().getFullYear());
+  fromMonthNum = signal(1);
+  toYear = signal(new Date().getFullYear());
+  toMonthNum = signal(new Date().getMonth() + 1);
 
-  years: YearOption[] = [];
+  years = signal<YearOption[]>([]);
   months: MonthOption[] = [
     { value: 1, label: 'January' },
     { value: 2, label: 'February' },
@@ -150,37 +151,37 @@ export class DateRangeFilterComponent implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.viewMode = this.defaultMode;
+    this.viewMode.set(this.defaultMode());
     this.buildYears();
-    this.currentMonthLabel = getMonthName(this.selectedMonth);
+    this.currentMonthLabel.set(getMonthName(this.selectedMonth()));
     this.emit();
   }
 
   onViewModeChange(mode: ViewMode): void {
-    this.viewMode = mode;
+    this.viewMode.set(mode);
     this.emit();
   }
 
   prevMonth(): void {
-    this.selectedMonth = shiftMonth(this.selectedMonth, -1);
-    this.currentMonthLabel = getMonthName(this.selectedMonth);
+    this.selectedMonth.set(shiftMonth(this.selectedMonth(), -1));
+    this.currentMonthLabel.set(getMonthName(this.selectedMonth()));
     this.emit();
   }
 
   nextMonth(): void {
-    this.selectedMonth = shiftMonth(this.selectedMonth, 1);
-    this.currentMonthLabel = getMonthName(this.selectedMonth);
+    this.selectedMonth.set(shiftMonth(this.selectedMonth(), 1));
+    this.currentMonthLabel.set(getMonthName(this.selectedMonth()));
     this.emit();
   }
 
   goToCurrentMonth(): void {
-    this.selectedMonth = getMonthString(new Date());
-    this.currentMonthLabel = getMonthName(this.selectedMonth);
+    this.selectedMonth.set(getMonthString(new Date()));
+    this.currentMonthLabel.set(getMonthName(this.selectedMonth()));
     this.emit();
   }
 
   isCurrentMonth(): boolean {
-    return this.selectedMonth === getMonthString(new Date());
+    return this.selectedMonth() === getMonthString(new Date());
   }
 
   emitCustomRange(): void {
@@ -188,11 +189,11 @@ export class DateRangeFilterComponent implements OnInit {
   }
 
   private emit(): void {
-    if (this.viewMode === 'monthly') {
-      this.rangeChange.emit({ mode: 'monthly', month: this.selectedMonth });
-    } else if (this.viewMode === 'custom') {
-      const from = `${this.fromYear}-${this.fromMonthNum.toString().padStart(2, '0')}`;
-      const to = `${this.toYear}-${this.toMonthNum.toString().padStart(2, '0')}`;
+    if (this.viewMode() === 'monthly') {
+      this.rangeChange.emit({ mode: 'monthly', month: this.selectedMonth() });
+    } else if (this.viewMode() === 'custom') {
+      const from = `${this.fromYear()}-${this.fromMonthNum().toString().padStart(2, '0')}`;
+      const to = `${this.toYear()}-${this.toMonthNum().toString().padStart(2, '0')}`;
       this.rangeChange.emit({ mode: 'custom', fromMonth: from, toMonth: to });
     } else {
       this.rangeChange.emit({ mode: 'alltime' });
@@ -201,9 +202,10 @@ export class DateRangeFilterComponent implements OnInit {
 
   private buildYears(): void {
     const currentYear = new Date().getFullYear();
-    this.years = [];
-    for (let y = currentYear; y >= this.startYear; y--) {
-      this.years.push({ value: y });
+    const years: YearOption[] = [];
+    for (let y = currentYear; y >= this.startYear(); y--) {
+      years.push({ value: y });
     }
+    this.years.set(years);
   }
 }

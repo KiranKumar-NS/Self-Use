@@ -16,15 +16,17 @@ import {
   increment,
   Timestamp,
   DocumentSnapshot,
-  arrayUnion,
 } from '@angular/fire/firestore';
 import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatus, ExpensePaymentStatus } from '../models/transaction.model';
 import { AuthService } from './auth.service';
+import { SummaryService } from './summary.service';
+import { appendTimelineCapped } from '../utils/timeline.utils';
 
 @Injectable({ providedIn: 'root' })
 export class TransactionService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
+  private summaryService = inject(SummaryService);
 
   /** Build a unique summary key per person. Custom "other" names get normalized and sanitized. */
   private personSummaryKey(paidBy: string | null | undefined, paidByName: string | null | undefined, fallbackUid: string): string {
@@ -35,6 +37,11 @@ export class TransactionService {
       return normalized.replace(/[.$/\[\]#]/g, '_');
     }
     return paidBy || fallbackUid;
+  }
+
+  /** Sanitize a product key for use in Firestore map field paths */
+  private productKey(product: string): string {
+    return product.trim().toLowerCase().replace(/[.$/\[\]#]/g, '_');
   }
 
   /**
@@ -85,6 +92,13 @@ export class TransactionService {
       }
     }
 
+    // Reverse per-product sales aggregates
+    if (txn.type === 'income' && txn.product && txn.quantity) {
+      const key = this.productKey(txn.product);
+      fields[`salesQtyByProduct.${key}`] = increment(-txn.quantity);
+      fields[`salesAmtByProduct.${key}`] = increment(-txn.amount);
+    }
+
     return fields;
   }
 
@@ -120,6 +134,14 @@ export class TransactionService {
     }
     if (data.type === 'expense' && (data.expensePaymentStatus || 'paid') === 'pending') {
       fields['pendingExpense'] = increment(data.amount);
+    }
+
+    // Per-product sales aggregates — enables product-level sales comparison
+    // and market-rate analytics without raw transaction scans
+    if (data.type === 'income' && data.product && data.quantity) {
+      const key = this.productKey(data.product);
+      fields[`salesQtyByProduct.${key}`] = increment(data.quantity);
+      fields[`salesAmtByProduct.${key}`] = increment(data.amount);
     }
 
     return fields;
@@ -175,6 +197,7 @@ export class TransactionService {
     if (data.linkedBuyerId) txnDoc['linkedBuyerId'] = data.linkedBuyerId;
     if (data.linkedBuyerName) txnDoc['linkedBuyerName'] = data.linkedBuyerName;
     if (data.tags?.length) txnDoc['tags'] = data.tags;
+    if (data.product) txnDoc['product'] = this.productKey(data.product);
 
     if (data.type === 'income') {
       txnDoc['paymentStatus'] = data.paymentStatus || 'received';
@@ -208,6 +231,7 @@ export class TransactionService {
     batch.set(yearlySummaryRef, yearlySummaryData, { merge: true });
 
     await batch.commit();
+    this.summaryService.clearCache();
     return txnRef.id;
   }
 
@@ -342,7 +366,12 @@ export class TransactionService {
         transaction.set(oldSummaryRef, combined, { merge: true });
       } else {
         // Different summary docs — safe to do two separate sets
-        transaction.set(oldSummaryRef, reversalFields, { merge: true });
+        transaction.set(oldSummaryRef, {
+          ...reversalFields,
+          month: oldData.month,
+          year: oldData.year,
+          segment: oldData.segment,
+        }, { merge: true });
 
         const newSummaryRef = doc(this.firestore, 'monthlySummaries', newSummaryId);
         transaction.set(newSummaryRef, {
@@ -426,7 +455,7 @@ export class TransactionService {
 
         transaction.set(oldYearlyRef, combined, { merge: true });
       } else {
-        const oldYearlyReversal = { ...reversalFields };
+        const oldYearlyReversal = { ...reversalFields, year: oldData.year, segment: oldData.segment };
         transaction.set(oldYearlyRef, oldYearlyReversal, { merge: true });
 
         const newYearlyRef = doc(this.firestore, 'yearlySummaries', newYearlyId);
@@ -456,9 +485,10 @@ export class TransactionService {
         unit: data.unit || null,
         ratePerUnit: data.ratePerUnit || null,
         tags: data.tags || [],
+        product: data.product ? this.productKey(data.product) : null,
         month: data.month,
         year: data.year,
-        timeline: arrayUnion({
+        timeline: appendTimelineCapped(oldData.timeline, {
           action: 'updated',
           by: user.uid,
           byName: user.displayName,
@@ -474,6 +504,7 @@ export class TransactionService {
 
       transaction.update(txnRef, txnUpdates);
     });
+    this.summaryService.clearCache();
   }
 
   async softDelete(id: string): Promise<void> {
@@ -494,16 +525,25 @@ export class TransactionService {
 
       const summaryId = `${oldData.month}-${oldData.segment}`;
       const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
-      transaction.set(summaryRef, reversalFields, { merge: true });
+      transaction.set(summaryRef, {
+        ...reversalFields,
+        month: oldData.month,
+        year: oldData.year,
+        segment: oldData.segment,
+      }, { merge: true });
 
       // Reverse yearly summary
       const yearlyId = `${oldData.year}-${oldData.segment}`;
       const yearlyRef = doc(this.firestore, 'yearlySummaries', yearlyId);
-      transaction.set(yearlyRef, reversalFields, { merge: true });
+      transaction.set(yearlyRef, {
+        ...reversalFields,
+        year: oldData.year,
+        segment: oldData.segment,
+      }, { merge: true });
 
       transaction.update(txnRef, {
         isDeleted: true,
-        timeline: arrayUnion({
+        timeline: appendTimelineCapped(oldData.timeline, {
           action: 'deleted',
           by: user.uid,
           byName: user.displayName,
@@ -511,6 +551,7 @@ export class TransactionService {
         }),
       });
     });
+    this.summaryService.clearCache();
   }
 
   async hardDelete(id: string): Promise<void> {
@@ -530,15 +571,25 @@ export class TransactionService {
 
       const summaryId = `${oldData.month}-${oldData.segment}`;
       const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
-      transaction.set(summaryRef, reversalFields, { merge: true });
+      transaction.set(summaryRef, {
+        ...reversalFields,
+        month: oldData.month,
+        year: oldData.year,
+        segment: oldData.segment,
+      }, { merge: true });
 
       // Reverse yearly summary
       const yearlyId = `${oldData.year}-${oldData.segment}`;
       const yearlyRef = doc(this.firestore, 'yearlySummaries', yearlyId);
-      transaction.set(yearlyRef, reversalFields, { merge: true });
+      transaction.set(yearlyRef, {
+        ...reversalFields,
+        year: oldData.year,
+        segment: oldData.segment,
+      }, { merge: true });
 
       transaction.delete(txnRef);
     });
+    this.summaryService.clearCache();
   }
 
   async updateDistribution(transactionId: string, distributions: DistributionEntry[]): Promise<void> {
@@ -575,8 +626,8 @@ export class TransactionService {
       // Update transaction
       transaction.update(txnRef, {
         distributions: nonZero,
-        timeline: arrayUnion({
-          action: 'distributed' as const,
+        timeline: appendTimelineCapped(oldData.timeline, {
+          action: 'distributed',
           by: user.uid,
           byName: user.displayName,
           at: Timestamp.now(),
@@ -611,13 +662,23 @@ export class TransactionService {
 
       summaryUpdates['totalDistributed'] = increment(newTotalDist - oldTotalDist);
 
-      transaction.set(summaryRef, summaryUpdates, { merge: true });
+      transaction.set(summaryRef, {
+        ...summaryUpdates,
+        month: oldData.month,
+        year: oldData.year,
+        segment: oldData.segment,
+      }, { merge: true });
 
       // Also update yearly summary distribution totals
       const yearlyId = `${oldData.year}-${oldData.segment}`;
       const yearlyRef = doc(this.firestore, 'yearlySummaries', yearlyId);
-      transaction.set(yearlyRef, summaryUpdates, { merge: true });
+      transaction.set(yearlyRef, {
+        ...summaryUpdates,
+        year: oldData.year,
+        segment: oldData.segment,
+      }, { merge: true });
     });
+    this.summaryService.clearCache();
   }
 
   async markAsReceived(transactionId: string): Promise<void> {
@@ -634,7 +695,7 @@ export class TransactionService {
 
       transaction.update(txnRef, {
         paymentStatus: 'received' as IncomePaymentStatus,
-        timeline: arrayUnion({
+        timeline: appendTimelineCapped(oldData.timeline, {
           action: 'payment_received',
           by: user.uid,
           byName: user.displayName,
@@ -646,10 +707,20 @@ export class TransactionService {
       const summaryId = `${oldData.month}-${oldData.segment}`;
       const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
       const pendingUpdate = { pendingIncome: increment(-oldData.amount), updatedAt: serverTimestamp() };
-      transaction.set(summaryRef, pendingUpdate, { merge: true });
+      transaction.set(summaryRef, {
+        ...pendingUpdate,
+        month: oldData.month,
+        year: oldData.year,
+        segment: oldData.segment,
+      }, { merge: true });
       const yearlyRef = doc(this.firestore, 'yearlySummaries', `${oldData.year}-${oldData.segment}`);
-      transaction.set(yearlyRef, pendingUpdate, { merge: true });
+      transaction.set(yearlyRef, {
+        ...pendingUpdate,
+        year: oldData.year,
+        segment: oldData.segment,
+      }, { merge: true });
     });
+    this.summaryService.clearCache();
   }
 
   async markAsPaid(transactionId: string): Promise<void> {
@@ -666,7 +737,7 @@ export class TransactionService {
 
       transaction.update(txnRef, {
         expensePaymentStatus: 'paid' as ExpensePaymentStatus,
-        timeline: arrayUnion({
+        timeline: appendTimelineCapped(oldData.timeline, {
           action: 'payment_paid',
           by: user.uid,
           byName: user.displayName,
@@ -677,14 +748,31 @@ export class TransactionService {
       const summaryId = `${oldData.month}-${oldData.segment}`;
       const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
       const pendingUpdate = { pendingExpense: increment(-oldData.amount), updatedAt: serverTimestamp() };
-      transaction.set(summaryRef, pendingUpdate, { merge: true });
+      transaction.set(summaryRef, {
+        ...pendingUpdate,
+        month: oldData.month,
+        year: oldData.year,
+        segment: oldData.segment,
+      }, { merge: true });
       const yearlyRef = doc(this.firestore, 'yearlySummaries', `${oldData.year}-${oldData.segment}`);
-      transaction.set(yearlyRef, pendingUpdate, { merge: true });
+      transaction.set(yearlyRef, {
+        ...pendingUpdate,
+        year: oldData.year,
+        segment: oldData.segment,
+      }, { merge: true });
     });
+    this.summaryService.clearCache();
   }
 
   async getAll(
-    filters: { type?: 'expense' | 'income'; segment?: string; month?: string; createdBy?: string } = {},
+    filters: {
+      type?: 'expense' | 'income';
+      segment?: string;
+      month?: string;
+      createdBy?: string;
+      dateFrom?: Date;
+      dateTo?: Date;
+    } = {},
     pageSize = 20,
     lastDoc?: DocumentSnapshot
   ): Promise<{ transactions: Transaction[]; lastDoc: DocumentSnapshot | null }> {
@@ -698,6 +786,8 @@ export class TransactionService {
     if (filters.segment) constraints.push(where('segment', '==', filters.segment));
     if (filters.month) constraints.push(where('month', '==', filters.month));
     if (filters.createdBy) constraints.push(where('createdBy', '==', filters.createdBy));
+    if (filters.dateFrom) constraints.push(where('date', '>=', Timestamp.fromDate(filters.dateFrom)));
+    if (filters.dateTo) constraints.push(where('date', '<=', Timestamp.fromDate(filters.dateTo)));
     if (lastDoc) constraints.push(startAfter(lastDoc));
 
     const q = query(collection(this.firestore, 'transactions'), ...constraints);

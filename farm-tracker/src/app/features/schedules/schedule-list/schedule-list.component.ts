@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ScheduleService } from '../../../core/services/schedule.service';
@@ -15,17 +15,19 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-schedule-list',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DatePipe, FormsModule, NgTemplateOutlet,
     LoadingSpinnerComponent, EmptyStateComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatChipsModule, MatMenuModule,
-    MatSlideToggleModule, MatSnackBarModule, MatTabsModule,
+    MatSlideToggleModule, MatTabsModule,
   ],
   template: `
     <div class="page-header">
@@ -169,7 +171,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 export class ScheduleListComponent implements OnInit {
   private scheduleService = inject(ScheduleService);
   private dialog = inject(MatDialog);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
 
   schedules = signal<Schedule[]>([]);
   loading = signal(true);
@@ -179,9 +181,9 @@ export class ScheduleListComponent implements OnInit {
   }
 
   async loadData(): Promise<void> {
-    this.loading.set(true);
-    this.schedules.set(await this.scheduleService.getAll());
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      this.schedules.set(await this.scheduleService.getAll());
+    }, this.toast);
   }
 
   recurringSchedules(): Schedule[] {
@@ -204,7 +206,7 @@ export class ScheduleListComponent implements OnInit {
     const ref = this.dialog.open(RecurringSetupDialogComponent, { width: '90vw', maxWidth: '550px', data: {} });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Recurring transaction created', '', { duration: 2500 });
+        this.toast.success('Recurring transaction created');
         await this.loadData();
       }
     });
@@ -214,7 +216,7 @@ export class ScheduleListComponent implements OnInit {
     const ref = this.dialog.open(ReminderFormDialogComponent, { width: '90vw', maxWidth: '550px', data: {} });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Reminder created', '', { duration: 2500 });
+        this.toast.success('Reminder created');
         await this.loadData();
       }
     });
@@ -225,7 +227,7 @@ export class ScheduleListComponent implements OnInit {
       const ref = this.dialog.open(RecurringSetupDialogComponent, { width: '90vw', maxWidth: '550px', data: { schedule } });
       ref.afterClosed().subscribe(async (result) => {
         if (result) {
-          this.snackBar.open('Schedule updated', '', { duration: 2500 });
+          this.toast.success('Schedule updated');
           await this.loadData();
         }
       });
@@ -233,7 +235,7 @@ export class ScheduleListComponent implements OnInit {
       const ref = this.dialog.open(ReminderFormDialogComponent, { width: '90vw', maxWidth: '550px', data: { schedule } });
       ref.afterClosed().subscribe(async (result) => {
         if (result) {
-          this.snackBar.open('Reminder updated', '', { duration: 2500 });
+          this.toast.success('Reminder updated');
           await this.loadData();
         }
       });
@@ -241,8 +243,13 @@ export class ScheduleListComponent implements OnInit {
   }
 
   async toggleActive(schedule: Schedule): Promise<void> {
-    await this.scheduleService.toggleActive(schedule.id, !schedule.isActive);
-    this.snackBar.open(schedule.isActive ? 'Schedule paused' : 'Schedule activated', '', { duration: 2000 });
+    try {
+      await this.scheduleService.toggleActive(schedule.id, !schedule.isActive);
+      this.toast.success(schedule.isActive ? 'Schedule paused' : 'Schedule activated');
+    } catch (err) {
+      console.error('Failed to update schedule', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to update schedule');
+    }
     await this.loadData();
   }
 
@@ -252,8 +259,13 @@ export class ScheduleListComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        await this.scheduleService.softDelete(schedule.id);
-        this.snackBar.open('Schedule deleted', '', { duration: 2500 });
+        try {
+          await this.scheduleService.softDelete(schedule.id);
+          this.toast.success('Schedule deleted');
+        } catch (err) {
+          console.error('Failed to delete schedule', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete schedule');
+        }
         await this.loadData();
       }
     });

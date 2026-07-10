@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit, ViewChild } from '@angular/core';
 import { SummaryService } from '../../../core/services/summary.service';
 import { UserService } from '../../../core/services/user.service';
 import { LoanService } from '../../../core/services/loan.service';
@@ -7,6 +7,8 @@ import { AnimalService } from '../../../core/services/animal.service';
 import { BuyerService } from '../../../core/services/buyer.service';
 import { MonthlySummary } from '../../../core/models/monthly-summary.model';
 import { getMonthName, getLast6MonthsFrom, getMonthRange } from '../../../core/utils/date.utils';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { SummaryCardsComponent } from '../summary-cards/summary-cards.component';
@@ -24,6 +26,7 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
 @Component({
   selector: 'app-dashboard-page',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     SummaryCardsComponent, SegmentBreakdownChartComponent, MonthlyTrendChartComponent,
     LoanSummaryWidgetComponent, BudgetWidgetComponent, StockWidgetComponent,
@@ -75,7 +78,7 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
         </div>
 
         <div class="widgets-row">
-          @if (currentMode === 'monthly') {
+          @if (currentMode() === 'monthly') {
             <app-budget-widget [segments]="segments()" [summaries]="currentMonthSummaries()" />
           }
           <app-loan-summary-widget
@@ -92,7 +95,7 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
 
         <hr class="section-divider" />
 
-        <app-analytics-tab [dateSelection]="currentSelection!" />
+        <app-analytics-tab [dateSelection]="currentSelection()!" />
       }
     }
   `,
@@ -125,11 +128,12 @@ export class DashboardPageComponent implements OnInit {
   private inventoryService = inject(InventoryService);
   private animalService = inject(AnimalService);
   private buyerService = inject(BuyerService);
+  private toast = inject(ToastService);
 
   initialLoading = signal(true);
   loading = signal(false);
-  currentMode: 'monthly' | 'custom' | 'alltime' = 'monthly';
-  currentSelection: DateRangeSelection | null = null;
+  currentMode = signal<'monthly' | 'custom' | 'alltime'>('monthly');
+  currentSelection = signal<DateRangeSelection | null>(null);
   trendTitle = signal('Monthly Trend (Last 6 Months)');
   currentMonthSummaries = signal<MonthlySummary[]>([]);
   totals = signal({ totalIncome: 0, totalExpense: 0, netProfit: 0, pendingIncome: 0 });
@@ -144,19 +148,20 @@ export class DashboardPageComponent implements OnInit {
   private pendingSelection: DateRangeSelection | null = null;
 
   async ngOnInit(): Promise<void> {
-    const [users, loans, segs] = await Promise.all([
-      this.userService.getAll(),
-      this.loanService.getSummary(),
-      this.segmentService.getAll(),
-    ]);
-    this.segments.set(segs);
-    for (const u of users) this.nameMap[u.uid] = u.displayName;
-    this.loanSummary.set(loans);
-    this.initialized = true;
-    this.initialLoading.set(false);
+    await safeLoad(this.initialLoading, async () => {
+      const [users, loans, segs] = await Promise.all([
+        this.userService.getAll(),
+        this.loanService.getSummary(),
+        this.segmentService.getAll(),
+      ]);
+      this.segments.set(segs);
+      for (const u of users) this.nameMap[u.uid] = u.displayName;
+      this.loanSummary.set(loans);
+      this.initialized = true;
+    }, this.toast);
 
     // Load data from the selection that arrived before init
-    if (this.pendingSelection) {
+    if (this.initialized && this.pendingSelection) {
       await this.onRangeChange(this.pendingSelection);
       this.pendingSelection = null;
     }
@@ -167,41 +172,41 @@ export class DashboardPageComponent implements OnInit {
       this.pendingSelection = selection;
       return;
     }
-    this.loading.set(true);
-    this.currentMode = selection.mode;
-    this.currentSelection = selection;
+    this.currentMode.set(selection.mode);
+    this.currentSelection.set(selection);
 
-    let summaries: MonthlySummary[];
+    await safeLoad(this.loading, async () => {
+      let summaries: MonthlySummary[];
 
-    if (selection.mode === 'monthly') {
-      const month = selection.month!;
-      this.trendTitle.set('Monthly Trend (Last 6 Months)');
-      const last6 = getLast6MonthsFrom(month);
-      const [monthSummaries, trendSummaries] = await Promise.all([
-        this.summaryService.getForMonth(month),
-        this.summaryService.getForMonths(last6),
-      ]);
-      summaries = monthSummaries;
-      this.buildTrend(last6, trendSummaries);
+      if (selection.mode === 'monthly') {
+        const month = selection.month!;
+        this.trendTitle.set('Monthly Trend (Last 6 Months)');
+        const last6 = getLast6MonthsFrom(month);
+        const [monthSummaries, trendSummaries] = await Promise.all([
+          this.summaryService.getForMonth(month),
+          this.summaryService.getForMonths(last6),
+        ]);
+        summaries = monthSummaries;
+        this.buildTrend(last6, trendSummaries);
 
-    } else if (selection.mode === 'custom') {
-      const months = getMonthRange(selection.fromMonth!, selection.toMonth!);
-      this.trendTitle.set(`Trend (${getMonthName(selection.fromMonth!)} - ${getMonthName(selection.toMonth!)})`);
-      summaries = await this.summaryService.getForMonthsBatched(months);
-      this.buildTrend(months, summaries);
+      } else if (selection.mode === 'custom') {
+        const months = getMonthRange(selection.fromMonth!, selection.toMonth!);
+        this.trendTitle.set(`Trend (${getMonthName(selection.fromMonth!)} - ${getMonthName(selection.toMonth!)})`);
+        summaries = await this.summaryService.getForMonthsBatched(months);
+        this.buildTrend(months, summaries);
 
-    } else {
-      this.trendTitle.set('All-Time Trend');
-      summaries = await this.summaryService.getAll();
-      const allMonths = [...new Set(summaries.map(s => s.month))].sort();
-      this.buildTrend(allMonths, summaries);
-    }
+      } else {
+        this.trendTitle.set('All-Time Trend');
+        summaries = await this.summaryService.getAll();
+        const allMonths = [...new Set(summaries.map(s => s.month))].sort();
+        this.buildTrend(allMonths, summaries);
+      }
 
-    this.currentMonthSummaries.set(summaries);
-    this.totals.set(this.summaryService.aggregateSummaries(summaries));
-    this.personBreakdown.set(this.buildPersonBreakdownFromSummaries(summaries));
-    this.totalDistributed.set(summaries.reduce((s, sum) => s + (sum.totalDistributed || 0), 0));
-    this.loading.set(false);
+      this.currentMonthSummaries.set(summaries);
+      this.totals.set(this.summaryService.aggregateSummaries(summaries));
+      this.personBreakdown.set(this.buildPersonBreakdownFromSummaries(summaries));
+      this.totalDistributed.set(summaries.reduce((s, sum) => s + (sum.totalDistributed || 0), 0));
+    }, this.toast);
   }
 
   private buildTrend(months: string[], summaries: MonthlySummary[]): void {
@@ -241,37 +246,48 @@ export class DashboardPageComponent implements OnInit {
   }
 
   private get rangeLabel(): string {
-    if (!this.currentSelection) return 'all';
-    if (this.currentSelection.mode === 'monthly') return this.currentSelection.month || 'all';
-    if (this.currentSelection.mode === 'custom') return `${this.currentSelection.fromMonth}_to_${this.currentSelection.toMonth}`;
+    const selection = this.currentSelection();
+    if (!selection) return 'all';
+    if (selection.mode === 'monthly') return selection.month || 'all';
+    if (selection.mode === 'custom') return `${selection.fromMonth}_to_${selection.toMonth}`;
     return 'all-time';
   }
 
   async exportExcel(): Promise<void> {
     if (!this.analyticsTab) return;
-    const { ExportService } = await import('../../../core/services/export.service');
-    const exportService = new ExportService();
-    // Fetch all data for backup including animals and buyers
-    const [loanResult, inventoryEvents, animals, buyers] = await Promise.all([
-      this.loanService.getAll({}, 200),
-      this.inventoryService.getEvents(undefined, 500),
-      this.animalService.getAll(),
-      this.buyerService.getAll(),
-    ]);
-    await exportService.exportBackupExcel(
-      this.analyticsTab.filtered(),
-      this.analyticsTab.filteredIncome(),
-      loanResult.loans,
-      inventoryEvents,
-      this.rangeLabel,
-      animals,
-      buyers,
-    );
+    try {
+      const { ExportService } = await import('../../../core/services/export.service');
+      const exportService = new ExportService();
+      // Fetch all data for backup including animals and buyers
+      const [loanResult, inventoryEvents, animals, buyers] = await Promise.all([
+        this.loanService.getAll({}, 200),
+        this.inventoryService.getEvents(undefined, 500),
+        this.animalService.getAll(),
+        this.buyerService.getAll(),
+      ]);
+      await exportService.exportBackupExcel(
+        this.analyticsTab.filtered(),
+        this.analyticsTab.filteredIncome(),
+        loanResult.loans,
+        inventoryEvents,
+        this.rangeLabel,
+        animals,
+        buyers,
+      );
+    } catch (err) {
+      console.error('[exportExcel]', err);
+      this.toast.error('Failed to export Excel backup. Check your connection and try again.');
+    }
   }
 
   async exportPdf(): Promise<void> {
-    if (this.analyticsTab) {
-      await this.analyticsTab.exportPdf();
+    try {
+      if (this.analyticsTab) {
+        await this.analyticsTab.exportPdf();
+      }
+    } catch (err) {
+      console.error('[exportPdf]', err);
+      this.toast.error('Failed to export PDF report. Check your connection and try again.');
     }
   }
 

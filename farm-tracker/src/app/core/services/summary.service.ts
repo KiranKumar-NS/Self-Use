@@ -16,7 +16,7 @@ export class SummaryService {
 
   private monthCache = new Map<string, { data: MonthlySummary[]; time: number }>();
   private allCache: { data: MonthlySummary[]; time: number } | null = null;
-  private readonly CACHE_TTL = 60 * 1000; // 1 minute
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes (cleared on every summary-touching write)
 
   clearCache(): void {
     this.monthCache.clear();

@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { CropActivityService } from '../../../core/services/crop-activity.service';
@@ -11,21 +11,23 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 import { CropActivityFormDialogComponent } from '../crop-activity-form-dialog/crop-activity-form-dialog.component';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { sortData, toggleSortState, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 
 @Component({
   selector: 'app-crop-activity-list',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, DatePipe, CurrencyInrPipe,
     LoadingSpinnerComponent, EmptyStateComponent,
-    MatCardModule, MatButtonModule, MatIconModule, MatSnackBarModule, MatSelectModule, MatFormFieldModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatSelectModule, MatFormFieldModule,
   ],
   template: `
     <div class="page-header">
@@ -94,7 +96,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
         <div class="pagination">
           <div class="page-size">
             <span>Rows per page:</span>
-            <select [(ngModel)]="pageSize" (change)="currentPage = 1">
+            <select [(ngModel)]="pageSize" (change)="currentPage.set(1)">
               <option [ngValue]="10">10</option>
               <option [ngValue]="20">20</option>
               <option [ngValue]="50">50</option>
@@ -102,10 +104,10 @@ import { MatFormFieldModule } from '@angular/material/form-field';
           </div>
           <span class="page-info">{{ pageStartNum() }}-{{ pageEndNum() }} of {{ displayedActivities().length }}</span>
           <div class="page-buttons">
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" aria-label="First"><mat-icon>first_page</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" aria-label="Prev"><mat-icon>chevron_left</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage >= totalPagesNum()" (click)="currentPage = currentPage + 1" aria-label="Next"><mat-icon>chevron_right</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage >= totalPagesNum()" (click)="currentPage = totalPagesNum()" aria-label="Last"><mat-icon>last_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(1)" aria-label="First"><mat-icon>first_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(currentPage() - 1)" aria-label="Prev"><mat-icon>chevron_left</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() >= totalPagesNum()" (click)="currentPage.set(currentPage() + 1)" aria-label="Next"><mat-icon>chevron_right</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() >= totalPagesNum()" (click)="currentPage.set(totalPagesNum())" aria-label="Last"><mat-icon>last_page</mat-icon></button>
           </div>
         </div>
       </mat-card>
@@ -139,47 +141,52 @@ export class CropActivityListComponent implements OnInit {
   private cropActivityService = inject(CropActivityService);
   private segmentService = inject(SegmentService);
   private dialog = inject(MatDialog);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
 
   activities = signal<CropActivity[]>([]);
   cropSegments = signal<Segment[]>([]);
   loading = signal(true);
   filterSegment = '';
 
-  sortColumn = '';
-  sortDirection: SortDirection = 'asc';
-  pageSize = 20;
-  currentPage = 1;
+  sortColumn = signal('');
+  sortDirection = signal<SortDirection>('asc');
+  pageSize = signal(20);
+  currentPage = signal(1);
 
   async ngOnInit(): Promise<void> {
-    const allSegments = await this.segmentService.getAll();
-    this.cropSegments.set(allSegments.filter(s => s.segmentType === 'crop'));
+    try {
+      const allSegments = await this.segmentService.getAll();
+      this.cropSegments.set(allSegments.filter(s => s.segmentType === 'crop'));
+    } catch (err) {
+      console.error('Failed to load segments', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load segments');
+    }
     await this.loadData();
   }
 
   async loadData(): Promise<void> {
-    this.loading.set(true);
-    const filters: { segment?: string } = {};
-    if (this.filterSegment) filters.segment = this.filterSegment;
-    this.activities.set(await this.cropActivityService.getAll(filters));
-    this.loading.set(false);
-    this.currentPage = 1;
+    await safeLoad(this.loading, async () => {
+      const filters: { segment?: string } = {};
+      if (this.filterSegment) filters.segment = this.filterSegment;
+      this.activities.set(await this.cropActivityService.getAll(filters));
+    }, this.toast);
+    this.currentPage.set(1);
   }
 
-  displayedActivities(): CropActivity[] {
-    return sortData(this.activities(), this.sortColumn, this.sortDirection);
-  }
+  displayedActivities = computed<CropActivity[]>(() =>
+    sortData(this.activities(), this.sortColumn(), this.sortDirection())
+  );
 
-  paginatedActivities(): CropActivity[] { return paginate(this.displayedActivities(), this.currentPage, this.pageSize); }
-  totalPagesNum(): number { return totalPages(this.displayedActivities().length, this.pageSize); }
-  pageStartNum(): number { return pageStart(this.displayedActivities().length, this.currentPage, this.pageSize); }
-  pageEndNum(): number { return pageEnd(this.displayedActivities().length, this.currentPage, this.pageSize); }
+  paginatedActivities = computed<CropActivity[]>(() => paginate(this.displayedActivities(), this.currentPage(), this.pageSize()));
+  totalPagesNum = computed<number>(() => totalPages(this.displayedActivities().length, this.pageSize()));
+  pageStartNum = computed<number>(() => pageStart(this.displayedActivities().length, this.currentPage(), this.pageSize()));
+  pageEndNum = computed<number>(() => pageEnd(this.displayedActivities().length, this.currentPage(), this.pageSize()));
 
   toggleSort(column: string): void {
-    const state = toggleSortState({ column: this.sortColumn, direction: this.sortDirection }, column);
-    this.sortColumn = state.column;
-    this.sortDirection = state.direction;
-    this.currentPage = 1;
+    const state = toggleSortState({ column: this.sortColumn(), direction: this.sortDirection() }, column);
+    this.sortColumn.set(state.column);
+    this.sortDirection.set(state.direction);
+    this.currentPage.set(1);
   }
 
   formatType(type: string): string {
@@ -190,7 +197,7 @@ export class CropActivityListComponent implements OnInit {
     const ref = this.dialog.open(CropActivityFormDialogComponent, { width: '90vw', maxWidth: '600px', data: {} });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Activity added', '', { duration: 2500 });
+        this.toast.success('Activity added');
         await this.loadData();
       }
     });
@@ -200,7 +207,7 @@ export class CropActivityListComponent implements OnInit {
     const ref = this.dialog.open(CropActivityFormDialogComponent, { width: '90vw', maxWidth: '600px', data: { activity } });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Activity updated', '', { duration: 2500 });
+        this.toast.success('Activity updated');
         await this.loadData();
       }
     });
@@ -212,8 +219,13 @@ export class CropActivityListComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        await this.cropActivityService.softDelete(activity.id);
-        this.snackBar.open('Activity deleted', '', { duration: 2500 });
+        try {
+          await this.cropActivityService.softDelete(activity.id);
+          this.toast.success('Activity deleted');
+        } catch (err) {
+          console.error('Failed to delete activity', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete activity');
+        }
         await this.loadData();
       }
     });

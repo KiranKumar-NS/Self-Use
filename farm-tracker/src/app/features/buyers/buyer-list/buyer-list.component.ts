@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
@@ -10,21 +10,23 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 import { BuyerFormDialogComponent } from '../buyer-form-dialog/buyer-form-dialog.component';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { sortData, toggleSortState, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 
 @Component({
   selector: 'app-buyer-list',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, DatePipe, CurrencyInrPipe,
     LoadingSpinnerComponent, EmptyStateComponent,
-    MatCardModule, MatButtonModule, MatIconModule, MatSnackBarModule, MatInputModule, MatFormFieldModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatInputModule, MatFormFieldModule,
   ],
   template: `
     <div class="page-header">
@@ -47,8 +49,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
         <mat-form-field appearance="outline" class="filter-field">
           <mat-label>Search</mat-label>
           <input matInput [(ngModel)]="searchTerm" placeholder="Name, phone, location..." />
-          @if (searchTerm) {
-            <button matSuffix mat-icon-button (click)="searchTerm = ''"><mat-icon>close</mat-icon></button>
+          @if (searchTerm()) {
+            <button matSuffix mat-icon-button (click)="searchTerm.set('')"><mat-icon>close</mat-icon></button>
           }
         </mat-form-field>
       </mat-card>
@@ -91,7 +93,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
         <div class="pagination">
           <div class="page-size">
             <span>Rows per page:</span>
-            <select [(ngModel)]="pageSize" (change)="currentPage = 1">
+            <select [(ngModel)]="pageSize" (change)="currentPage.set(1)">
               <option [ngValue]="10">10</option>
               <option [ngValue]="20">20</option>
               <option [ngValue]="50">50</option>
@@ -99,10 +101,10 @@ import { MatFormFieldModule } from '@angular/material/form-field';
           </div>
           <span class="page-info">{{ pageStartNum() }}-{{ pageEndNum() }} of {{ displayedBuyers().length }}</span>
           <div class="page-buttons">
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" aria-label="First"><mat-icon>first_page</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" aria-label="Prev"><mat-icon>chevron_left</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage >= totalPagesNum()" (click)="currentPage = currentPage + 1" aria-label="Next"><mat-icon>chevron_right</mat-icon></button>
-            <button mat-icon-button [disabled]="currentPage >= totalPagesNum()" (click)="currentPage = totalPagesNum()" aria-label="Last"><mat-icon>last_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(1)" aria-label="First"><mat-icon>first_page</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(currentPage() - 1)" aria-label="Prev"><mat-icon>chevron_left</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() >= totalPagesNum()" (click)="currentPage.set(currentPage() + 1)" aria-label="Next"><mat-icon>chevron_right</mat-icon></button>
+            <button mat-icon-button [disabled]="currentPage() >= totalPagesNum()" (click)="currentPage.set(totalPagesNum())" aria-label="Last"><mat-icon>last_page</mat-icon></button>
           </div>
         </div>
       </mat-card>
@@ -118,30 +120,30 @@ export class BuyerListComponent implements OnInit {
   private buyerService = inject(BuyerService);
   private router = inject(Router);
   private dialog = inject(MatDialog);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
 
   buyers = signal<Buyer[]>([]);
   loading = signal(true);
-  searchTerm = '';
+  searchTerm = signal('');
 
-  sortColumn = '';
-  sortDirection: SortDirection = 'asc';
-  pageSize = 20;
-  currentPage = 1;
+  sortColumn = signal('');
+  sortDirection = signal<SortDirection>('asc');
+  pageSize = signal(20);
+  currentPage = signal(1);
 
   async ngOnInit(): Promise<void> {
     await this.loadData();
   }
 
   async loadData(): Promise<void> {
-    this.loading.set(true);
-    this.buyers.set(await this.buyerService.getAll());
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      this.buyers.set(await this.buyerService.getAll());
+    }, this.toast);
   }
 
-  displayedBuyers(): Buyer[] {
+  displayedBuyers = computed<Buyer[]>(() => {
     let filtered = this.buyers();
-    const term = this.searchTerm.toLowerCase().trim();
+    const term = this.searchTerm().toLowerCase().trim();
     if (term) {
       filtered = filtered.filter(b =>
         b.name.toLowerCase().includes(term) ||
@@ -149,19 +151,19 @@ export class BuyerListComponent implements OnInit {
         b.location?.toLowerCase().includes(term)
       );
     }
-    return sortData(filtered, this.sortColumn, this.sortDirection);
-  }
+    return sortData(filtered, this.sortColumn(), this.sortDirection());
+  });
 
-  paginatedBuyers(): Buyer[] { return paginate(this.displayedBuyers(), this.currentPage, this.pageSize); }
-  totalPagesNum(): number { return totalPages(this.displayedBuyers().length, this.pageSize); }
-  pageStartNum(): number { return pageStart(this.displayedBuyers().length, this.currentPage, this.pageSize); }
-  pageEndNum(): number { return pageEnd(this.displayedBuyers().length, this.currentPage, this.pageSize); }
+  paginatedBuyers = computed<Buyer[]>(() => paginate(this.displayedBuyers(), this.currentPage(), this.pageSize()));
+  totalPagesNum = computed<number>(() => totalPages(this.displayedBuyers().length, this.pageSize()));
+  pageStartNum = computed<number>(() => pageStart(this.displayedBuyers().length, this.currentPage(), this.pageSize()));
+  pageEndNum = computed<number>(() => pageEnd(this.displayedBuyers().length, this.currentPage(), this.pageSize()));
 
   toggleSort(column: string): void {
-    const state = toggleSortState({ column: this.sortColumn, direction: this.sortDirection }, column);
-    this.sortColumn = state.column;
-    this.sortDirection = state.direction;
-    this.currentPage = 1;
+    const state = toggleSortState({ column: this.sortColumn(), direction: this.sortDirection() }, column);
+    this.sortColumn.set(state.column);
+    this.sortDirection.set(state.direction);
+    this.currentPage.set(1);
   }
 
   viewDetail(id: string): void { this.router.navigate(['/buyers', id]); }
@@ -170,7 +172,7 @@ export class BuyerListComponent implements OnInit {
     const ref = this.dialog.open(BuyerFormDialogComponent, { width: '90vw', maxWidth: '500px', data: {} });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Buyer added', '', { duration: 2500 });
+        this.toast.success('Buyer added');
         await this.loadData();
       }
     });
@@ -180,7 +182,7 @@ export class BuyerListComponent implements OnInit {
     const ref = this.dialog.open(BuyerFormDialogComponent, { width: '90vw', maxWidth: '500px', data: { buyer } });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Buyer updated', '', { duration: 2500 });
+        this.toast.success('Buyer updated');
         await this.loadData();
       }
     });
@@ -192,8 +194,13 @@ export class BuyerListComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        await this.buyerService.softDelete(buyer.id);
-        this.snackBar.open('Buyer deleted', '', { duration: 2500 });
+        try {
+          await this.buyerService.softDelete(buyer.id);
+          this.toast.success('Buyer deleted');
+        } catch (err) {
+          console.error('Failed to delete buyer', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete buyer');
+        }
         await this.loadData();
       }
     });

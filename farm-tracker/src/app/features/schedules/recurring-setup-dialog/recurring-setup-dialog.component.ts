@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -19,6 +19,7 @@ import { UserService } from '../../../core/services/user.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { Category } from '../../../core/models/category.model';
 import { Segment } from '../../../core/models/segment.model';
+import { ToastService } from '../../../core/services/toast.service';
 
 export interface RecurringSetupDialogData {
   schedule?: Schedule;
@@ -27,6 +28,7 @@ export interface RecurringSetupDialogData {
 @Component({
   selector: 'app-recurring-setup-dialog',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule,
     MatInputModule, MatSelectModule, MatDatepickerModule, MatRadioModule, MatIconModule,
@@ -155,6 +157,7 @@ export class RecurringSetupDialogComponent implements OnInit {
   private segmentService = inject(SegmentService);
   private userService = inject(UserService);
   private authService = inject(AuthService);
+  private toast = inject(ToastService);
 
   saving = signal(false);
   error = signal('');
@@ -163,20 +166,20 @@ export class RecurringSetupDialogComponent implements OnInit {
   users = signal<{ uid: string; displayName: string }[]>([]);
 
   // Schedule fields
-  title = '';
-  description = '';
-  frequency: RepeatFrequency = 'monthly';
-  startDate: Date = new Date();
-  endDate: Date | null = null;
+  title = signal('');
+  description = signal('');
+  frequency = signal<RepeatFrequency>('monthly');
+  startDate = signal<Date>(new Date());
+  endDate = signal<Date | null>(null);
 
   // Transaction template fields
-  txnType: TransactionType = 'expense';
-  amount = 0;
-  selectedCategory = '';
-  selectedSegment = '';
-  paymentMethod: PaymentMethod = 'upi';
-  paidBy = '';
-  txnDescription = '';
+  txnType = signal<TransactionType>('expense');
+  amount = signal(0);
+  selectedCategory = signal('');
+  selectedSegment = signal('');
+  paymentMethod = signal<PaymentMethod>('upi');
+  paidBy = signal('');
+  txnDescription = signal('');
 
   // Resolved names
   private categoryName = '';
@@ -184,34 +187,39 @@ export class RecurringSetupDialogComponent implements OnInit {
   private paidByName = '';
 
   async ngOnInit(): Promise<void> {
-    const [cats, segs, allUsers] = await Promise.all([
-      this.categoryService.getAll(),
-      this.segmentService.getAll(),
-      this.userService.getAll(),
-    ]);
-    this.categories.set(cats);
-    this.segments.set(segs);
-    this.users.set(allUsers.map(u => ({ uid: u.uid, displayName: u.displayName })));
+    try {
+      const [cats, segs, allUsers] = await Promise.all([
+        this.categoryService.getAll(),
+        this.segmentService.getAll(),
+        this.userService.getAll(),
+      ]);
+      this.categories.set(cats);
+      this.segments.set(segs);
+      this.users.set(allUsers.map(u => ({ uid: u.uid, displayName: u.displayName })));
+    } catch (err) {
+      console.error('Failed to load data', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load data');
+    }
 
     const currentUser = this.authService.currentUser();
-    if (currentUser) this.paidBy = currentUser.uid;
+    if (currentUser) this.paidBy.set(currentUser.uid);
 
     if (this.data?.schedule) {
       const s = this.data.schedule;
-      this.title = s.title;
-      this.description = s.description;
-      this.frequency = s.frequency;
-      this.startDate = s.startDate.toDate();
-      this.endDate = s.endDate?.toDate() || null;
+      this.title.set(s.title);
+      this.description.set(s.description);
+      this.frequency.set(s.frequency);
+      this.startDate.set(s.startDate.toDate());
+      this.endDate.set(s.endDate?.toDate() || null);
 
       if (s.transactionTemplate) {
-        this.txnType = s.transactionTemplate.type;
-        this.amount = s.transactionTemplate.amount;
-        this.selectedCategory = s.transactionTemplate.category;
-        this.selectedSegment = s.transactionTemplate.segment;
-        this.paymentMethod = s.transactionTemplate.paymentMethod;
-        this.paidBy = s.transactionTemplate.paidBy || this.paidBy;
-        this.txnDescription = s.transactionTemplate.description;
+        this.txnType.set(s.transactionTemplate.type);
+        this.amount.set(s.transactionTemplate.amount);
+        this.selectedCategory.set(s.transactionTemplate.category);
+        this.selectedSegment.set(s.transactionTemplate.segment);
+        this.paymentMethod.set(s.transactionTemplate.paymentMethod);
+        this.paidBy.set(s.transactionTemplate.paidBy || this.paidBy());
+        this.txnDescription.set(s.transactionTemplate.description);
         this.categoryName = s.transactionTemplate.categoryName;
         this.segmentName = s.transactionTemplate.segmentName;
         this.paidByName = s.transactionTemplate.paidByName || '';
@@ -220,26 +228,26 @@ export class RecurringSetupDialogComponent implements OnInit {
   }
 
   filteredCategories(): Category[] {
-    return this.categories().filter(c => c.type === this.txnType && c.isActive);
+    return this.categories().filter(c => c.type === this.txnType() && c.isActive);
   }
 
   onCategoryChange(): void {
-    const cat = this.categories().find(c => c.id === this.selectedCategory);
+    const cat = this.categories().find(c => c.id === this.selectedCategory());
     this.categoryName = cat?.name || '';
   }
 
   onSegmentChange(): void {
-    const seg = this.segments().find(s => s.id === this.selectedSegment);
+    const seg = this.segments().find(s => s.id === this.selectedSegment());
     this.segmentName = seg?.name || '';
   }
 
   onPaidByChange(): void {
-    const user = this.users().find(u => u.uid === this.paidBy);
+    const user = this.users().find(u => u.uid === this.paidBy());
     this.paidByName = user?.displayName || '';
   }
 
   isValid(): boolean {
-    return !!(this.title.trim() && this.amount > 0 && this.selectedCategory && this.selectedSegment);
+    return !!(this.title().trim() && this.amount() > 0 && this.selectedCategory() && this.selectedSegment());
   }
 
   async save(): Promise<void> {
@@ -248,26 +256,27 @@ export class RecurringSetupDialogComponent implements OnInit {
     try {
       const scheduleData: Partial<Schedule> = {
         type: 'recurring_transaction',
-        title: this.title,
-        description: this.description,
-        frequency: this.frequency,
-        startDate: Timestamp.fromDate(this.startDate),
-        nextDueDate: Timestamp.fromDate(this.startDate),
+        title: this.title(),
+        description: this.description(),
+        frequency: this.frequency(),
+        startDate: Timestamp.fromDate(this.startDate()),
+        nextDueDate: Timestamp.fromDate(this.startDate()),
         transactionTemplate: {
-          type: this.txnType,
-          amount: this.amount,
-          category: this.selectedCategory,
+          type: this.txnType(),
+          amount: this.amount(),
+          category: this.selectedCategory(),
           categoryName: this.categoryName,
-          segment: this.selectedSegment,
+          segment: this.selectedSegment(),
           segmentName: this.segmentName,
-          description: this.txnDescription,
-          paymentMethod: this.paymentMethod,
-          paidBy: this.paidBy,
+          description: this.txnDescription(),
+          paymentMethod: this.paymentMethod(),
+          paidBy: this.paidBy(),
           paidByName: this.paidByName,
         },
       };
-      if (this.endDate) {
-        scheduleData.endDate = Timestamp.fromDate(this.endDate);
+      const endDate = this.endDate();
+      if (endDate) {
+        scheduleData.endDate = Timestamp.fromDate(endDate);
       }
 
       if (this.data?.schedule) {

@@ -32,6 +32,24 @@ export class AuthService {
   isLoggedIn = computed(() => !!this.currentUser());
   assignedSegments = computed(() => this.userProfile()?.assignedSegments ?? []);
 
+  private readyResolvers: (() => void)[] = [];
+
+  /**
+   * Resolves once the initial auth state (claims + profile) has loaded.
+   * Falls through after timeoutMs so a hung auth check can't block navigation
+   * forever — callers then see the current (logged-out) state.
+   */
+  whenReady(timeoutMs = 10_000): Promise<void> {
+    if (!this.isLoading()) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, timeoutMs);
+      this.readyResolvers.push(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+
   constructor() {
     onAuthStateChanged(this.auth, async (user) => {
       this.currentUser.set(user);
@@ -55,6 +73,8 @@ export class AuthService {
         this.userProfile.set(null);
       }
       this.isLoading.set(false);
+      this.readyResolvers.forEach((resolve) => resolve());
+      this.readyResolvers = [];
     });
   }
 

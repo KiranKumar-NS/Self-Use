@@ -53,6 +53,13 @@ describe('date.utils', () => {
       const result = getMonthName('2026-12');
       expect(result).toContain('December');
     });
+
+    it('should return non YYYY-MM input unchanged instead of "Invalid Date"', () => {
+      expect(getMonthName('all-time')).toBe('all-time');
+      expect(getMonthName('')).toBe('');
+      expect(getMonthName('2026')).toBe('2026');
+      expect(getMonthName('garbage')).toBe('garbage');
+    });
   });
 
   describe('getLast6MonthsFrom', () => {

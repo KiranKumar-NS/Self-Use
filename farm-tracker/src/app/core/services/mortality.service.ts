@@ -19,7 +19,13 @@ export class MortalityService {
   private animalService = inject(AnimalService);
   private segmentService = inject(SegmentService);
 
+  private cache: { data: MortalityStats; time: number } | null = null;
+  private readonly CACHE_TTL = 5 * 60 * 1000;
+
   async getMortalityStats(): Promise<MortalityStats> {
+    if (this.cache && Date.now() - this.cache.time < this.CACHE_TTL) {
+      return this.cache.data;
+    }
     const [allAnimals, segments] = await Promise.all([
       this.animalService.getAll({}, 500),
       this.segmentService.getAll(),

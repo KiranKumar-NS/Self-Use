@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -21,6 +21,7 @@ interface GuideSection {
   selector: 'app-user-guide-dialog',
   standalone: true,
   imports: [MatDialogModule, MatButtonModule, MatIconModule, MatExpansionModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="guide-container">
       <div class="guide-header">
@@ -38,7 +39,7 @@ interface GuideSection {
 
       <div class="guide-nav">
         @for (s of sections; track s.id) {
-          <button class="nav-chip" [class.active]="s.id === activeSection"
+          <button class="nav-chip" [class.active]="s.id === activeSection()"
                   (click)="scrollTo(s.id)">
             <mat-icon>{{ s.icon }}</mat-icon>
             <span>{{ s.title }}</span>
@@ -490,7 +491,7 @@ interface GuideSection {
 export class UserGuideDialogComponent implements OnInit {
   dialogRef = inject(MatDialogRef<UserGuideDialogComponent>);
   data = inject<{ currentRoute: string }>(MAT_DIALOG_DATA);
-  activeSection = '';
+  activeSection = signal('');
 
   sections: GuideSection[] = [
     {
@@ -978,13 +979,13 @@ export class UserGuideDialogComponent implements OnInit {
     const route = this.data?.currentRoute || '';
     const match = this.sections.find(s => route.startsWith(s.route));
     if (match) {
-      this.activeSection = match.id;
+      this.activeSection.set(match.id);
       setTimeout(() => this.scrollTo(match.id), 300);
     }
   }
 
   scrollTo(sectionId: string): void {
-    this.activeSection = sectionId;
+    this.activeSection.set(sectionId);
     const el = document.getElementById('section-' + sectionId);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });

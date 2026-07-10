@@ -17,6 +17,9 @@ export function formatDate(date: Date): string {
 }
 
 export function getMonthName(monthStr: string): string {
+  // Only YYYY-MM parses safely; anything else would render "Invalid Date"
+  // (this once produced a farm-backup-Invalid-Date.xlsx export)
+  if (!/^\d{4}-\d{2}$/.test(monthStr)) return monthStr;
   const [year, month] = monthStr.split('-');
   const date = new Date(parseInt(year), parseInt(month) - 1);
   return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'long' });

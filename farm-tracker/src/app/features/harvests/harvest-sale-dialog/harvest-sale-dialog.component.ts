@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -11,6 +11,7 @@ import { Harvest } from '../../../core/models/harvest.model';
 import { BuyerService } from '../../../core/services/buyer.service';
 import { Buyer } from '../../../core/models/buyer.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
+import { ToastService } from '../../../core/services/toast.service';
 
 export interface HarvestSaleDialogData {
   harvest: Harvest;
@@ -19,6 +20,7 @@ export interface HarvestSaleDialogData {
 @Component({
   selector: 'app-harvest-sale-dialog',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, CurrencyInrPipe],
   template: `
     <h2 mat-dialog-title>Record Sale</h2>
@@ -83,6 +85,7 @@ export class HarvestSaleDialogComponent implements OnInit {
   dialogRef = inject(MatDialogRef<HarvestSaleDialogComponent>);
   private harvestService = inject(HarvestService);
   private buyerService = inject(BuyerService);
+  private toast = inject(ToastService);
 
   saving = signal(false);
   error = signal('');
@@ -95,7 +98,12 @@ export class HarvestSaleDialogComponent implements OnInit {
   note = '';
 
   async ngOnInit(): Promise<void> {
-    this.buyers.set(await this.buyerService.getAll());
+    try {
+      this.buyers.set(await this.buyerService.getAll());
+    } catch (err) {
+      console.error('Failed to load buyers', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load buyers');
+    }
   }
 
   onBuyerChange(): void {

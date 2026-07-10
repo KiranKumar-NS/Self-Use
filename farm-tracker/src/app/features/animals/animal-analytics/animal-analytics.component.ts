@@ -1,10 +1,11 @@
-import { Component, inject, signal, computed, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { DatePipe } from '@angular/common';
 import { AnimalService } from '../../../core/services/animal.service';
 import { BuyerService } from '../../../core/services/buyer.service';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { SegmentService } from '../../../core/services/segment.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { Animal } from '../../../core/models/animal.model';
 import { Buyer } from '../../../core/models/buyer.model';
 import { Transaction } from '../../../core/models/transaction.model';
@@ -45,6 +46,7 @@ interface CategorySales {
 @Component({
   selector: 'app-animal-analytics',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [DatePipe, CurrencyInrPipe, LoadingSpinnerComponent, LoadingSkeletonComponent, MatCardModule, MatButtonModule, MatIconModule, MatTabsModule],
   template: `
     <div class="page-header">
@@ -58,6 +60,15 @@ interface CategorySales {
       <app-loading-skeleton type="cards" [count]="5" />
       <app-loading-skeleton type="table" [count]="5" />
     } @else {
+      @if (!fullHistory()) {
+        <div class="history-banner">
+          <mat-icon>info</mat-icon>
+          <span>Showing the last 12 months of transactions.</span>
+          <button mat-button color="primary" (click)="loadFullHistory()" [disabled]="loadingHistory()">
+            {{ loadingHistory() ? 'Loading…' : 'Load full history' }}
+          </button>
+        </div>
+      }
       <!-- Overall Summary Cards -->
       <div class="stats-grid">
         <mat-card class="stat-card">
@@ -384,6 +395,8 @@ interface CategorySales {
     }
   `,
   styles: [`
+    .history-banner { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; margin-bottom: 1rem; border-radius: 8px; background: var(--color-bg-subtle, rgba(0,0,0,0.04)); font-size: var(--font-sm); color: var(--color-text-muted); flex-wrap: wrap; }
+    .history-banner mat-icon { font-size: 18px; width: 18px; height: 18px; }
     .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; }
     .stat-card { padding: 1rem; text-align: center; }
     .stat-value { font-size: 1.4rem; font-weight: 700; }
@@ -470,12 +483,15 @@ export class AnimalAnalyticsComponent implements OnInit {
   private transactionService = inject(TransactionService);
   private segmentService = inject(SegmentService);
   private router = inject(Router);
+  private toast = inject(ToastService);
 
   allAnimals = signal<Animal[]>([]);
   buyers = signal<Buyer[]>([]);
   allTransactions = signal<Transaction[]>([]);
   segments = signal<Segment[]>([]);
   loading = signal(true);
+  fullHistory = signal(false);
+  loadingHistory = signal(false);
 
   // --- Overall ---
   overallIncome = computed(() =>
@@ -638,29 +654,55 @@ export class AnimalAnalyticsComponent implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
-    // Load all data — transactions loaded across all time
-    const [animals, buyers, segments] = await Promise.all([
-      this.animalService.getAll(),
-      this.buyerService.getAll(),
-      this.segmentService.getAll(),
-    ]);
+    try {
+      const [animals, buyers, segments] = await Promise.all([
+        this.animalService.getAll(),
+        this.buyerService.getAll(),
+        this.segmentService.getAll(),
+      ]);
 
-    // Load all transactions (multiple pages)
-    let allTxns: Transaction[] = [];
+      // Default to the last 12 months; "Load full history" fetches the rest on demand
+      const dateFrom = new Date();
+      dateFrom.setMonth(dateFrom.getMonth() - 12);
+      const txns = await this.fetchTransactions({ dateFrom });
+
+      this.allAnimals.set(animals);
+      this.buyers.set(buyers.filter(b => b.totalPurchases > 0));
+      this.segments.set(segments);
+      this.allTransactions.set(txns);
+    } catch (err) {
+      console.error('Failed to load analytics data', err);
+      this.toast.error('Failed to load data. Check your connection and try again.');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async loadFullHistory(): Promise<void> {
+    if (this.fullHistory() || this.loadingHistory()) return;
+    this.loadingHistory.set(true);
+    try {
+      this.allTransactions.set(await this.fetchTransactions({}));
+      this.fullHistory.set(true);
+    } catch (err) {
+      console.error('Failed to load full history', err);
+      this.toast.error('Failed to load full history. Please try again.');
+    } finally {
+      this.loadingHistory.set(false);
+    }
+  }
+
+  private async fetchTransactions(filters: { dateFrom?: Date }): Promise<Transaction[]> {
+    let txns: Transaction[] = [];
     let lastDoc: any = null;
     let hasMore = true;
     while (hasMore) {
-      const result = await this.transactionService.getAll({}, 200, lastDoc);
-      allTxns = [...allTxns, ...result.transactions];
+      const result = await this.transactionService.getAll(filters, 200, lastDoc);
+      txns = [...txns, ...result.transactions];
       lastDoc = result.lastDoc;
       hasMore = result.transactions.length === 200;
     }
-
-    this.allAnimals.set(animals);
-    this.buyers.set(buyers.filter(b => b.totalPurchases > 0));
-    this.segments.set(segments);
-    this.allTransactions.set(allTxns);
-    this.loading.set(false);
+    return txns;
   }
 
   private buildCatBreakdown(type: 'income' | 'expense'): CategorySales[] {

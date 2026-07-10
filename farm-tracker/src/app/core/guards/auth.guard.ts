@@ -2,36 +2,11 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 
-export const authGuard: CanActivateFn = () => {
+export const authGuard: CanActivateFn = async () => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
-  if (auth.isLoading()) {
-    return new Promise<boolean>((resolve) => {
-      let elapsed = 0;
-      const interval = setInterval(() => {
-        elapsed += 100;
-        if (elapsed > 10000) {
-          clearInterval(interval);
-          router.navigate(['/auth/login']);
-          resolve(false);
-          return;
-        }
-        if (!auth.isLoading()) {
-          clearInterval(interval);
-          if (auth.currentUser() && auth.userProfile()?.isActive !== false) {
-            resolve(true);
-          } else {
-            if (auth.currentUser() && auth.userProfile()?.isActive === false) {
-              auth.logout();
-            }
-            router.navigate(['/auth/login']);
-            resolve(false);
-          }
-        }
-      }, 100);
-    });
-  }
+  await auth.whenReady();
 
   if (auth.currentUser()) {
     if (auth.userProfile()?.isActive === false) {

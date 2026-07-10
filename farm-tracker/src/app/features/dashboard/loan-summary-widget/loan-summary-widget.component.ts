@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { Router } from '@angular/router';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { MatCardModule } from '@angular/material/card';
@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 @Component({
   selector: 'app-loan-summary-widget',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CurrencyInrPipe, MatCardModule, MatButtonModule],
   template: `
     <mat-card class="loan-card">

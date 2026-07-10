@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -16,6 +16,7 @@ import { SegmentService } from '../../../core/services/segment.service';
 import { AnimalService } from '../../../core/services/animal.service';
 import { Segment } from '../../../core/models/segment.model';
 import { Animal } from '../../../core/models/animal.model';
+import { ToastService } from '../../../core/services/toast.service';
 
 export interface ReminderFormDialogData {
   schedule?: Schedule;
@@ -24,6 +25,7 @@ export interface ReminderFormDialogData {
 @Component({
   selector: 'app-reminder-form-dialog',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule,
     MatInputModule, MatSelectModule, MatDatepickerModule, MatCheckboxModule,
@@ -106,7 +108,7 @@ export interface ReminderFormDialogData {
           <mat-checkbox [(ngModel)]="autoCreateTask">Auto-create task when due</mat-checkbox>
         </div>
 
-        @if (autoCreateTask) {
+        @if (autoCreateTask()) {
           <mat-form-field appearance="outline">
             <mat-label>Task Priority</mat-label>
             <mat-select [(ngModel)]="taskPriority">
@@ -126,7 +128,7 @@ export interface ReminderFormDialogData {
 
     <mat-dialog-actions align="end">
       <button mat-button (click)="dialogRef.close()">Cancel</button>
-      <button mat-flat-button color="primary" [disabled]="saving() || !title.trim()" (click)="save()">
+      <button mat-flat-button color="primary" [disabled]="saving() || !title().trim()" (click)="save()">
         {{ saving() ? 'Saving...' : (data.schedule ? 'Update' : 'Create') }}
       </button>
     </mat-dialog-actions>
@@ -145,6 +147,7 @@ export class ReminderFormDialogComponent implements OnInit {
   private scheduleService = inject(ScheduleService);
   private segmentService = inject(SegmentService);
   private animalService = inject(AnimalService);
+  private toast = inject(ToastService);
 
   saving = signal(false);
   error = signal('');
@@ -153,46 +156,51 @@ export class ReminderFormDialogComponent implements OnInit {
   animalSegment = signal(false);
 
   // Fields
-  title = '';
-  description = '';
-  reminderType: ReminderType = 'vaccination';
-  frequency: RepeatFrequency = 'monthly';
-  startDate: Date = new Date();
-  notifyDaysBefore = 3;
-  selectedSegment = '';
-  selectedAnimalIds: string[] = [];
-  autoCreateTask = true;
-  taskPriority: TaskPriority = 'medium';
+  title = signal('');
+  description = signal('');
+  reminderType = signal<ReminderType>('vaccination');
+  frequency = signal<RepeatFrequency>('monthly');
+  startDate = signal<Date>(new Date());
+  notifyDaysBefore = signal(3);
+  selectedSegment = signal('');
+  selectedAnimalIds = signal<string[]>([]);
+  autoCreateTask = signal(true);
+  taskPriority = signal<TaskPriority>('medium');
 
   private segmentName = '';
 
   async ngOnInit(): Promise<void> {
-    this.segments.set(await this.segmentService.getAll());
+    try {
+      this.segments.set(await this.segmentService.getAll());
+    } catch (err) {
+      console.error('Failed to load segments', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load segments');
+    }
 
     if (this.data?.schedule) {
       const s = this.data.schedule;
-      this.title = s.title;
-      this.description = s.description;
-      this.frequency = s.frequency;
-      this.startDate = s.startDate.toDate();
+      this.title.set(s.title);
+      this.description.set(s.description);
+      this.frequency.set(s.frequency);
+      this.startDate.set(s.startDate.toDate());
 
       if (s.reminderConfig) {
-        this.reminderType = s.reminderConfig.reminderType;
-        this.notifyDaysBefore = s.reminderConfig.notifyDaysBefore;
-        this.autoCreateTask = s.reminderConfig.autoCreateTask;
-        this.taskPriority = s.reminderConfig.taskPriority || 'medium';
-        this.selectedSegment = s.reminderConfig.linkedSegment || '';
-        this.selectedAnimalIds = s.reminderConfig.linkedAnimalIds || [];
-        if (this.selectedSegment) await this.loadAnimals();
+        this.reminderType.set(s.reminderConfig.reminderType);
+        this.notifyDaysBefore.set(s.reminderConfig.notifyDaysBefore);
+        this.autoCreateTask.set(s.reminderConfig.autoCreateTask);
+        this.taskPriority.set(s.reminderConfig.taskPriority || 'medium');
+        this.selectedSegment.set(s.reminderConfig.linkedSegment || '');
+        this.selectedAnimalIds.set(s.reminderConfig.linkedAnimalIds || []);
+        if (this.selectedSegment()) await this.loadAnimals();
       }
     }
   }
 
   async onSegmentChange(): Promise<void> {
-    const seg = this.segments().find(s => s.id === this.selectedSegment);
+    const seg = this.segments().find(s => s.id === this.selectedSegment());
     this.segmentName = seg?.name || '';
     this.animalSegment.set(seg?.segmentType === 'animal');
-    this.selectedAnimalIds = [];
+    this.selectedAnimalIds.set([]);
     if (this.animalSegment()) {
       await this.loadAnimals();
     } else {
@@ -201,9 +209,14 @@ export class ReminderFormDialogComponent implements OnInit {
   }
 
   private async loadAnimals(): Promise<void> {
-    if (!this.selectedSegment) return;
-    const result = await this.animalService.getActiveBySegment(this.selectedSegment);
-    this.animals.set(result);
+    if (!this.selectedSegment()) return;
+    try {
+      const result = await this.animalService.getActiveBySegment(this.selectedSegment());
+      this.animals.set(result);
+    } catch (err) {
+      console.error('Failed to load animals', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load animals');
+    }
   }
 
   getAnimalName(animal: Animal): string {
@@ -214,27 +227,27 @@ export class ReminderFormDialogComponent implements OnInit {
     this.saving.set(true);
     this.error.set('');
     try {
-      const animalNames = this.selectedAnimalIds.map(id => {
+      const animalNames = this.selectedAnimalIds().map(id => {
         const a = this.animals().find(an => an.id === id);
         return a ? this.animalService.getDisplayName(a) : id;
       });
 
       const scheduleData: Partial<Schedule> = {
         type: 'reminder',
-        title: this.title,
-        description: this.description,
-        frequency: this.frequency,
-        startDate: Timestamp.fromDate(this.startDate),
-        nextDueDate: Timestamp.fromDate(this.startDate),
+        title: this.title(),
+        description: this.description(),
+        frequency: this.frequency(),
+        startDate: Timestamp.fromDate(this.startDate()),
+        nextDueDate: Timestamp.fromDate(this.startDate()),
         reminderConfig: {
-          reminderType: this.reminderType,
-          linkedSegment: this.selectedSegment || undefined,
+          reminderType: this.reminderType(),
+          linkedSegment: this.selectedSegment() || undefined,
           linkedSegmentName: this.segmentName || undefined,
-          linkedAnimalIds: this.selectedAnimalIds.length > 0 ? this.selectedAnimalIds : undefined,
+          linkedAnimalIds: this.selectedAnimalIds().length > 0 ? this.selectedAnimalIds() : undefined,
           linkedAnimalNames: animalNames.length > 0 ? animalNames : undefined,
-          autoCreateTask: this.autoCreateTask,
-          taskPriority: this.autoCreateTask ? this.taskPriority : undefined,
-          notifyDaysBefore: this.notifyDaysBefore,
+          autoCreateTask: this.autoCreateTask(),
+          taskPriority: this.autoCreateTask() ? this.taskPriority() : undefined,
+          notifyDaysBefore: this.notifyDaysBefore(),
         },
       };
 

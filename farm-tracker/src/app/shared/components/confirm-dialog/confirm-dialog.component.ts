@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -20,6 +20,7 @@ export interface ConfirmDialogData {
   selector: 'app-confirm-dialog',
   standalone: true,
   imports: [FormsModule, MatDialogModule, MatButtonModule, MatRadioModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h2 mat-dialog-title>{{ data.title }}</h2>
     <mat-dialog-content>
@@ -57,14 +58,14 @@ export interface ConfirmDialogData {
 export class ConfirmDialogComponent {
   data = inject<ConfirmDialogData>(MAT_DIALOG_DATA);
   dialogRef = inject(MatDialogRef<ConfirmDialogComponent>);
-  deleteType: 'hard' | 'soft' = 'hard';
-  inputValue = '';
+  deleteType = signal<'hard' | 'soft'>('hard');
+  inputValue = signal('');
 
   confirm(): void {
     if (this.data.showDeleteOptions) {
-      this.dialogRef.close({ confirmed: true, deleteType: this.deleteType });
+      this.dialogRef.close({ confirmed: true, deleteType: this.deleteType() });
     } else if (this.data.showInput) {
-      this.dialogRef.close({ confirmed: true, inputValue: this.inputValue });
+      this.dialogRef.close({ confirmed: true, inputValue: this.inputValue() });
     } else {
       this.dialogRef.close(true);
     }

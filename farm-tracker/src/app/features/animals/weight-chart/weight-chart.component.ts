@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
 import { WeightLogEntry } from '../../../core/models/animal.model';
@@ -6,6 +6,7 @@ import { WeightLogEntry } from '../../../core/models/animal.model';
 @Component({
   selector: 'app-weight-chart',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [BaseChartDirective],
   template: `
     @if (chartData()) {

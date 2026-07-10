@@ -44,3 +44,6 @@ Thumbs.db
 
 # Firebase service account key (NEVER commit this)
 **/service-account-key.json
+
+# Local Excel backups exported from the app (never commit data)
+scripts/farm-backup-*.xlsx

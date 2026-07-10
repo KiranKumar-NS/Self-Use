@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DatePipe } from '@angular/common';
 import { BuyerService } from '../../../core/services/buyer.service';
@@ -12,12 +12,14 @@ import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-buyer-detail',
   standalone: true,
-  imports: [DatePipe, CurrencyInrPipe, LoadingSpinnerComponent, RouterLink, MatCardModule, MatButtonModule, MatIconModule, MatSnackBarModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DatePipe, CurrencyInrPipe, LoadingSpinnerComponent, RouterLink, MatCardModule, MatButtonModule, MatIconModule],
   template: `
     @if (loading()) {
       <app-loading-spinner />
@@ -125,7 +127,7 @@ export class BuyerDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private dialog = inject(MatDialog);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
 
   buyer = signal<Buyer | null>(null);
   purchaseHistory = signal<Animal[]>([]);
@@ -138,14 +140,14 @@ export class BuyerDetailComponent implements OnInit {
   }
 
   async loadData(): Promise<void> {
-    this.loading.set(true);
-    const [buyer, animals] = await Promise.all([
-      this.buyerService.getById(this.buyerId),
-      this.animalService.getAll({ status: 'sold' }),
-    ]);
-    this.buyer.set(buyer);
-    this.purchaseHistory.set(animals.filter(a => a.buyerId === this.buyerId));
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      const [buyer, animals] = await Promise.all([
+        this.buyerService.getById(this.buyerId),
+        this.animalService.getAll({ status: 'sold' }),
+      ]);
+      this.buyer.set(buyer);
+      this.purchaseHistory.set(animals.filter(a => a.buyerId === this.buyerId));
+    }, this.toast);
   }
 
   editBuyer(): void {
@@ -155,7 +157,7 @@ export class BuyerDetailComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.snackBar.open('Buyer updated', '', { duration: 2500 });
+        this.toast.success('Buyer updated');
         await this.loadData();
       }
     });

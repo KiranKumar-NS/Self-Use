@@ -1,7 +1,9 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { ToastService } from '../../../core/services/toast.service';
+import { safeLoad } from '../../../core/utils/async.utils';
 import { Transaction } from '../../../core/models/transaction.model';
 import { CostAttributionDialogComponent } from '../../animals/cost-attribution-dialog/cost-attribution-dialog.component';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
@@ -18,6 +20,7 @@ import { DatePipe } from '@angular/common';
 @Component({
   selector: 'app-transaction-detail',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [DatePipe, CurrencyInrPipe, RelativeTimePipe, LoadingSpinnerComponent, RouterLink, MatCardModule, MatButtonModule, MatIconModule, MatChipsModule],
   template: `
     @if (loading()) {
@@ -290,6 +293,7 @@ export class TransactionDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private dialog = inject(MatDialog);
+  private toast = inject(ToastService);
   auth = inject(AuthService);
 
   transaction = signal<Transaction | null>(null);
@@ -304,9 +308,9 @@ export class TransactionDetailComponent implements OnInit {
   }
 
   async loadTransaction(): Promise<void> {
-    this.loading.set(true);
-    this.transaction.set(await this.transactionService.getById(this.txnId));
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      this.transaction.set(await this.transactionService.getById(this.txnId));
+    }, this.toast);
   }
 
   hasDistributions(): boolean {
@@ -339,6 +343,9 @@ export class TransactionDetailComponent implements OnInit {
     try {
       await this.transactionService.markAsReceived(this.txnId);
       await this.loadTransaction();
+    } catch (err) {
+      console.error('Failed to mark as received', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       this.marking.set(false);
     }
@@ -349,6 +356,9 @@ export class TransactionDetailComponent implements OnInit {
     try {
       await this.transactionService.markAsPaid(this.txnId);
       await this.loadTransaction();
+    } catch (err) {
+      console.error('Failed to mark as paid', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       this.marking.set(false);
     }

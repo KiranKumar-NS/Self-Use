@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -12,6 +12,7 @@ import { InventoryItem, ConsumableCategory } from '../../../core/models/inventor
 import { SegmentService } from '../../../core/services/segment.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { Segment } from '../../../core/models/segment.model';
+import { ToastService } from '../../../core/services/toast.service';
 
 export interface ConsumableFormDialogData {
   item?: InventoryItem;
@@ -32,6 +33,7 @@ const CATEGORY_OPTIONS: { value: ConsumableCategory; label: string }[] = [
 @Component({
   selector: 'app-consumable-form-dialog',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
   template: `
     <h2 mat-dialog-title>{{ data.item ? 'Edit' : 'Add' }} Consumable Item</h2>
@@ -90,7 +92,7 @@ const CATEGORY_OPTIONS: { value: ConsumableCategory; label: string }[] = [
 
     <mat-dialog-actions align="end">
       <button mat-button (click)="dialogRef.close()">Cancel</button>
-      <button mat-flat-button color="primary" [disabled]="saving() || !name.trim()" (click)="save()">
+      <button mat-flat-button color="primary" [disabled]="saving() || !name().trim()" (click)="save()">
         {{ saving() ? 'Saving...' : (data.item ? 'Update' : 'Add Item') }}
       </button>
     </mat-dialog-actions>
@@ -107,6 +109,7 @@ export class ConsumableFormDialogComponent implements OnInit {
   dialogRef = inject(MatDialogRef<ConsumableFormDialogComponent>);
   private inventoryService = inject(InventoryItemService);
   private segmentService = inject(SegmentService);
+  private toast = inject(ToastService);
 
   saving = signal(false);
   error = signal('');
@@ -114,24 +117,29 @@ export class ConsumableFormDialogComponent implements OnInit {
 
   categoryOptions = CATEGORY_OPTIONS;
 
-  name = '';
-  category: ConsumableCategory = 'other';
-  unit = 'kg';
-  minimumStock: number | null = null;
+  name = signal('');
+  category = signal<ConsumableCategory>('other');
+  unit = signal('kg');
+  minimumStock = signal<number | null>(null);
   openingStock: number | null = null;
-  selectedSegments: string[] = [];
-  note = '';
+  selectedSegments = signal<string[]>([]);
+  note = signal('');
 
   async ngOnInit(): Promise<void> {
-    this.segments.set(await this.segmentService.getAll());
+    try {
+      this.segments.set(await this.segmentService.getAll());
+    } catch (err) {
+      console.error('Failed to load segments', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load segments');
+    }
 
     if (this.data?.item) {
-      this.name = this.data.item.name;
-      this.category = this.data.item.category;
-      this.unit = this.data.item.unit;
-      this.minimumStock = this.data.item.minimumStock ?? null;
-      this.selectedSegments = this.data.item.segments || [];
-      this.note = this.data.item.note || '';
+      this.name.set(this.data.item.name);
+      this.category.set(this.data.item.category);
+      this.unit.set(this.data.item.unit);
+      this.minimumStock.set(this.data.item.minimumStock ?? null);
+      this.selectedSegments.set(this.data.item.segments || []);
+      this.note.set(this.data.item.note || '');
     }
   }
 
@@ -140,19 +148,19 @@ export class ConsumableFormDialogComponent implements OnInit {
     this.error.set('');
     try {
       const allSegments = this.segments();
-      const segmentNames = this.selectedSegments.map(id => {
+      const segmentNames = this.selectedSegments().map(id => {
         const seg = allSegments.find(s => s.id === id);
         return seg ? seg.name : id;
       });
 
       const formData: Partial<InventoryItem> = {
-        name: this.name,
-        category: this.category,
-        unit: this.unit,
-        minimumStock: this.minimumStock ?? undefined,
-        segments: this.selectedSegments,
+        name: this.name(),
+        category: this.category(),
+        unit: this.unit(),
+        minimumStock: this.minimumStock() ?? undefined,
+        segments: this.selectedSegments(),
         segmentNames,
-        note: this.note,
+        note: this.note(),
       };
 
       if (this.data?.item) {

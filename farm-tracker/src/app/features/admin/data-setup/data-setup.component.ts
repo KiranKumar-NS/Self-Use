@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { SegmentService } from '../../../core/services/segment.service';
 import { CategoryService } from '../../../core/services/category.service';
@@ -6,6 +6,8 @@ import { SummaryReconciliationService, ReconciliationReport } from '../../../cor
 import { Segment } from '../../../core/models/segment.model';
 import { Category } from '../../../core/models/category.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -27,6 +29,7 @@ import {
 @Component({
   selector: 'app-data-setup',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, LoadingSpinnerComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatChipsModule,
@@ -109,28 +112,28 @@ import {
               <div class="add-form">
                 <mat-form-field appearance="outline">
                   <mat-label>ID (lowercase, no spaces)</mat-label>
-                  <input matInput [(ngModel)]="newSegment.id" />
+                  <input matInput [ngModel]="newSegment().id" (ngModelChange)="newSegment().id = $event" />
                 </mat-form-field>
                 <mat-form-field appearance="outline">
                   <mat-label>Name</mat-label>
-                  <input matInput [(ngModel)]="newSegment.name" />
+                  <input matInput [ngModel]="newSegment().name" (ngModelChange)="newSegment().name = $event" />
                 </mat-form-field>
                 <mat-form-field appearance="outline">
                   <mat-label>Description</mat-label>
-                  <input matInput [(ngModel)]="newSegment.description" />
+                  <input matInput [ngModel]="newSegment().description" (ngModelChange)="newSegment().description = $event" />
                 </mat-form-field>
                 <mat-form-field appearance="outline">
                   <mat-label>Icon (emoji)</mat-label>
-                  <input matInput [(ngModel)]="newSegment.icon" />
+                  <input matInput [ngModel]="newSegment().icon" (ngModelChange)="newSegment().icon = $event" />
                 </mat-form-field>
                 <mat-form-field appearance="outline">
                   <mat-label>Type</mat-label>
-                  <mat-select [(ngModel)]="newSegment.segmentType">
+                  <mat-select [ngModel]="newSegment().segmentType" (ngModelChange)="newSegment().segmentType = $event">
                     <mat-option value="animal">🐄 Animal</mat-option>
                     <mat-option value="crop">🌱 Crop</mat-option>
                   </mat-select>
                 </mat-form-field>
-                <button mat-flat-button color="primary" (click)="addSegment()" [disabled]="!newSegment.id || !newSegment.name">
+                <button mat-flat-button color="primary" (click)="addSegment()" [disabled]="!newSegment().id || !newSegment().name">
                   <mat-icon>add</mat-icon> Add
                 </button>
               </div>
@@ -205,20 +208,20 @@ import {
               <div class="add-form">
                 <mat-form-field appearance="outline">
                   <mat-label>ID (lowercase, no spaces)</mat-label>
-                  <input matInput [(ngModel)]="newCategory.id" />
+                  <input matInput [ngModel]="newCategory().id" (ngModelChange)="newCategory().id = $event" />
                 </mat-form-field>
                 <mat-form-field appearance="outline">
                   <mat-label>Name</mat-label>
-                  <input matInput [(ngModel)]="newCategory.name" />
+                  <input matInput [ngModel]="newCategory().name" (ngModelChange)="newCategory().name = $event" />
                 </mat-form-field>
                 <mat-form-field appearance="outline">
                   <mat-label>Type</mat-label>
-                  <mat-select [(ngModel)]="newCategory.type">
+                  <mat-select [ngModel]="newCategory().type" (ngModelChange)="newCategory().type = $event">
                     <mat-option value="expense">Expense</mat-option>
                     <mat-option value="income">Income</mat-option>
                   </mat-select>
                 </mat-form-field>
-                <button mat-flat-button color="primary" (click)="addCategory()" [disabled]="!newCategory.id || !newCategory.name">
+                <button mat-flat-button color="primary" (click)="addCategory()" [disabled]="!newCategory().id || !newCategory().name">
                   <mat-icon>add</mat-icon> Add
                 </button>
               </div>
@@ -370,6 +373,7 @@ export class DataSetupComponent implements OnInit {
   private categoryService = inject(CategoryService);
   private reconciliationService = inject(SummaryReconciliationService);
   private firestore = inject(Firestore);
+  private toast = inject(ToastService);
 
   loading = signal(true);
   seeding = signal(false);
@@ -383,8 +387,8 @@ export class DataSetupComponent implements OnInit {
   expenseCategories = signal<Category[]>([]);
   incomeCategories = signal<Category[]>([]);
 
-  newSegment = { id: '', name: '', description: '', icon: '', segmentType: 'animal' as 'animal' | 'crop' };
-  newCategory = { id: '', name: '', type: 'expense' as 'expense' | 'income' };
+  newSegment = signal<{ id: string; name: string; description: string; icon: string; segmentType: 'animal' | 'crop' }>({ id: '', name: '', description: '', icon: '', segmentType: 'animal' });
+  newCategory = signal<{ id: string; name: string; type: 'expense' | 'income' }>({ id: '', name: '', type: 'expense' });
 
 
   async ngOnInit(): Promise<void> {
@@ -392,16 +396,16 @@ export class DataSetupComponent implements OnInit {
   }
 
   async loadData(): Promise<void> {
-    this.loading.set(true);
-    const [segments, categories] = await Promise.all([
-      this.segmentService.getAll(),
-      this.categoryService.getAll(),
-    ]);
-    this.segments.set(segments);
-    this.categories.set(categories);
-    this.expenseCategories.set(categories.filter((c) => c.type === 'expense'));
-    this.incomeCategories.set(categories.filter((c) => c.type === 'income'));
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      const [segments, categories] = await Promise.all([
+        this.segmentService.getAll(),
+        this.categoryService.getAll(),
+      ]);
+      this.segments.set(segments);
+      this.categories.set(categories);
+      this.expenseCategories.set(categories.filter((c) => c.type === 'expense'));
+      this.incomeCategories.set(categories.filter((c) => c.type === 'income'));
+    }, this.toast);
   }
 
   async seedAll(): Promise<void> {
@@ -449,19 +453,20 @@ export class DataSetupComponent implements OnInit {
 
   async addSegment(): Promise<void> {
     this.clearMessages();
-    const id = this.newSegment.id.toLowerCase().replace(/\s+/g, '-');
+    const newSegment = this.newSegment();
+    const id = newSegment.id.toLowerCase().replace(/\s+/g, '-');
     try {
       await setDoc(doc(this.firestore, 'segments', id), {
         id,
-        name: this.newSegment.name,
-        description: this.newSegment.description,
-        icon: this.newSegment.icon || '📦',
-        segmentType: this.newSegment.segmentType,
+        name: newSegment.name,
+        description: newSegment.description,
+        icon: newSegment.icon || '📦',
+        segmentType: newSegment.segmentType,
         isActive: true,
         createdAt: serverTimestamp(),
       });
-      this.successMsg.set(`Segment "${this.newSegment.name}" added!`);
-      this.newSegment = { id: '', name: '', description: '', icon: '', segmentType: 'animal' };
+      this.successMsg.set(`Segment "${newSegment.name}" added!`);
+      this.newSegment.set({ id: '', name: '', description: '', icon: '', segmentType: 'animal' });
       await this.loadData();
     } catch (err: any) {
       this.errorMsg.set(err.message);
@@ -470,16 +475,17 @@ export class DataSetupComponent implements OnInit {
 
   async addCategory(): Promise<void> {
     this.clearMessages();
-    const id = this.newCategory.id.toLowerCase().replace(/\s+/g, '-');
+    const newCategory = this.newCategory();
+    const id = newCategory.id.toLowerCase().replace(/\s+/g, '-');
     try {
       await setDoc(doc(this.firestore, 'categories', id), {
         id,
-        name: this.newCategory.name,
-        type: this.newCategory.type,
+        name: newCategory.name,
+        type: newCategory.type,
         isActive: true,
       });
-      this.successMsg.set(`Category "${this.newCategory.name}" added!`);
-      this.newCategory = { id: '', name: '', type: 'expense' };
+      this.successMsg.set(`Category "${newCategory.name}" added!`);
+      this.newCategory.set({ id: '', name: '', type: 'expense' });
       await this.loadData();
     } catch (err: any) {
       this.errorMsg.set(err.message);

@@ -77,6 +77,10 @@ export const routes: Routes = [
         canActivate: [roleGuard(['admin', 'manager'])],
       },
       {
+        path: 'market-prices',
+        loadComponent: () => import('./features/market-prices/market-prices-page.component').then(m => m.MarketPricesPageComponent),
+      },
+      {
         path: 'admin',
         loadChildren: () => import('./features/admin/admin.routes').then(m => m.ADMIN_ROUTES),
         canActivate: [roleGuard(['admin'])],

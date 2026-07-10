@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { InventoryService } from '../../../core/services/inventory.service';
@@ -9,6 +9,8 @@ import { Segment } from '../../../core/models/segment.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { InventoryEventDialogComponent } from '../inventory-event-dialog/inventory-event-dialog.component';
 import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
+import { safeLoad } from '../../../core/utils/async.utils';
+import { ToastService } from '../../../core/services/toast.service';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -20,6 +22,7 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
 @Component({
   selector: 'app-inventory-page',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, DatePipe, LoadingSpinnerComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule,
@@ -118,7 +121,7 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
           <div class="pagination">
             <div class="page-size">
               <span>Rows per page:</span>
-              <select [(ngModel)]="pageSize" (change)="currentPage = 1">
+              <select [(ngModel)]="pageSize" (change)="currentPage.set(1)">
                 <option [ngValue]="10">10</option>
                 <option [ngValue]="20">20</option>
                 <option [ngValue]="50">50</option>
@@ -126,10 +129,10 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
             </div>
             <span class="page-info">{{ pageStart() }}–{{ pageEnd() }} of {{ sortedEvents().length }}</span>
             <div class="page-buttons">
-              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" aria-label="First page"><mat-icon>first_page</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(1)" aria-label="First page"><mat-icon>first_page</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(currentPage() - 1)" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage() >= totalPages()" (click)="currentPage.set(currentPage() + 1)" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage() >= totalPages()" (click)="currentPage.set(totalPages())" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
             </div>
           </div>
         }
@@ -174,6 +177,7 @@ export class InventoryPageComponent implements OnInit {
   private inventoryService = inject(InventoryService);
   private segmentService = inject(SegmentService);
   private dialog = inject(MatDialog);
+  private toast = inject(ToastService);
   auth = inject(AuthService);
 
   loading = signal(true);
@@ -181,17 +185,18 @@ export class InventoryPageComponent implements OnInit {
   events = signal<InventoryEvent[]>([]);
   filterSegment = '';
 
-  sortColumn = '';
-  sortDirection: SortDirection = 'asc';
-  pageSize = 20;
-  currentPage = 1;
+  sortColumn = signal('');
+  sortDirection = signal<SortDirection>('asc');
+  pageSize = signal(20);
+  currentPage = signal(1);
 
   async ngOnInit(): Promise<void> {
-    // Auto-migrate: set segmentType, unit, fix icons on existing segments
-    await this.segmentService.migrateSegmentTypes();
-    this.segments.set(await this.segmentService.getAll());
-    await this.loadEvents();
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      // Auto-migrate: set segmentType, unit, fix icons on existing segments
+      await this.segmentService.migrateSegmentTypes();
+      this.segments.set(await this.segmentService.getAll());
+      await this.loadEvents();
+    }, this.toast);
   }
 
   animalSegments(): Segment[] {
@@ -199,31 +204,36 @@ export class InventoryPageComponent implements OnInit {
   }
 
   async loadEvents(): Promise<void> {
-    this.currentPage = 1;
-    this.events.set(await this.inventoryService.getEvents(this.filterSegment || undefined));
+    this.currentPage.set(1);
+    try {
+      this.events.set(await this.inventoryService.getEvents(this.filterSegment || undefined));
+    } catch (err) {
+      console.error('Failed to load inventory events', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load inventory events');
+    }
   }
 
-  sortedEvents(): InventoryEvent[] {
-    return sortData(this.events(), this.sortColumn, this.sortDirection);
-  }
+  sortedEvents = computed<InventoryEvent[]>(() =>
+    sortData(this.events(), this.sortColumn(), this.sortDirection())
+  );
 
-  paginatedEvents(): InventoryEvent[] {
-    return paginate(this.sortedEvents(), this.currentPage, this.pageSize);
-  }
+  paginatedEvents = computed<InventoryEvent[]>(() =>
+    paginate(this.sortedEvents(), this.currentPage(), this.pageSize())
+  );
 
-  totalPages(): number { return totalPages(this.sortedEvents().length, this.pageSize); }
-  pageStart(): number { return pageStart(this.sortedEvents().length, this.currentPage, this.pageSize); }
-  pageEnd(): number { return pageEnd(this.sortedEvents().length, this.currentPage, this.pageSize); }
+  totalPages = computed<number>(() => totalPages(this.sortedEvents().length, this.pageSize()));
+  pageStart = computed<number>(() => pageStart(this.sortedEvents().length, this.currentPage(), this.pageSize()));
+  pageEnd = computed<number>(() => pageEnd(this.sortedEvents().length, this.currentPage(), this.pageSize()));
 
   toggleSort(column: string): void {
-    const state = toggleSortState({ column: this.sortColumn, direction: this.sortDirection }, column);
-    this.sortColumn = state.column;
-    this.sortDirection = state.direction;
-    this.currentPage = 1;
+    const state = toggleSortState({ column: this.sortColumn(), direction: this.sortDirection() }, column);
+    this.sortColumn.set(state.column);
+    this.sortDirection.set(state.direction);
+    this.currentPage.set(1);
   }
 
   getSortIcon(column: string): string {
-    return getSortIndicator(this.sortColumn, this.sortDirection, column);
+    return getSortIndicator(this.sortColumn(), this.sortDirection(), column);
   }
 
   openEventDialog(): void {
@@ -234,8 +244,13 @@ export class InventoryPageComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.segmentService.clearCache();
-        this.segments.set(await this.segmentService.getAll());
+        try {
+          this.segmentService.clearCache();
+          this.segments.set(await this.segmentService.getAll());
+        } catch (err) {
+          console.error('Failed to refresh segments', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to refresh segments');
+        }
         await this.loadEvents();
       }
     });
@@ -249,8 +264,13 @@ export class InventoryPageComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.segmentService.clearCache();
-        this.segments.set(await this.segmentService.getAll());
+        try {
+          this.segmentService.clearCache();
+          this.segments.set(await this.segmentService.getAll());
+        } catch (err) {
+          console.error('Failed to refresh segments', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to refresh segments');
+        }
         await this.loadEvents();
       }
     });
@@ -267,13 +287,18 @@ export class InventoryPageComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        if (result.deleteType === 'hard') {
-          await this.inventoryService.deleteEvent(ev.id, ev.segment, ev.count);
-        } else {
-          await this.inventoryService.softDeleteEvent(ev.id, ev.segment, ev.count);
+        try {
+          if (result.deleteType === 'hard') {
+            await this.inventoryService.deleteEvent(ev.id, ev.segment, ev.count);
+          } else {
+            await this.inventoryService.softDeleteEvent(ev.id, ev.segment, ev.count);
+          }
+          this.segmentService.clearCache();
+          this.segments.set(await this.segmentService.getAll());
+        } catch (err) {
+          console.error('Failed to delete inventory event', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete inventory event');
         }
-        this.segmentService.clearCache();
-        this.segments.set(await this.segmentService.getAll());
         await this.loadEvents();
       }
     });

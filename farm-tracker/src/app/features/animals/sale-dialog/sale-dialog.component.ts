@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -14,6 +14,7 @@ import { BuyerService } from '../../../core/services/buyer.service';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { InventoryService } from '../../../core/services/inventory.service';
 import { SegmentService } from '../../../core/services/segment.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { Animal } from '../../../core/models/animal.model';
 import { Buyer } from '../../../core/models/buyer.model';
 import { PaymentMethod, IncomePaymentStatus, SaleUnit } from '../../../core/models/transaction.model';
@@ -26,6 +27,7 @@ export interface SaleDialogData {
 @Component({
   selector: 'app-sale-dialog',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule,
     MatInputModule, MatSelectModule, MatDatepickerModule, MatAutocompleteModule,
@@ -132,6 +134,7 @@ export class SaleDialogComponent implements OnInit {
   private transactionService = inject(TransactionService);
   private inventoryService = inject(InventoryService);
   private segmentService = inject(SegmentService);
+  private toast = inject(ToastService);
 
   buyers = signal<Buyer[]>([]);
   saving = signal(false);
@@ -140,16 +143,21 @@ export class SaleDialogComponent implements OnInit {
   today = new Date();
   salePrice = 0;
   saleDate = new Date();
-  countSold = 1;
+  countSold = signal(1);
   buyerId = '';
   newBuyerName = '';
   paymentMethod: PaymentMethod = 'cash';
   paymentStatus: IncomePaymentStatus = 'received';
 
   async ngOnInit(): Promise<void> {
-    this.buyers.set(await this.buyerService.getAll());
+    try {
+      this.buyers.set(await this.buyerService.getAll());
+    } catch (err) {
+      console.error('Failed to load buyers', err);
+      this.toast.error('Failed to load buyers. Check your connection and try again.');
+    }
     if (this.data.animal.trackingMode === 'batch') {
-      this.countSold = this.data.animal.currentCount;
+      this.countSold.set(this.data.animal.currentCount);
     }
   }
 
@@ -180,9 +188,9 @@ export class SaleDialogComponent implements OnInit {
         type: 'income',
         date: this.saleDate,
         amount: this.salePrice,
-        quantity: this.countSold,
+        quantity: this.countSold(),
         unit: 'head' as SaleUnit,
-        ratePerUnit: this.countSold > 0 ? Math.round((this.salePrice / this.countSold) * 100) / 100 : this.salePrice,
+        ratePerUnit: this.countSold() > 0 ? Math.round((this.salePrice / this.countSold()) * 100) / 100 : this.salePrice,
         category: 'animal-sales',
         categoryName: 'Animal Sales',
         segment: animal.segment,
@@ -205,7 +213,7 @@ export class SaleDialogComponent implements OnInit {
         segment: animal.segment,
         segmentName: animal.segmentName,
         eventType: 'sale',
-        count: this.countSold,
+        count: this.countSold(),
         breed: animal.breed,
         note: `Sold ${this.animalService.getDisplayName(animal)}${resolvedBuyerName ? ' to ' + resolvedBuyerName : ''}`,
         date: this.saleDate,
@@ -221,12 +229,12 @@ export class SaleDialogComponent implements OnInit {
         saleTransactionId: txnId,
         saleInventoryEventId: eventId,
         date: this.saleDate,
-        countSold: this.countSold,
+        countSold: this.countSold(),
       });
 
       // 4. Update buyer stats
       if (resolvedBuyerId && resolvedBuyerId !== '__new__') {
-        await this.buyerService.updateStats(resolvedBuyerId, this.salePrice, this.countSold, this.saleDate, this.data.animal.segment);
+        await this.buyerService.updateStats(resolvedBuyerId, this.salePrice, this.countSold(), this.saleDate, this.data.animal.segment);
       }
 
       this.segmentService.clearCache();

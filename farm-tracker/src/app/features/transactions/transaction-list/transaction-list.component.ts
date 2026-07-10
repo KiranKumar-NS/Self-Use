@@ -1,10 +1,11 @@
-import { Component, inject, signal, computed, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { UpperCasePipe, DatePipe } from '@angular/common';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { SegmentService } from '../../../core/services/segment.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { Transaction } from '../../../core/models/transaction.model';
 import { Segment } from '../../../core/models/segment.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
@@ -13,6 +14,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/components/date-range-filter/date-range-filter.component';
 import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
+import { safeLoad } from '../../../core/utils/async.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -20,17 +22,17 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatInputModule } from '@angular/material/input';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { getMonthString } from '../../../core/utils/date.utils';
 import { normalizeName } from '../../../core/utils/name.utils';
 
 @Component({
   selector: 'app-transaction-list',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, DatePipe, UpperCasePipe, CurrencyInrPipe,
     LoadingSpinnerComponent, EmptyStateComponent, DateRangeFilterComponent,
-    MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule, MatSnackBarModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule,
   ],
   template: `
     <!-- Header -->
@@ -49,18 +51,18 @@ import { normalizeName } from '../../../core/utils/name.utils';
 
     <!-- Filters -->
     <mat-card class="filter-card">
-      <div class="filter-header" (click)="filtersOpen = !filtersOpen">
+      <div class="filter-header" (click)="filtersOpen.set(!filtersOpen())">
         <mat-icon>filter_list</mat-icon>
         <span>Filters</span>
         @if (activeFilterCount() > 0) {
           <span class="filter-count">{{ activeFilterCount() }} active</span>
         }
-        @if (filterType || filterSegment || filterPaidBy || filterPaymentStatus || filterTag || searchTerm) {
+        @if (activeFilterCount() > 0) {
           <button mat-button class="clear-btn" (click)="clearFilters(); $event.stopPropagation()">Clear All</button>
         }
-        <mat-icon class="toggle-icon" [class.expanded]="filtersOpen">expand_more</mat-icon>
+        <mat-icon class="toggle-icon" [class.expanded]="filtersOpen()">expand_more</mat-icon>
       </div>
-      <div class="filters" [class.collapsed]="!filtersOpen">
+      <div class="filters" [class.collapsed]="!filtersOpen()">
         <mat-form-field appearance="outline" class="filter-field">
           <mat-label>Type</mat-label>
           <mat-select [(ngModel)]="filterType" (selectionChange)="loadData()">
@@ -116,8 +118,8 @@ import { normalizeName } from '../../../core/utils/name.utils';
         <mat-form-field appearance="outline" class="filter-field search-field">
           <mat-label>Search</mat-label>
           <input matInput [(ngModel)]="searchTerm" placeholder="Description, person, tag..." />
-          @if (searchTerm) {
-            <button matSuffix mat-icon-button (click)="searchTerm = ''"><mat-icon>close</mat-icon></button>
+          @if (searchTerm()) {
+            <button matSuffix mat-icon-button (click)="searchTerm.set('')"><mat-icon>close</mat-icon></button>
           }
         </mat-form-field>
       </div>
@@ -126,6 +128,8 @@ import { normalizeName } from '../../../core/utils/name.utils';
     <!-- Content -->
     @if (loading()) {
       <app-loading-spinner />
+    } @else if (loadFailed()) {
+      <app-empty-state icon="⚠️" title="Couldn't load transactions" message="Check your connection and try again." actionLabel="Retry" (actionClick)="loadData()" />
     } @else if (displayedTransactions().length === 0) {
       <app-empty-state icon="📋" title="No transactions" message="No transactions found. Try changing the filters or add a new transaction." actionLabel="Add Transaction" (actionClick)="addNew()" />
     } @else {
@@ -143,13 +147,13 @@ import { normalizeName } from '../../../core/utils/name.utils';
           <table class="data-table data-table--wide">
             <thead>
               <tr>
-                <th class="sortable" (click)="toggleSort('date')" [attr.aria-sort]="sortColumn === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : null">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
-                <th class="sortable" (click)="toggleSort('type')" [attr.aria-sort]="sortColumn === 'type' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : null">Type <span class="sort-icon">{{ getSortIcon('type') }}</span></th>
-                <th class="sortable" (click)="toggleSort('segmentName')" [attr.aria-sort]="sortColumn === 'segmentName' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : null">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
-                <th class="sortable" (click)="toggleSort('categoryName')" [attr.aria-sort]="sortColumn === 'categoryName' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : null">Category <span class="sort-icon">{{ getSortIcon('categoryName') }}</span></th>
-                <th class="sortable" (click)="toggleSort('amount')" [attr.aria-sort]="sortColumn === 'amount' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : null">Amount <span class="sort-icon">{{ getSortIcon('amount') }}</span></th>
+                <th class="sortable" (click)="toggleSort('date')" [attr.aria-sort]="sortColumn() === 'date' ? (sortDirection() === 'asc' ? 'ascending' : 'descending') : null">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
+                <th class="sortable" (click)="toggleSort('type')" [attr.aria-sort]="sortColumn() === 'type' ? (sortDirection() === 'asc' ? 'ascending' : 'descending') : null">Type <span class="sort-icon">{{ getSortIcon('type') }}</span></th>
+                <th class="sortable" (click)="toggleSort('segmentName')" [attr.aria-sort]="sortColumn() === 'segmentName' ? (sortDirection() === 'asc' ? 'ascending' : 'descending') : null">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('categoryName')" [attr.aria-sort]="sortColumn() === 'categoryName' ? (sortDirection() === 'asc' ? 'ascending' : 'descending') : null">Category <span class="sort-icon">{{ getSortIcon('categoryName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('amount')" [attr.aria-sort]="sortColumn() === 'amount' ? (sortDirection() === 'asc' ? 'ascending' : 'descending') : null">Amount <span class="sort-icon">{{ getSortIcon('amount') }}</span></th>
                 <th>Paid Via</th>
-                <th class="sortable" (click)="toggleSort('paidByName')" [attr.aria-sort]="sortColumn === 'paidByName' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : null">By <span class="sort-icon">{{ getSortIcon('paidByName') }}</span></th>
+                <th class="sortable" (click)="toggleSort('paidByName')" [attr.aria-sort]="sortColumn() === 'paidByName' ? (sortDirection() === 'asc' ? 'ascending' : 'descending') : null">By <span class="sort-icon">{{ getSortIcon('paidByName') }}</span></th>
                 <th>Description</th>
                 <th class="actions-th">Actions</th>
               </tr>
@@ -214,7 +218,7 @@ import { normalizeName } from '../../../core/utils/name.utils';
         <div class="pagination">
           <div class="page-size">
             <span>Rows per page:</span>
-            <select [(ngModel)]="pageSize" (change)="currentPage = 1">
+            <select [(ngModel)]="pageSize" (change)="currentPage.set(1)">
               <option [ngValue]="10">10</option>
               <option [ngValue]="20">20</option>
               <option [ngValue]="50">50</option>
@@ -222,16 +226,16 @@ import { normalizeName } from '../../../core/utils/name.utils';
           </div>
           <span class="page-info">{{ pageStart() }}–{{ pageEnd() }} of {{ displayedTransactions().length }}</span>
           <div class="page-buttons">
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" title="First page" aria-label="First page">
+            <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(1)" title="First page" aria-label="First page">
               <mat-icon>first_page</mat-icon>
             </button>
-            <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" title="Previous page" aria-label="Previous page">
+            <button mat-icon-button [disabled]="currentPage() === 1" (click)="currentPage.set(currentPage() - 1)" title="Previous page" aria-label="Previous page">
               <mat-icon>chevron_left</mat-icon>
             </button>
-            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1" title="Next page" aria-label="Next page">
+            <button mat-icon-button [disabled]="currentPage() >= totalPages()" (click)="currentPage.set(currentPage() + 1)" title="Next page" aria-label="Next page">
               <mat-icon>chevron_right</mat-icon>
             </button>
-            <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()" title="Last page" aria-label="Last page">
+            <button mat-icon-button [disabled]="currentPage() >= totalPages()" (click)="currentPage.set(totalPages())" title="Last page" aria-label="Last page">
               <mat-icon>last_page</mat-icon>
             </button>
           </div>
@@ -317,73 +321,78 @@ export class TransactionListComponent implements OnInit {
   private segmentService = inject(SegmentService);
   private router = inject(Router);
   private dialog = inject(MatDialog);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
   auth = inject(AuthService);
 
   transactions = signal<Transaction[]>([]);
   segments = signal<Segment[]>([]);
   loading = signal(true);
+  loadFailed = signal(false);
   hasMore = signal(false);
   private lastDoc: any = null;
 
-  filtersOpen = window.innerWidth > 768;
-  filterType = '';
-  filterSegment = '';
-  filterPaidBy = '';
-  filterPaymentStatus = '';
-  filterTag = '';
-  searchTerm = '';
+  filtersOpen = signal(window.innerWidth > 768);
+  filterType = signal('');
+  filterSegment = signal('');
+  filterPaidBy = signal('');
+  filterPaymentStatus = signal('');
+  filterTag = signal('');
+  searchTerm = signal('');
   paidByList = signal<string[]>([]);
   allTags = signal<string[]>([]);
 
   // Date range state
-  private currentSelection: DateRangeSelection = { mode: 'monthly', month: getMonthString(new Date()) };
+  private currentSelection = signal<DateRangeSelection>({ mode: 'monthly', month: getMonthString(new Date()) });
 
   activeFilterCount = computed(() => {
     let count = 0;
-    if (this.filterType) count++;
-    if (this.filterSegment) count++;
-    if (this.filterPaidBy) count++;
-    if (this.filterPaymentStatus) count++;
-    if (this.filterTag) count++;
-    if (this.searchTerm) count++;
+    if (this.filterType()) count++;
+    if (this.filterSegment()) count++;
+    if (this.filterPaidBy()) count++;
+    if (this.filterPaymentStatus()) count++;
+    if (this.filterTag()) count++;
+    if (this.searchTerm()) count++;
     return count;
   });
 
-  sortColumn = '';
-  sortDirection: SortDirection = 'asc';
-  pageSize = 20;
-  currentPage = 1;
+  sortColumn = signal('');
+  sortDirection = signal<SortDirection>('asc');
+  pageSize = signal(20);
+  currentPage = signal(1);
 
-  displayedTransactions(): Transaction[] {
+  displayedTransactions = computed<Transaction[]>(() => {
     let filtered = this.transactions();
+    const selection = this.currentSelection();
 
     // Client-side month range filter for custom/alltime modes
-    if (this.currentSelection.mode === 'custom') {
+    if (selection.mode === 'custom') {
       filtered = filtered.filter(txn =>
-        txn.month >= this.currentSelection.fromMonth! && txn.month <= this.currentSelection.toMonth!
+        txn.month >= selection.fromMonth! && txn.month <= selection.toMonth!
       );
     }
 
-    if (this.filterPaidBy) {
-      filtered = filtered.filter(txn => normalizeName(txn.paidByName || txn.createdByName || 'Unknown') === this.filterPaidBy);
+    const paidBy = this.filterPaidBy();
+    if (paidBy) {
+      filtered = filtered.filter(txn => normalizeName(txn.paidByName || txn.createdByName || 'Unknown') === paidBy);
     }
 
-    if (this.filterPaymentStatus) {
+    const paymentStatus = this.filterPaymentStatus();
+    if (paymentStatus) {
       filtered = filtered.filter(txn => {
-        if (this.filterPaymentStatus === 'pending') return txn.paymentStatus === 'pending';
-        if (this.filterPaymentStatus === 'received') return txn.type === 'income' && txn.paymentStatus !== 'pending';
-        if (this.filterPaymentStatus === 'credit') return txn.type === 'expense' && txn.expensePaymentStatus === 'pending';
-        if (this.filterPaymentStatus === 'paid') return txn.type === 'expense' && txn.expensePaymentStatus !== 'pending';
+        if (paymentStatus === 'pending') return txn.paymentStatus === 'pending';
+        if (paymentStatus === 'received') return txn.type === 'income' && txn.paymentStatus !== 'pending';
+        if (paymentStatus === 'credit') return txn.type === 'expense' && txn.expensePaymentStatus === 'pending';
+        if (paymentStatus === 'paid') return txn.type === 'expense' && txn.expensePaymentStatus !== 'pending';
         return true;
       });
     }
 
-    if (this.filterTag) {
-      filtered = filtered.filter(txn => txn.tags?.includes(this.filterTag));
+    const tag = this.filterTag();
+    if (tag) {
+      filtered = filtered.filter(txn => txn.tags?.includes(tag));
     }
 
-    const term = this.searchTerm.toLowerCase().trim();
+    const term = this.searchTerm().toLowerCase().trim();
     if (term) {
       filtered = filtered.filter(txn =>
         txn.description?.toLowerCase().includes(term) ||
@@ -392,95 +401,97 @@ export class TransactionListComponent implements OnInit {
         txn.categoryName?.toLowerCase().includes(term) ||
         txn.segmentName?.toLowerCase().includes(term) ||
         txn.amount.toString().includes(term) ||
-        txn.tags?.some(tag => tag.includes(term))
+        txn.tags?.some(t => t.includes(term))
       );
     }
 
-    return sortData(filtered, this.sortColumn, this.sortDirection);
-  }
+    return sortData(filtered, this.sortColumn(), this.sortDirection());
+  });
+
+  paginatedTransactions = computed<Transaction[]>(() =>
+    paginate(this.displayedTransactions(), this.currentPage(), this.pageSize())
+  );
+
+  totalPages = computed<number>(() => totalPages(this.displayedTransactions().length, this.pageSize()));
+
+  pageStart = computed<number>(() => pageStart(this.displayedTransactions().length, this.currentPage(), this.pageSize()));
+
+  pageEnd = computed<number>(() => pageEnd(this.displayedTransactions().length, this.currentPage(), this.pageSize()));
 
   async ngOnInit(): Promise<void> {
-    this.segments.set(await this.segmentService.getAll());
+    try {
+      this.segments.set(await this.segmentService.getAll());
+    } catch (err) {
+      console.error('Failed to load segments', err);
+    }
   }
 
   async onRangeChange(selection: DateRangeSelection): Promise<void> {
-    this.currentSelection = selection;
+    this.currentSelection.set(selection);
     await this.loadData();
   }
 
   async loadData(): Promise<void> {
-    this.loading.set(true);
     this.lastDoc = null;
-    this.currentPage = 1;
-    const filters: any = {};
-    if (this.filterType) filters.type = this.filterType;
-    if (this.filterSegment) filters.segment = this.filterSegment;
-
-    // Use server-side month filter only for single month mode
-    if (this.currentSelection.mode === 'monthly') {
-      filters.month = this.currentSelection.month;
-    }
-
-    const limit = this.currentSelection.mode === 'monthly' ? 20 : 200;
-    const result = await this.transactionService.getAll(filters, limit);
-    this.transactions.set(result.transactions);
-    this.lastDoc = result.lastDoc;
-    this.hasMore.set(result.transactions.length === limit);
-    this.paidByList.set([...new Set(result.transactions.map(t => normalizeName(t.paidByName || t.createdByName || 'Unknown')))].sort());
-    this.allTags.set([...new Set(result.transactions.flatMap(t => t.tags || []))].sort());
-    this.loading.set(false);
+    this.currentPage.set(1);
+    const ok = await safeLoad(this.loading, async () => {
+      const { filters, limit } = this.buildQuery();
+      const result = await this.transactionService.getAll(filters, limit);
+      this.transactions.set(result.transactions);
+      this.lastDoc = result.lastDoc;
+      this.hasMore.set(result.transactions.length === limit);
+      this.paidByList.set([...new Set(result.transactions.map(t => normalizeName(t.paidByName || t.createdByName || 'Unknown')))].sort());
+      this.allTags.set([...new Set(result.transactions.flatMap(t => t.tags || []))].sort());
+    }, this.toast);
+    this.loadFailed.set(!ok);
   }
 
   async loadMore(): Promise<void> {
     if (this.loading()) return;
-    const filters: any = {};
-    if (this.filterType) filters.type = this.filterType;
-    if (this.filterSegment) filters.segment = this.filterSegment;
-    if (this.currentSelection.mode === 'monthly') {
-      filters.month = this.currentSelection.month;
+    try {
+      const { filters, limit } = this.buildQuery();
+      const result = await this.transactionService.getAll(filters, limit, this.lastDoc);
+      this.transactions.update((prev) => [...prev, ...result.transactions]);
+      this.lastDoc = result.lastDoc;
+      this.hasMore.set(result.transactions.length === limit);
+    } catch (err) {
+      console.error('Failed to load more transactions', err);
+      this.toast.error('Failed to load more. Please try again.');
+    }
+  }
+
+  private buildQuery(): { filters: { type?: 'expense' | 'income'; segment?: string; month?: string }; limit: number } {
+    const selection = this.currentSelection();
+    const filters: { type?: 'expense' | 'income'; segment?: string; month?: string } = {};
+    if (this.filterType()) filters.type = this.filterType() as 'expense' | 'income';
+    if (this.filterSegment()) filters.segment = this.filterSegment();
+
+    // Use server-side month filter only for single month mode
+    if (selection.mode === 'monthly') {
+      filters.month = selection.month;
     }
 
-    const limit = this.currentSelection.mode === 'monthly' ? 20 : 200;
-    const result = await this.transactionService.getAll(filters, limit, this.lastDoc);
-    this.transactions.update((prev) => [...prev, ...result.transactions]);
-    this.lastDoc = result.lastDoc;
-    this.hasMore.set(result.transactions.length === limit);
-  }
-
-  paginatedTransactions(): Transaction[] {
-    return paginate(this.displayedTransactions(), this.currentPage, this.pageSize);
-  }
-
-  totalPages(): number {
-    return totalPages(this.displayedTransactions().length, this.pageSize);
-  }
-
-  pageStart(): number {
-    return pageStart(this.displayedTransactions().length, this.currentPage, this.pageSize);
-  }
-
-  pageEnd(): number {
-    return pageEnd(this.displayedTransactions().length, this.currentPage, this.pageSize);
+    return { filters, limit: selection.mode === 'monthly' ? 20 : 200 };
   }
 
   toggleSort(column: string): void {
-    const state = toggleSortState({ column: this.sortColumn, direction: this.sortDirection }, column);
-    this.sortColumn = state.column;
-    this.sortDirection = state.direction;
-    this.currentPage = 1;
+    const state = toggleSortState({ column: this.sortColumn(), direction: this.sortDirection() }, column);
+    this.sortColumn.set(state.column);
+    this.sortDirection.set(state.direction);
+    this.currentPage.set(1);
   }
 
   getSortIcon(column: string): string {
-    return getSortIndicator(this.sortColumn, this.sortDirection, column);
+    return getSortIndicator(this.sortColumn(), this.sortDirection(), column);
   }
 
   clearFilters(): void {
-    this.filterType = '';
-    this.filterSegment = '';
-    this.filterPaidBy = '';
-    this.filterPaymentStatus = '';
-    this.filterTag = '';
-    this.searchTerm = '';
+    this.filterType.set('');
+    this.filterSegment.set('');
+    this.filterPaidBy.set('');
+    this.filterPaymentStatus.set('');
+    this.filterTag.set('');
+    this.searchTerm.set('');
     this.loadData();
   }
 
@@ -508,13 +519,18 @@ export class TransactionListComponent implements OnInit {
 
     dialogRef.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        if (result.deleteType === 'hard') {
-          await this.transactionService.hardDelete(txn.id);
-        } else {
-          await this.transactionService.softDelete(txn.id);
+        try {
+          if (result.deleteType === 'hard') {
+            await this.transactionService.hardDelete(txn.id);
+          } else {
+            await this.transactionService.softDelete(txn.id);
+          }
+          this.toast.success('Transaction deleted');
+          await this.loadData();
+        } catch (err) {
+          console.error('Failed to delete transaction', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete transaction');
         }
-        this.snackBar.open('Transaction deleted', '', { duration: 2500 });
-        await this.loadData();
       }
     });
   }

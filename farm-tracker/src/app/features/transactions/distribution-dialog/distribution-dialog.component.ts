@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,6 +8,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { Transaction, DistributionEntry } from '../../../core/models/transaction.model';
 import { UserService } from '../../../core/services/user.service';
 import { TransactionService } from '../../../core/services/transaction.service';
+import { ToastService } from '../../../core/services/toast.service';
+import { safeLoad } from '../../../core/utils/async.utils';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 
 export interface DistributionDialogData {
@@ -23,6 +25,7 @@ interface DistributionRow {
 @Component({
   selector: 'app-distribution-dialog',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule,
     MatInputModule, MatIconModule, CurrencyInrPipe,
@@ -134,6 +137,7 @@ export class DistributionDialogComponent implements OnInit {
   dialogRef = inject(MatDialogRef<DistributionDialogComponent>);
   private userService = inject(UserService);
   private transactionService = inject(TransactionService);
+  private toast = inject(ToastService);
 
   rows = signal<DistributionRow[]>([]);
   loading = signal(true);
@@ -143,26 +147,27 @@ export class DistributionDialogComponent implements OnInit {
   remaining = signal(0);
 
   async ngOnInit(): Promise<void> {
-    const users = await this.userService.getAll();
-    const activeUsers = users.filter(u => u.isActive);
-    const existing = this.data.transaction.distributions || [];
+    await safeLoad(this.loading, async () => {
+      const users = await this.userService.getAll();
+      const activeUsers = users.filter(u => u.isActive);
+      const existing = this.data.transaction.distributions || [];
 
-    const distRows: DistributionRow[] = activeUsers.map(u => ({
-      uid: u.uid,
-      name: u.displayName,
-      amount: existing.find(d => d.uid === u.uid)?.amount || 0,
-    }));
+      const distRows: DistributionRow[] = activeUsers.map(u => ({
+        uid: u.uid,
+        name: u.displayName,
+        amount: existing.find(d => d.uid === u.uid)?.amount || 0,
+      }));
 
-    // Add reinvestment row
-    distRows.push({
-      uid: 'reinvestment',
-      name: 'Reinvestment',
-      amount: existing.find(d => d.uid === 'reinvestment')?.amount || 0,
-    });
+      // Add reinvestment row
+      distRows.push({
+        uid: 'reinvestment',
+        name: 'Reinvestment',
+        amount: existing.find(d => d.uid === 'reinvestment')?.amount || 0,
+      });
 
-    this.rows.set(distRows);
-    this.onAmountChange();
-    this.loading.set(false);
+      this.rows.set(distRows);
+      this.onAmountChange();
+    }, this.toast);
   }
 
   onAmountChange(): void {

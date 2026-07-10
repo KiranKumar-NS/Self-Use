@@ -26,14 +26,32 @@ service cloud.firestore {
       return getUserData().isActive == true;
     }
 
+    function isActiveReader() {
+      return isAuthenticated() && isActiveUser();
+    }
+
     function hasSegmentAccess(segment) {
       return isAdmin() ||
         (getUserRole() == 'manager' && segment in getUserData().assignedSegments);
     }
 
+    // 'personal' is a shared pseudo-segment writable by any active manager
+    function hasSegmentOrPersonalAccess(segment) {
+      return segment == 'personal' || hasSegmentAccess(segment);
+    }
+
+    // Post-write state must keep timeline bounded (client caps at 50; generous
+    // backstop so legacy docs with longer histories stay editable)
+    function timelineWithinCap() {
+      return !('timeline' in request.resource.data)
+        || request.resource.data.timeline.size() <= 100;
+    }
+
     // Users collection
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      // Self-read must work even for deactivated users (login flow reads the
+      // profile to detect isActive and sign the user out)
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isActiveUser());
       // User can update their own profile (but NOT role, segments, or isActive)
       allow update: if isAuthenticated() && request.auth.uid == userId
         && request.resource.data.role == resource.data.role
@@ -45,59 +63,111 @@ service cloud.firestore {
 
     // Segments (reference data)
     match /segments/{segmentId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow write: if isManagerOrAdmin() && isActiveUser();
     }
 
     // Categories (reference data)
     match /categories/{categoryId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow write: if isAdmin();
+    }
+
+    // App metadata (tag/product suggestion lists, small shared config docs)
+    match /meta/{docId} {
+      allow read: if isActiveReader();
+      allow write: if isManagerOrAdmin() && isActiveUser();
     }
 
     // Transactions
     match /transactions/{transactionId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow create: if isManagerOrAdmin() && isActiveUser()
-        && hasSegmentAccess(request.resource.data.segment)
+        && hasSegmentOrPersonalAccess(request.resource.data.segment)
         && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.isDeleted == false;
+        && request.resource.data.isDeleted == false
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.type in ['expense', 'income']
+        && request.resource.data.month is string
+        && request.resource.data.year is int
+        && timelineWithinCap();
       allow update: if isManagerOrAdmin() && isActiveUser()
-        && hasSegmentAccess(resource.data.segment)
-        && hasSegmentAccess(request.resource.data.segment);
+        && hasSegmentOrPersonalAccess(resource.data.segment)
+        && hasSegmentOrPersonalAccess(request.resource.data.segment)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.type in ['expense', 'income']
+        && timelineWithinCap();
       allow delete: if isAdmin();
     }
 
-    // Loans (personal loans use segment='personal' which all users can access)
+    // Loans (personal loans use segment='personal' which all managers can access)
     match /loans/{loanId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow create: if isManagerOrAdmin() && isActiveUser()
-        && (request.resource.data.segment == 'personal' || hasSegmentAccess(request.resource.data.segment));
+        && hasSegmentOrPersonalAccess(request.resource.data.segment)
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && timelineWithinCap();
       allow update: if isManagerOrAdmin() && isActiveUser()
-        && (resource.data.segment == 'personal' || hasSegmentAccess(resource.data.segment));
-      allow delete: if isManagerOrAdmin() && isActiveUser();
+        && hasSegmentOrPersonalAccess(resource.data.segment)
+        && timelineWithinCap();
+      allow delete: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentOrPersonalAccess(resource.data.segment);
 
       // Repayments subcollection — check parent loan segment
       match /repayments/{repaymentId} {
-        allow read: if isAuthenticated();
+        allow read: if isActiveReader();
         allow create: if isManagerOrAdmin() && isActiveUser()
-          && (get(/databases/$(database)/documents/loans/$(loanId)).data.segment == 'personal'
-              || hasSegmentAccess(get(/databases/$(database)/documents/loans/$(loanId)).data.segment));
+          && hasSegmentOrPersonalAccess(get(/databases/$(database)/documents/loans/$(loanId)).data.segment);
         allow update, delete: if isManagerOrAdmin() && isActiveUser()
-          && (get(/databases/$(database)/documents/loans/$(loanId)).data.segment == 'personal'
-              || hasSegmentAccess(get(/databases/$(database)/documents/loans/$(loanId)).data.segment));
+          && hasSegmentOrPersonalAccess(get(/databases/$(database)/documents/loans/$(loanId)).data.segment);
       }
     }
 
-    // Monthly summaries
+    // Monthly summaries — client-maintained aggregation counters.
+    // Doc ID must match the identity fields so a manager cannot corrupt another
+    // period/segment's counters; money fields must be numbers when present
+    // (merge writes with increments omit fields they don't touch).
     match /monthlySummaries/{summaryId} {
-      allow read: if isAuthenticated();
-      allow write: if isManagerOrAdmin() && isActiveUser();
+      allow read: if isActiveReader();
+      allow create, update: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentOrPersonalAccess(request.resource.data.segment)
+        && summaryId == request.resource.data.month + '-' + request.resource.data.segment
+        && (!('totalIncome' in request.resource.data) || request.resource.data.totalIncome is number)
+        && (!('totalExpense' in request.resource.data) || request.resource.data.totalExpense is number)
+        && (!('netProfit' in request.resource.data) || request.resource.data.netProfit is number);
+      // Only the admin reconciliation tool removes orphaned summaries
+      allow delete: if isAdmin();
+    }
+
+    // Yearly summaries — same contract as monthly
+    match /yearlySummaries/{summaryId} {
+      allow read: if isActiveReader();
+      allow create, update: if isManagerOrAdmin() && isActiveUser()
+        && hasSegmentOrPersonalAccess(request.resource.data.segment)
+        && summaryId == string(request.resource.data.year) + '-' + request.resource.data.segment
+        && (!('totalIncome' in request.resource.data) || request.resource.data.totalIncome is number)
+        && (!('totalExpense' in request.resource.data) || request.resource.data.totalExpense is number)
+        && (!('netProfit' in request.resource.data) || request.resource.data.netProfit is number);
+      allow delete: if isAdmin();
+    }
+
+    // Market prices (manual reference data for rate comparison)
+    match /marketPrices/{priceId} {
+      allow read: if isActiveReader();
+      allow create, update: if isManagerOrAdmin() && isActiveUser()
+        && request.resource.data.price is number
+        && request.resource.data.price > 0
+        && request.resource.data.product is string;
+      allow delete: if isAdmin();
     }
 
     // Inventory events
     match /inventoryEvents/{eventId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow create: if isManagerOrAdmin() && isActiveUser()
         && hasSegmentAccess(request.resource.data.segment);
       allow update: if isManagerOrAdmin() && isActiveUser()
@@ -106,21 +176,15 @@ service cloud.firestore {
         && hasSegmentAccess(resource.data.segment);
     }
 
-    // Tasks - managers/admins can write, all authenticated can read
+    // Tasks - managers/admins can write, all active users can read
     match /tasks/{taskId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow create, update, delete: if isManagerOrAdmin() && isActiveUser();
-    }
-
-    // Yearly summaries
-    match /yearlySummaries/{summaryId} {
-      allow read: if isAuthenticated();
-      allow write: if isManagerOrAdmin() && isActiveUser();
     }
 
     // Animals
     match /animals/{animalId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow create: if isManagerOrAdmin() && isActiveUser()
         && hasSegmentAccess(request.resource.data.segment);
       allow update: if isManagerOrAdmin() && isActiveUser()
@@ -130,21 +194,21 @@ service cloud.firestore {
 
     // Buyers
     match /buyers/{buyerId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow create, update: if isManagerOrAdmin() && isActiveUser();
       allow delete: if isAdmin();
     }
 
     // Schedules (recurring transactions + reminders)
     match /schedules/{scheduleId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow create, update: if isManagerOrAdmin() && isActiveUser();
       allow delete: if isAdmin();
     }
 
     // Breeding records
     match /breedingRecords/{recordId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow create: if isManagerOrAdmin() && isActiveUser()
         && hasSegmentAccess(request.resource.data.segment);
       allow update: if isManagerOrAdmin() && isActiveUser()
@@ -155,7 +219,7 @@ service cloud.firestore {
 
     // Crop activities
     match /cropActivities/{activityId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow create: if isManagerOrAdmin() && isActiveUser()
         && hasSegmentAccess(request.resource.data.segment);
       allow update: if isManagerOrAdmin() && isActiveUser()
@@ -166,7 +230,7 @@ service cloud.firestore {
 
     // Harvests
     match /harvests/{harvestId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow create: if isManagerOrAdmin() && isActiveUser()
         && hasSegmentAccess(request.resource.data.segment);
       allow update: if isManagerOrAdmin() && isActiveUser()
@@ -177,14 +241,14 @@ service cloud.firestore {
 
     // Inventory items (consumables)
     match /inventoryItems/{itemId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow create, update: if isManagerOrAdmin() && isActiveUser();
       allow delete: if isAdmin();
     }
 
     // Suppliers
     match /suppliers/{supplierId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveReader();
       allow create, update: if isManagerOrAdmin() && isActiveUser();
       allow delete: if isAdmin();
     }

@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 @Component({
   selector: 'app-summary-cards',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CurrencyInrPipe, MatCardModule, MatIconModule],
   template: `
     <div class="cards-grid">

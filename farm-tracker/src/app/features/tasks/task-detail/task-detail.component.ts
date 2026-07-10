@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../core/services/task.service';
@@ -10,10 +10,12 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog } from '@angular/material/dialog';
 import { DatePipe } from '@angular/common';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-task-detail',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, DatePipe, MatCardModule, MatButtonModule, MatIconModule, MatCheckboxModule],
   template: `
     @if (task()) {
@@ -120,12 +122,18 @@ export class TaskDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private dialog = inject(MatDialog);
+  private toast = inject(ToastService);
 
   task = signal<Task | null>(null);
 
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.params['id'];
-    this.task.set(await this.taskService.getById(id));
+    try {
+      this.task.set(await this.taskService.getById(id));
+    } catch (err) {
+      console.error('Failed to load task', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load task');
+    }
   }
 
   formatStatus(s: string): string { return s.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()); }
@@ -134,8 +142,13 @@ export class TaskDetailComponent implements OnInit {
   async toggleSubtask(i: number): Promise<void> {
     const subtasks = [...this.task()!.subtasks];
     subtasks[i] = { ...subtasks[i], done: !subtasks[i].done };
-    await this.taskService.toggleSubtask(this.task()!.id, subtasks);
-    this.task.set({ ...this.task()!, subtasks });
+    try {
+      await this.taskService.toggleSubtask(this.task()!.id, subtasks);
+      this.task.set({ ...this.task()!, subtasks });
+    } catch (err) {
+      console.error('Failed to update subtask', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to update subtask');
+    }
   }
 
   edit(): void { this.router.navigate(['/tasks', this.task()!.id, 'edit']); }
@@ -152,12 +165,17 @@ export class TaskDetailComponent implements OnInit {
     });
     dialogRef.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        if (result.deleteType === 'hard') {
-          await this.taskService.delete(task.id);
-        } else {
-          await this.taskService.softDelete(task.id);
+        try {
+          if (result.deleteType === 'hard') {
+            await this.taskService.delete(task.id);
+          } else {
+            await this.taskService.softDelete(task.id);
+          }
+          this.back();
+        } catch (err) {
+          console.error('Failed to delete task', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete task');
         }
-        this.back();
       }
     });
   }

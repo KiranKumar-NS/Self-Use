@@ -1,4 +1,4 @@
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { MatListModule } from '@angular/material/list';
@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
   selector: 'app-sidebar',
   standalone: true,
   imports: [RouterLink, RouterLinkActive, MatListModule, MatIconModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (open()) {
       <div class="overlay" (click)="closed.emit()" aria-label="Close navigation menu"></div>
@@ -70,6 +71,11 @@ import { MatIconModule } from '@angular/material/icon';
             <span>Suppliers</span>
           </a>
         }
+
+        <a routerLink="/market-prices" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
+          <mat-icon>trending_up</mat-icon>
+          <span>Market Prices</span>
+        </a>
 
         <a routerLink="/tasks" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
           <mat-icon>view_kanban</mat-icon>

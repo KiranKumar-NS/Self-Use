@@ -17,6 +17,8 @@ export interface MonthlySummary {
   distributionByPerson?: Record<string, number>;
   pendingIncome?: number;
   pendingExpense?: number;
+  salesQtyByProduct?: Record<string, number>;  // product key → quantity sold
+  salesAmtByProduct?: Record<string, number>;  // product key → sale revenue
   updatedAt: Timestamp;
 }
 
@@ -41,5 +43,7 @@ export interface YearlySummary {
   distributionByPerson?: Record<string, number>;
   pendingIncome?: number;
   pendingExpense?: number;
+  salesQtyByProduct?: Record<string, number>;
+  salesAmtByProduct?: Record<string, number>;
   updatedAt: Timestamp;
 }

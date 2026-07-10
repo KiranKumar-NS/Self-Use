@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit, computed } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, OnInit, computed } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { LoanService } from '../../../core/services/loan.service';
@@ -24,8 +24,9 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
+import { ToastService } from '../../../core/services/toast.service';
+import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
 
 interface DeductionRow {
   type: DeductionType;
@@ -66,10 +67,11 @@ interface DocRow {
 @Component({
   selector: 'app-loan-form',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, DatePipe, DecimalPipe, CurrencyInrPipe, MatCardModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatDatepickerModule, MatRadioModule,
-    MatIconModule, MatSlideToggleModule, MatChipsModule, MatTooltipModule, MatSnackBarModule,
+    MatIconModule, MatSlideToggleModule, MatChipsModule, MatTooltipModule, ErrorMessagePipe,
   ],
   template: `
     <div class="page-header">
@@ -105,24 +107,24 @@ interface DocRow {
           <div class="form-row">
             <mat-form-field appearance="outline">
               <mat-label>Date</mat-label>
-              <input matInput [matDatepicker]="picker" [(ngModel)]="date" name="date" required />
+              <input matInput [matDatepicker]="picker" [(ngModel)]="date" name="date" required #dateModel="ngModel" />
               <mat-datepicker-toggle matIconSuffix [for]="picker" />
               <mat-datepicker #picker />
-              <mat-error>Required</mat-error>
+              <mat-error>{{ dateModel.errors | errorMessage }}</mat-error>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
               <mat-label>Amount (INR)</mat-label>
-              <input matInput type="number" [(ngModel)]="amount" name="amount" required min="1" />
-              <mat-error>Required</mat-error>
+              <input matInput type="number" [(ngModel)]="amount" name="amount" required min="1" #amountModel="ngModel" />
+              <mat-error>{{ amountModel.errors | errorMessage }}</mat-error>
             </mat-form-field>
           </div>
 
           <div class="form-row">
             <mat-form-field appearance="outline">
               <mat-label>Person Name</mat-label>
-              <input matInput [(ngModel)]="personName" name="personName" required />
-              <mat-error>Required</mat-error>
+              <input matInput [(ngModel)]="personName" name="personName" required #personNameModel="ngModel" />
+              <mat-error>{{ personNameModel.errors | errorMessage }}</mat-error>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
@@ -138,8 +140,8 @@ interface DocRow {
 
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Purpose / Reason</mat-label>
-            <input matInput [(ngModel)]="purpose" name="purpose" required placeholder="e.g. Personal need, Goat feed" />
-            <mat-error>Required</mat-error>
+            <input matInput [(ngModel)]="purpose" name="purpose" required placeholder="e.g. Personal need, Goat feed" #purposeModel="ngModel" />
+            <mat-error>{{ purposeModel.errors | errorMessage }}</mat-error>
           </mat-form-field>
         }
 
@@ -152,19 +154,19 @@ interface DocRow {
           <div class="form-row">
             <mat-form-field appearance="outline">
               <mat-label>Loan Source</mat-label>
-              <mat-select [(ngModel)]="loanSource" name="loanSource" required (ngModelChange)="onSourceChange()">
+              <mat-select [(ngModel)]="loanSource" name="loanSource" required (ngModelChange)="onSourceChange()" #loanSourceModel="ngModel">
                 <mat-option value="bank">Bank</mat-option>
                 <mat-option value="finance_company">Finance Company</mat-option>
                 <mat-option value="individual">Individual Lender</mat-option>
                 <mat-option value="gold_loan">Gold Loan</mat-option>
               </mat-select>
-              <mat-error>Required</mat-error>
+              <mat-error>{{ loanSourceModel.errors | errorMessage }}</mat-error>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
               <mat-label>{{ loanSource === 'individual' ? 'Lender Name' : 'Source Name' }}</mat-label>
-              <input matInput [(ngModel)]="loanSourceName" name="loanSourceName" required placeholder="e.g. SBI, Muthoot Finance" />
-              <mat-error>Required</mat-error>
+              <input matInput [(ngModel)]="loanSourceName" name="loanSourceName" required placeholder="e.g. SBI, Muthoot Finance" #loanSourceNameModel="ngModel" />
+              <mat-error>{{ loanSourceNameModel.errors | errorMessage }}</mat-error>
             </mat-form-field>
           </div>
 
@@ -176,8 +178,8 @@ interface DocRow {
 
             <mat-form-field appearance="outline">
               <mat-label>Lender / Borrower Name</mat-label>
-              <input matInput [(ngModel)]="personName" name="formalPersonName" required />
-              <mat-error>Required</mat-error>
+              <input matInput [(ngModel)]="personName" name="formalPersonName" required #formalPersonModel="ngModel" />
+              <mat-error>{{ formalPersonModel.errors | errorMessage }}</mat-error>
             </mat-form-field>
           </div>
 
@@ -185,24 +187,24 @@ interface DocRow {
             <mat-form-field appearance="outline">
               <mat-label>Sanctioned Amount (INR)</mat-label>
               <input matInput type="number" [(ngModel)]="sanctionedAmount" name="sanctionedAmount" required min="1"
-                (ngModelChange)="recalculate()" />
+                (ngModelChange)="recalculate()" #sanctionedModel="ngModel" />
               <mat-icon matSuffix class="info-icon" matTooltip="Total loan amount approved by the lender. e.g. Bank sanctions Rs.5,00,000">info</mat-icon>
-              <mat-error>Required</mat-error>
+              <mat-error>{{ sanctionedModel.errors | errorMessage }}</mat-error>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
               <mat-label>Disbursement Date</mat-label>
-              <input matInput [matDatepicker]="disPicker" [(ngModel)]="disbursementDate" name="disbursementDate" required />
+              <input matInput [matDatepicker]="disPicker" [(ngModel)]="disbursementDate" name="disbursementDate" required #disbursementModel="ngModel" />
               <mat-datepicker-toggle matIconSuffix [for]="disPicker" />
               <mat-datepicker #disPicker />
-              <mat-error>Required</mat-error>
+              <mat-error>{{ disbursementModel.errors | errorMessage }}</mat-error>
             </mat-form-field>
           </div>
 
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Purpose / Reason</mat-label>
-            <input matInput [(ngModel)]="purpose" name="formalPurpose" required placeholder="e.g. Farm expansion, Working capital" />
-            <mat-error>Required</mat-error>
+            <input matInput [(ngModel)]="purpose" name="formalPurpose" required placeholder="e.g. Farm expansion, Working capital" #formalPurposeModel="ngModel" />
+            <mat-error>{{ formalPurposeModel.errors | errorMessage }}</mat-error>
           </mat-form-field>
 
           <!-- Held By -->
@@ -273,12 +275,12 @@ interface DocRow {
             <mat-form-field appearance="outline">
               <mat-label>Interest Rate ({{ frequencyLabel() }})</mat-label>
               <input matInput type="number" [(ngModel)]="interestRateInput" name="interestRateInput" required min="0" step="0.01"
-                (ngModelChange)="recalculate()" />
-              <mat-error>Required</mat-error>
+                (ngModelChange)="recalculate()" #rateModel="ngModel" />
+              <mat-error>{{ rateModel.errors | errorMessage }}</mat-error>
             </mat-form-field>
           </div>
 
-          @if (interestFrequency !== 'annual' && interestRateInput > 0) {
+          @if (interestFrequency() !== 'annual' && interestRateInput > 0) {
             <div class="computed-info">= {{ computedAnnualRate() | number:'1.2-2' }}% p.a.</div>
           }
 
@@ -309,8 +311,8 @@ interface DocRow {
               <mat-form-field appearance="outline">
                 <mat-label>Tenure (months)</mat-label>
                 <input matInput type="number" [(ngModel)]="tenure" name="tenure" required min="1"
-                  (ngModelChange)="recalculate()" />
-                <mat-error>Required</mat-error>
+                  (ngModelChange)="recalculate()" #tenureModel="ngModel" />
+                <mat-error>{{ tenureModel.errors | errorMessage }}</mat-error>
               </mat-form-field>
 
               <mat-form-field appearance="outline">
@@ -657,7 +659,8 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
   private userService = inject(UserService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
+  private cdr = inject(ChangeDetectorRef);
 
   isEdit = signal(false);
   isFormalEdit = signal(false);
@@ -698,7 +701,9 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
   // Repayment
   repaymentType: RepaymentType = 'emi';
   interestType: InterestType = 'fixed';
-  interestFrequency: InterestFrequency = 'annual';
+  // Signal: read by the frequencyLabel computed(), which would never
+  // recompute if this stayed a plain field.
+  interestFrequency = signal<InterestFrequency>('annual');
   interestRateInput = 0;
   isSubsidized = false;
   subsidyDetails = '';
@@ -719,7 +724,7 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
 
   // Computed values
   frequencyLabel = computed(() => {
-    switch (this.interestFrequency) {
+    switch (this.interestFrequency()) {
       case 'monthly': return '% per month';
       case 'weekly': return '% per week';
       default: return '% p.a.';
@@ -755,6 +760,19 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
   });
 
   async ngOnInit(): Promise<void> {
+    try {
+      await this.loadFormData();
+    } catch (err) {
+      console.error('Failed to load loan form data', err);
+      this.toast.error('Failed to load data. Check your connection and try again.');
+    } finally {
+      // Form model fields are plain properties populated after awaits; with
+      // OnPush we must explicitly mark the view for check once loaded.
+      this.cdr.markForCheck();
+    }
+  }
+
+  private async loadFormData(): Promise<void> {
     const segs = await this.segmentService.getAll();
     const accessible = this.authService.isAdmin()
       ? segs
@@ -808,7 +826,7 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
     if (this.loanCategory === 'formal') {
       this.type = 'received';
       this.repaymentType = (this.loanSource === 'individual' || this.loanSource === 'gold_loan') ? 'interest_only' : 'emi';
-      this.interestFrequency = (this.loanSource === 'individual' || this.loanSource === 'gold_loan') ? 'monthly' : 'annual';
+      this.interestFrequency.set((this.loanSource === 'individual' || this.loanSource === 'gold_loan') ? 'monthly' : 'annual');
     }
   }
 
@@ -845,12 +863,12 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
   onSourceChange(): void {
     const isLocal = this.loanSource === 'individual' || this.loanSource === 'gold_loan';
     this.repaymentType = isLocal ? 'interest_only' : 'emi';
-    this.interestFrequency = isLocal ? 'monthly' : 'annual';
+    this.interestFrequency.set(isLocal ? 'monthly' : 'annual');
     this.recalculate();
   }
 
   recalculate(): void {
-    const annualRate = this.loanService.toAnnualRate(this.interestRateInput, this.interestFrequency);
+    const annualRate = this.loanService.toAnnualRate(this.interestRateInput, this.interestFrequency());
     this.computedAnnualRate.set(annualRate);
 
     const rateForCalc = this.isSubsidized && this.effectiveRate > 0 ? this.effectiveRate : annualRate;
@@ -890,7 +908,7 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
 
     // Interest-only calculation
     if (this.repaymentType === 'interest_only' && this.sanctionedAmount > 0 && this.interestRateInput > 0) {
-      const freq = this.interestPaymentFrequency ?? this.interestFrequency;
+      const freq = this.interestPaymentFrequency ?? this.interestFrequency();
       const ratePerPeriod = freq === 'weekly'
         ? annualRate / 52 / 100
         : annualRate / 12 / 100;
@@ -933,15 +951,14 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
       } else {
         await this.saveSimpleLoan();
       }
-      this.snackBar.open(
-        this.isEdit() ? 'Loan updated' : 'Loan created',
-        '',
-        { duration: 2500 }
-      );
+      this.toast.success(this.isEdit() ? 'Loan updated' : 'Loan created');
       this.saved = true;
       this.router.navigate(['/loans']);
-    } catch (err: any) {
-      this.error.set(err.message || 'Failed to save loan');
+    } catch (err) {
+      console.error('Failed to save loan', err);
+      const message = err instanceof Error ? err.message : 'Failed to save loan';
+      this.error.set(message);
+      this.toast.error(message);
     } finally {
       this.saving.set(false);
     }
@@ -991,7 +1008,7 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
     }
 
     // Create
-    const annualRate = this.loanService.toAnnualRate(this.interestRateInput, this.interestFrequency);
+    const annualRate = this.loanService.toAnnualRate(this.interestRateInput, this.interestFrequency());
     const primarySeg = this.selectedSegments[0] || 'personal';
     const primarySegObj = this.segments().find(s => s.id === primarySeg);
 
@@ -1012,7 +1029,7 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
       sanctionedAmount: this.sanctionedAmount,
       repaymentType: this.repaymentType,
       interestType: this.interestType,
-      interestFrequency: this.interestFrequency,
+      interestFrequency: this.interestFrequency(),
       interestRateInput: this.interestRateInput,
       interestRate: annualRate,
       tenure: this.repaymentType === 'emi' ? this.tenure : undefined,

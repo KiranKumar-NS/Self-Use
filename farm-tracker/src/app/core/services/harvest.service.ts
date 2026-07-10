@@ -64,12 +64,11 @@ export class HarvestService {
   async getAll(filters: { segment?: string; status?: string } = {}, pageSize = 200): Promise<Harvest[]> {
     const constraints: any[] = [where('isDeleted', '==', false)];
     if (filters.segment) constraints.push(where('segment', '==', filters.segment));
+    if (filters.status) constraints.push(where('status', '==', filters.status));
     constraints.push(orderBy('harvestDate', 'desc'), limit(pageSize));
     const q = query(this.ref, ...constraints);
     const snapshot = await getDocs(q);
-    let results = snapshot.docs.map(d => d.data() as Harvest);
-    if (filters.status) results = results.filter(h => h.status === filters.status);
-    return results;
+    return snapshot.docs.map(d => d.data() as Harvest);
   }
 
   async getById(id: string): Promise<Harvest | null> {
@@ -103,6 +102,7 @@ export class HarvestService {
       description: `${harvest.cropName} sale from harvest`,
       paymentMethod: 'upi',
       tags: ['harvest-sale'],
+      product: harvest.cropName,
       month: getMonthString(saleDate),
       year: getYear(saleDate),
     };

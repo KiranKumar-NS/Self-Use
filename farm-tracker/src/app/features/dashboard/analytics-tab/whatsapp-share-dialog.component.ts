@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatButtonModule } from '@angular/material/button';
@@ -31,6 +31,7 @@ export interface WhatsappShareData {
 @Component({
   selector: 'app-whatsapp-share-dialog',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatDialogModule, MatCheckboxModule, MatButtonModule, MatIconModule, FormsModule],
   template: `
     <h2 mat-dialog-title>Share via WhatsApp</h2>

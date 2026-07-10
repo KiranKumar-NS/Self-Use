@@ -29,6 +29,18 @@ vi.mock('@angular/fire/firestore', () => {
     limit: vi.fn(),
     startAfter: vi.fn(),
     writeBatch: vi.fn(() => batchMethods),
+    runTransaction: vi.fn(async (_fs: any, fn: any) => {
+      const transaction = {
+        get: vi.fn(async () => {
+          if (mockGetDocResults.length > 0) return mockGetDocResults.shift();
+          return { exists: () => false, data: () => undefined };
+        }),
+        set: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      };
+      return fn(transaction);
+    }),
     deleteDoc: vi.fn(),
     serverTimestamp: vi.fn(() => 'SERVER_TS'),
     increment: vi.fn((n: number) => ({ _increment: n })),
@@ -53,6 +65,7 @@ vi.mock('@angular/core', async () => {
     inject: vi.fn(() => ({
       userProfile: () => ({ uid: 'test-uid', displayName: 'Test User' }),
       requireUser: () => ({ uid: 'test-uid', displayName: 'Test User' }),
+      clearCache: vi.fn(),
     })),
   };
 });

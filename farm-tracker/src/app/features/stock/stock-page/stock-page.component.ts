@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
@@ -6,6 +6,7 @@ import { AnimalService } from '../../../core/services/animal.service';
 import { InventoryService } from '../../../core/services/inventory.service';
 import { SegmentService } from '../../../core/services/segment.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { Animal } from '../../../core/models/animal.model';
 import { InventoryEvent } from '../../../core/models/inventory.model';
 import { Segment } from '../../../core/models/segment.model';
@@ -15,6 +16,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { InventoryEventDialogComponent } from '../../inventory/inventory-event-dialog/inventory-event-dialog.component';
 import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
+import { safeLoad } from '../../../core/utils/async.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -23,16 +25,16 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatInputModule } from '@angular/material/input';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 @Component({
   selector: 'app-stock-page',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule, DatePipe, CurrencyInrPipe,
     LoadingSpinnerComponent, EmptyStateComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule,
-    MatSelectModule, MatInputModule, MatTabsModule, MatSnackBarModule,
+    MatSelectModule, MatInputModule, MatTabsModule,
   ],
   template: `
     <!-- Header -->
@@ -93,18 +95,18 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
           <!-- Filters -->
           <mat-card class="filter-card">
-            <div class="filter-header" (click)="animalFiltersOpen = !animalFiltersOpen">
+            <div class="filter-header" (click)="animalFiltersOpen.set(!animalFiltersOpen())">
               <mat-icon>filter_list</mat-icon>
               <span>Filters</span>
               @if (activeFilterCount() > 0) {
                 <span class="filter-count">{{ activeFilterCount() }} active</span>
               }
-              @if (filterSegment || filterStatus || searchTerm) {
+              @if (filterSegment() || filterStatus() || searchTerm()) {
                 <button mat-button class="clear-btn" (click)="clearAnimalFilters(); $event.stopPropagation()">Clear All</button>
               }
-              <mat-icon class="toggle-icon" [class.expanded]="animalFiltersOpen">expand_more</mat-icon>
+              <mat-icon class="toggle-icon" [class.expanded]="animalFiltersOpen()">expand_more</mat-icon>
             </div>
-            <div class="filters" [class.collapsed]="!animalFiltersOpen">
+            <div class="filters" [class.collapsed]="!animalFiltersOpen()">
               <mat-form-field appearance="outline" class="filter-field">
                 <mat-label>Segment</mat-label>
                 <mat-select [(ngModel)]="filterSegment" (selectionChange)="loadAnimals()">
@@ -128,14 +130,14 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
               <mat-form-field appearance="outline" class="filter-field">
                 <mat-label>Search</mat-label>
                 <input matInput [(ngModel)]="searchTerm" placeholder="Tag, name, breed..." />
-                @if (searchTerm) {
-                  <button matSuffix mat-icon-button (click)="searchTerm = ''"><mat-icon>close</mat-icon></button>
+                @if (searchTerm()) {
+                  <button matSuffix mat-icon-button (click)="searchTerm.set('')"><mat-icon>close</mat-icon></button>
                 }
               </mat-form-field>
             </div>
           </mat-card>
 
-          @if (displayedAnimals().length === 0 && !filterSegment && !filterStatus && !searchTerm) {
+          @if (displayedAnimals().length === 0 && !filterSegment() && !filterStatus() && !searchTerm()) {
             <app-empty-state icon="🐐" title="No animals registered" message="Record a purchase or birth event to start tracking." actionLabel="Record Event" (actionClick)="openEventDialog()" />
           } @else {
             @if (displayedAnimals().length > 0) {
@@ -197,7 +199,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
                 <div class="pagination">
                   <div class="page-size">
                     <span>Rows:</span>
-                    <select [(ngModel)]="animalPageSize" (change)="animalPage = 1">
+                    <select [(ngModel)]="animalPageSize" (change)="animalPage.set(1)">
                       <option [ngValue]="10">10</option>
                       <option [ngValue]="20">20</option>
                       <option [ngValue]="50">50</option>
@@ -205,10 +207,10 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
                   </div>
                   <span class="page-info">{{ animalPageStart() }}-{{ animalPageEnd() }} of {{ displayedAnimals().length }}</span>
                   <div class="page-buttons">
-                    <button mat-icon-button [disabled]="animalPage === 1" (click)="animalPage = 1"><mat-icon>first_page</mat-icon></button>
-                    <button mat-icon-button [disabled]="animalPage === 1" (click)="animalPage = animalPage - 1"><mat-icon>chevron_left</mat-icon></button>
-                    <button mat-icon-button [disabled]="animalPage >= animalTotalPages()" (click)="animalPage = animalPage + 1"><mat-icon>chevron_right</mat-icon></button>
-                    <button mat-icon-button [disabled]="animalPage >= animalTotalPages()" (click)="animalPage = animalTotalPages()"><mat-icon>last_page</mat-icon></button>
+                    <button mat-icon-button [disabled]="animalPage() === 1" (click)="animalPage.set(1)"><mat-icon>first_page</mat-icon></button>
+                    <button mat-icon-button [disabled]="animalPage() === 1" (click)="animalPage.set(animalPage() - 1)"><mat-icon>chevron_left</mat-icon></button>
+                    <button mat-icon-button [disabled]="animalPage() >= animalTotalPages()" (click)="animalPage.set(animalPage() + 1)"><mat-icon>chevron_right</mat-icon></button>
+                    <button mat-icon-button [disabled]="animalPage() >= animalTotalPages()" (click)="animalPage.set(animalTotalPages())"><mat-icon>last_page</mat-icon></button>
                   </div>
                 </div>
               }
@@ -275,7 +277,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
               <div class="pagination">
                 <div class="page-size">
                   <span>Rows:</span>
-                  <select [(ngModel)]="eventPageSize" (change)="eventPage = 1">
+                  <select [(ngModel)]="eventPageSize" (change)="eventPage.set(1)">
                     <option [ngValue]="10">10</option>
                     <option [ngValue]="20">20</option>
                     <option [ngValue]="50">50</option>
@@ -283,10 +285,10 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
                 </div>
                 <span class="page-info">{{ eventPageStart() }}-{{ eventPageEnd() }} of {{ sortedEvents().length }}</span>
                 <div class="page-buttons">
-                  <button mat-icon-button [disabled]="eventPage === 1" (click)="eventPage = 1"><mat-icon>first_page</mat-icon></button>
-                  <button mat-icon-button [disabled]="eventPage === 1" (click)="eventPage = eventPage - 1"><mat-icon>chevron_left</mat-icon></button>
-                  <button mat-icon-button [disabled]="eventPage >= eventTotalPages()" (click)="eventPage = eventPage + 1"><mat-icon>chevron_right</mat-icon></button>
-                  <button mat-icon-button [disabled]="eventPage >= eventTotalPages()" (click)="eventPage = eventTotalPages()"><mat-icon>last_page</mat-icon></button>
+                  <button mat-icon-button [disabled]="eventPage() === 1" (click)="eventPage.set(1)"><mat-icon>first_page</mat-icon></button>
+                  <button mat-icon-button [disabled]="eventPage() === 1" (click)="eventPage.set(eventPage() - 1)"><mat-icon>chevron_left</mat-icon></button>
+                  <button mat-icon-button [disabled]="eventPage() >= eventTotalPages()" (click)="eventPage.set(eventPage() + 1)"><mat-icon>chevron_right</mat-icon></button>
+                  <button mat-icon-button [disabled]="eventPage() >= eventTotalPages()" (click)="eventPage.set(eventTotalPages())"><mat-icon>last_page</mat-icon></button>
                 </div>
               </div>
             }
@@ -371,7 +373,7 @@ export class StockPageComponent implements OnInit {
   private segmentService = inject(SegmentService);
   private router = inject(Router);
   private dialog = inject(MatDialog);
-  private snackBar = inject(MatSnackBar);
+  private toast = inject(ToastService);
   auth = inject(AuthService);
 
   loading = signal(true);
@@ -379,24 +381,24 @@ export class StockPageComponent implements OnInit {
   animals = signal<Animal[]>([]);
   events = signal<InventoryEvent[]>([]);
 
-  activeTab = 0;
+  activeTab = signal(0);
 
   // Animal filters
-  animalFiltersOpen = window.innerWidth > 768;
-  filterSegment = '';
-  filterStatus = '';
-  searchTerm = '';
-  animalSortColumn = '';
-  animalSortDirection: SortDirection = 'asc';
-  animalPageSize = 20;
-  animalPage = 1;
+  animalFiltersOpen = signal(window.innerWidth > 768);
+  filterSegment = signal('');
+  filterStatus = signal('');
+  searchTerm = signal('');
+  animalSortColumn = signal('');
+  animalSortDirection = signal<SortDirection>('asc');
+  animalPageSize = signal(20);
+  animalPage = signal(1);
 
   // Event filters
-  eventFilterSegment = '';
-  eventSortColumn = '';
-  eventSortDirection: SortDirection = 'asc';
-  eventPageSize = 20;
-  eventPage = 1;
+  eventFilterSegment = signal('');
+  eventSortColumn = signal('');
+  eventSortDirection = signal<SortDirection>('asc');
+  eventPageSize = signal(20);
+  eventPage = signal(1);
 
   // Computed animal stats
   activeCount = computed(() => this.animals().filter(a => a.status === 'active').length);
@@ -408,36 +410,42 @@ export class StockPageComponent implements OnInit {
   });
   activeFilterCount = computed(() => {
     let count = 0;
-    if (this.filterSegment) count++;
-    if (this.filterStatus) count++;
-    if (this.searchTerm) count++;
+    if (this.filterSegment()) count++;
+    if (this.filterStatus()) count++;
+    if (this.searchTerm()) count++;
     return count;
   });
 
   async ngOnInit(): Promise<void> {
-    await this.segmentService.migrateSegmentTypes();
-    this.segments.set(await this.segmentService.getAll());
-    await Promise.all([this.loadAnimals(), this.loadEvents()]);
-    this.loading.set(false);
+    await safeLoad(this.loading, async () => {
+      await this.segmentService.migrateSegmentTypes();
+      this.segments.set(await this.segmentService.getAll());
+      await Promise.all([this.loadAnimals(), this.loadEvents()]);
+    }, this.toast);
   }
 
-  animalSegments(): Segment[] {
-    return this.segments().filter(s => s.segmentType !== 'crop');
-  }
+  animalSegments = computed<Segment[]>(() =>
+    this.segments().filter(s => s.segmentType !== 'crop')
+  );
 
   // ── Animals ──
 
   async loadAnimals(): Promise<void> {
-    this.animalPage = 1;
-    const filters: any = {};
-    if (this.filterSegment) filters.segment = this.filterSegment;
-    if (this.filterStatus) filters.status = this.filterStatus;
-    this.animals.set(await this.animalService.getAll(filters));
+    this.animalPage.set(1);
+    try {
+      const filters: any = {};
+      if (this.filterSegment()) filters.segment = this.filterSegment();
+      if (this.filterStatus()) filters.status = this.filterStatus();
+      this.animals.set(await this.animalService.getAll(filters));
+    } catch (err) {
+      console.error('Failed to load animals', err);
+      this.toast.error('Failed to load animals. Check your connection and try again.');
+    }
   }
 
-  displayedAnimals(): Animal[] {
+  displayedAnimals = computed<Animal[]>(() => {
     let filtered = this.animals();
-    const term = this.searchTerm.toLowerCase().trim();
+    const term = this.searchTerm().toLowerCase().trim();
     if (term) {
       filtered = filtered.filter(a =>
         a.name?.toLowerCase().includes(term) ||
@@ -448,25 +456,25 @@ export class StockPageComponent implements OnInit {
         a.segmentName?.toLowerCase().includes(term)
       );
     }
-    return sortData(filtered, this.animalSortColumn, this.animalSortDirection);
-  }
+    return sortData(filtered, this.animalSortColumn(), this.animalSortDirection());
+  });
 
-  paginatedAnimals(): Animal[] { return paginate(this.displayedAnimals(), this.animalPage, this.animalPageSize); }
-  animalTotalPages(): number { return totalPages(this.displayedAnimals().length, this.animalPageSize); }
-  animalPageStart(): number { return pageStart(this.displayedAnimals().length, this.animalPage, this.animalPageSize); }
-  animalPageEnd(): number { return pageEnd(this.displayedAnimals().length, this.animalPage, this.animalPageSize); }
+  paginatedAnimals = computed<Animal[]>(() => paginate(this.displayedAnimals(), this.animalPage(), this.animalPageSize()));
+  animalTotalPages = computed<number>(() => totalPages(this.displayedAnimals().length, this.animalPageSize()));
+  animalPageStart = computed<number>(() => pageStart(this.displayedAnimals().length, this.animalPage(), this.animalPageSize()));
+  animalPageEnd = computed<number>(() => pageEnd(this.displayedAnimals().length, this.animalPage(), this.animalPageSize()));
 
   toggleAnimalSort(column: string): void {
-    const state = toggleSortState({ column: this.animalSortColumn, direction: this.animalSortDirection }, column);
-    this.animalSortColumn = state.column;
-    this.animalSortDirection = state.direction;
-    this.animalPage = 1;
+    const state = toggleSortState({ column: this.animalSortColumn(), direction: this.animalSortDirection() }, column);
+    this.animalSortColumn.set(state.column);
+    this.animalSortDirection.set(state.direction);
+    this.animalPage.set(1);
   }
 
   clearAnimalFilters(): void {
-    this.filterSegment = '';
-    this.filterStatus = '';
-    this.searchTerm = '';
+    this.filterSegment.set('');
+    this.filterStatus.set('');
+    this.searchTerm.set('');
     this.loadAnimals();
   }
 
@@ -480,10 +488,15 @@ export class StockPageComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        if (result.deleteType === 'hard') await this.animalService.hardDelete(animal.id);
-        else await this.animalService.softDelete(animal.id);
-        this.snackBar.open('Animal deleted', '', { duration: 2500 });
-        await this.loadAnimals();
+        try {
+          if (result.deleteType === 'hard') await this.animalService.hardDelete(animal.id);
+          else await this.animalService.softDelete(animal.id);
+          this.toast.success('Animal deleted');
+          await this.loadAnimals();
+        } catch (err) {
+          console.error('Failed to delete animal', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete animal');
+        }
       }
     });
   }
@@ -491,21 +504,26 @@ export class StockPageComponent implements OnInit {
   // ── Events ──
 
   async loadEvents(): Promise<void> {
-    this.eventPage = 1;
-    this.events.set(await this.inventoryService.getEvents(this.eventFilterSegment || undefined));
+    this.eventPage.set(1);
+    try {
+      this.events.set(await this.inventoryService.getEvents(this.eventFilterSegment() || undefined));
+    } catch (err) {
+      console.error('Failed to load inventory events', err);
+      this.toast.error('Failed to load stock log. Check your connection and try again.');
+    }
   }
 
-  sortedEvents(): InventoryEvent[] { return sortData(this.events(), this.eventSortColumn, this.eventSortDirection); }
-  paginatedEvents(): InventoryEvent[] { return paginate(this.sortedEvents(), this.eventPage, this.eventPageSize); }
-  eventTotalPages(): number { return totalPages(this.sortedEvents().length, this.eventPageSize); }
-  eventPageStart(): number { return pageStart(this.sortedEvents().length, this.eventPage, this.eventPageSize); }
-  eventPageEnd(): number { return pageEnd(this.sortedEvents().length, this.eventPage, this.eventPageSize); }
+  sortedEvents = computed<InventoryEvent[]>(() => sortData(this.events(), this.eventSortColumn(), this.eventSortDirection()));
+  paginatedEvents = computed<InventoryEvent[]>(() => paginate(this.sortedEvents(), this.eventPage(), this.eventPageSize()));
+  eventTotalPages = computed<number>(() => totalPages(this.sortedEvents().length, this.eventPageSize()));
+  eventPageStart = computed<number>(() => pageStart(this.sortedEvents().length, this.eventPage(), this.eventPageSize()));
+  eventPageEnd = computed<number>(() => pageEnd(this.sortedEvents().length, this.eventPage(), this.eventPageSize()));
 
   toggleEventSort(column: string): void {
-    const state = toggleSortState({ column: this.eventSortColumn, direction: this.eventSortDirection }, column);
-    this.eventSortColumn = state.column;
-    this.eventSortDirection = state.direction;
-    this.eventPage = 1;
+    const state = toggleSortState({ column: this.eventSortColumn(), direction: this.eventSortDirection() }, column);
+    this.eventSortColumn.set(state.column);
+    this.eventSortDirection.set(state.direction);
+    this.eventPage.set(1);
   }
 
   // ── Dialogs ──
@@ -530,16 +548,26 @@ export class StockPageComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
-        if (result.deleteType === 'hard') await this.inventoryService.deleteEvent(ev.id, ev.segment, ev.count);
-        else await this.inventoryService.softDeleteEvent(ev.id, ev.segment, ev.count);
-        await this.refreshAll();
+        try {
+          if (result.deleteType === 'hard') await this.inventoryService.deleteEvent(ev.id, ev.segment, ev.count);
+          else await this.inventoryService.softDeleteEvent(ev.id, ev.segment, ev.count);
+          await this.refreshAll();
+        } catch (err) {
+          console.error('Failed to delete inventory event', err);
+          this.toast.error(err instanceof Error ? err.message : 'Failed to delete inventory event');
+        }
       }
     });
   }
 
   private async refreshAll(): Promise<void> {
     this.segmentService.clearCache();
-    this.segments.set(await this.segmentService.getAll());
+    try {
+      this.segments.set(await this.segmentService.getAll());
+    } catch (err) {
+      console.error('Failed to refresh segments', err);
+      this.toast.error('Failed to refresh data. Check your connection and try again.');
+    }
     await Promise.all([this.loadAnimals(), this.loadEvents()]);
   }
 }

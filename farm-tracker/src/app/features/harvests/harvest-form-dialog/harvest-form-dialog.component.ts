@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -12,6 +12,7 @@ import { Harvest } from '../../../core/models/harvest.model';
 import { SegmentService } from '../../../core/services/segment.service';
 import { Segment } from '../../../core/models/segment.model';
 import { Timestamp } from '@angular/fire/firestore';
+import { ToastService } from '../../../core/services/toast.service';
 
 export interface HarvestFormDialogData {
   harvest?: Harvest;
@@ -20,6 +21,7 @@ export interface HarvestFormDialogData {
 @Component({
   selector: 'app-harvest-form-dialog',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule],
   template: `
     <h2 mat-dialog-title>{{ data.harvest ? 'Edit' : 'Record' }} Harvest</h2>
@@ -95,7 +97,7 @@ export interface HarvestFormDialogData {
 
     <mat-dialog-actions align="end">
       <button mat-button (click)="dialogRef.close()">Cancel</button>
-      <button mat-flat-button color="primary" [disabled]="saving() || !segment || !cropName.trim() || !totalQuantity" (click)="save()">
+      <button mat-flat-button color="primary" [disabled]="saving() || !segment() || !cropName().trim() || !totalQuantity()" (click)="save()">
         {{ saving() ? 'Saving...' : (data.harvest ? 'Update' : 'Record Harvest') }}
       </button>
     </mat-dialog-actions>
@@ -112,39 +114,45 @@ export class HarvestFormDialogComponent implements OnInit {
   dialogRef = inject(MatDialogRef<HarvestFormDialogComponent>);
   private harvestService = inject(HarvestService);
   private segmentService = inject(SegmentService);
+  private toast = inject(ToastService);
 
   saving = signal(false);
   error = signal('');
   cropSegments = signal<Segment[]>([]);
 
   today = new Date();
-  segment = '';
-  cropName = '';
-  variety = '';
-  harvestDate: Date = new Date();
-  totalQuantity: number | null = null;
-  unit = 'kg';
-  grade = '';
-  storageLocation = '';
-  harvestCost: number | null = null;
-  note = '';
+  segment = signal('');
+  cropName = signal('');
+  variety = signal('');
+  harvestDate = signal<Date>(new Date());
+  totalQuantity = signal<number | null>(null);
+  unit = signal('kg');
+  grade = signal('');
+  storageLocation = signal('');
+  harvestCost = signal<number | null>(null);
+  note = signal('');
 
   async ngOnInit(): Promise<void> {
-    const allSegments = await this.segmentService.getAll();
-    this.cropSegments.set(allSegments.filter(s => s.segmentType === 'crop'));
+    try {
+      const allSegments = await this.segmentService.getAll();
+      this.cropSegments.set(allSegments.filter(s => s.segmentType === 'crop'));
+    } catch (err) {
+      console.error('Failed to load segments', err);
+      this.toast.error(err instanceof Error ? err.message : 'Failed to load segments');
+    }
 
     if (this.data?.harvest) {
       const h = this.data.harvest;
-      this.segment = h.segment;
-      this.cropName = h.cropName;
-      this.variety = h.variety || '';
-      this.harvestDate = h.harvestDate?.toDate() || new Date();
-      this.totalQuantity = h.totalQuantity;
-      this.unit = h.unit || 'kg';
-      this.grade = h.grade || '';
-      this.storageLocation = h.storageLocation || '';
-      this.harvestCost = h.harvestCost ?? null;
-      this.note = h.note || '';
+      this.segment.set(h.segment);
+      this.cropName.set(h.cropName);
+      this.variety.set(h.variety || '');
+      this.harvestDate.set(h.harvestDate?.toDate() || new Date());
+      this.totalQuantity.set(h.totalQuantity);
+      this.unit.set(h.unit || 'kg');
+      this.grade.set(h.grade || '');
+      this.storageLocation.set(h.storageLocation || '');
+      this.harvestCost.set(h.harvestCost ?? null);
+      this.note.set(h.note || '');
     }
   }
 
@@ -152,19 +160,19 @@ export class HarvestFormDialogComponent implements OnInit {
     this.saving.set(true);
     this.error.set('');
     try {
-      const selectedSegment = this.cropSegments().find(s => s.id === this.segment);
+      const selectedSegment = this.cropSegments().find(s => s.id === this.segment());
       const formData: Partial<Harvest> = {
-        segment: this.segment,
+        segment: this.segment(),
         segmentName: selectedSegment?.name || '',
-        cropName: this.cropName,
-        variety: this.variety || undefined,
-        harvestDate: Timestamp.fromDate(this.harvestDate),
-        totalQuantity: this.totalQuantity || 0,
-        unit: this.unit,
-        grade: this.grade || undefined,
-        storageLocation: this.storageLocation || undefined,
-        harvestCost: this.harvestCost ?? undefined,
-        note: this.note || undefined,
+        cropName: this.cropName(),
+        variety: this.variety() || undefined,
+        harvestDate: Timestamp.fromDate(this.harvestDate()),
+        totalQuantity: this.totalQuantity() || 0,
+        unit: this.unit(),
+        grade: this.grade() || undefined,
+        storageLocation: this.storageLocation() || undefined,
+        harvestCost: this.harvestCost() ?? undefined,
+        note: this.note() || undefined,
       };
 
       if (this.data?.harvest) {
