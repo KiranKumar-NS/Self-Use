@@ -26,6 +26,11 @@ export const routes: Routes = [
         canActivate: [roleGuard(['admin', 'manager'])],
       },
       {
+        path: 'dues',
+        loadComponent: () => import('./features/dues/dues-page.component').then(m => m.DuesPageComponent),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
         path: 'stock',
         loadChildren: () => import('./features/stock/stock.routes').then(m => m.STOCK_ROUTES),
         canActivate: [roleGuard(['admin', 'manager'])],
@@ -75,10 +80,6 @@ export const routes: Routes = [
         path: 'suppliers',
         loadChildren: () => import('./features/suppliers/suppliers.routes').then(m => m.SUPPLIER_ROUTES),
         canActivate: [roleGuard(['admin', 'manager'])],
-      },
-      {
-        path: 'market-prices',
-        loadComponent: () => import('./features/market-prices/market-prices-page.component').then(m => m.MarketPricesPageComponent),
       },
       {
         path: 'admin',

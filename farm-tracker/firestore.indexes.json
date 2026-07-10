@@ -370,23 +370,6 @@
       ]
     },
     {
-      "collectionGroup": "marketPrices",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "isDeleted", "order": "ASCENDING" },
-        { "fieldPath": "date", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "marketPrices",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "isDeleted", "order": "ASCENDING" },
-        { "fieldPath": "product", "order": "ASCENDING" },
-        { "fieldPath": "date", "order": "DESCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "inventoryItems",
       "queryScope": "COLLECTION",
       "fields": [

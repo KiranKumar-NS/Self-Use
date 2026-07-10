@@ -892,41 +892,6 @@ export class UserGuideDialogComponent implements OnInit {
       ],
     },
     {
-      id: 'market-prices',
-      icon: 'trending_up',
-      title: 'Market Prices',
-      route: '/market-prices',
-      overview: 'Record the prevailing market rate for your products and compare it against your own average sale rates — so you always know whether you\'re selling at a good price.',
-      prerequisites: [
-        '<strong>Product on sales</strong> — the "My Rate vs Market" comparison uses this year\'s income transactions that have a product set (harvest sales fill it automatically from the crop name)',
-        '<strong>Manager or Admin role</strong> — needed to add market prices (viewers can still view the page)',
-      ],
-      steps: [
-        { action: 'Add a market price', detail: 'Date, product (e.g. tomato), price, per-unit (kg/head/litre/…), and optionally the market/mandi name' },
-        { action: 'Check the comparison', detail: '"My Rate vs Market" table shows quantity sold, your average rate, the latest market rate, and the % difference per product' },
-        { action: 'Review recent prices', detail: 'The list below shows all recorded rates — admins can delete wrong entries' },
-      ],
-      example: {
-        title: 'Tomato Rate Check',
-        scenario: 'You sold tomatoes all season and want to know if your rate was fair.',
-        steps: [
-          'Every market day, record the mandi rate: <strong>Market Prices → Add</strong> → Product: <strong>tomato</strong> | Price: <strong>₹28/kg</strong> | Market: <strong>local mandi</strong>',
-          'Your sales this year (with product "tomato") total <strong>450 kg</strong> at an average of <strong>₹25/kg</strong>',
-          'Comparison table shows: My Avg <strong>₹25</strong> vs Market <strong>₹28</strong> → <strong>−10.7%</strong> below market',
-          'Action: negotiate a better rate with your buyers, or try selling to a different market',
-        ],
-      },
-      consequences: [
-        { skip: 'Don\'t record market prices', result: 'The market rate and difference columns stay empty — you have no benchmark to judge your selling price against' },
-        { skip: 'Don\'t set product on income transactions', result: 'Those sales never appear in the comparison table — the app can\'t total sales per product without a product name' },
-      ],
-      tips: [
-        'Use the same product spelling everywhere — names are normalized to lowercase, but "tomato" and "tomatoes" count as different products',
-        'Record rates on your regular market day each week — trends need consistent data',
-        'Harvest sales set the product automatically from the crop name — animal and other sales need it typed in the transaction form',
-      ],
-    },
-    {
       id: 'tasks',
       icon: 'view_kanban',
       title: 'Tasks',

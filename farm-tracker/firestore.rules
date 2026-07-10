@@ -155,16 +155,6 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Market prices (manual reference data for rate comparison)
-    match /marketPrices/{priceId} {
-      allow read: if isActiveReader();
-      allow create, update: if isManagerOrAdmin() && isActiveUser()
-        && request.resource.data.price is number
-        && request.resource.data.price > 0
-        && request.resource.data.product is string;
-      allow delete: if isAdmin();
-    }
-
     // Inventory events
     match /inventoryEvents/{eventId} {
       allow read: if isActiveReader();

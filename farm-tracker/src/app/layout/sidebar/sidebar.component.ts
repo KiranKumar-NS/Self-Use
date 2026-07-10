@@ -36,6 +36,11 @@ import { MatIconModule } from '@angular/material/icon';
             <span>Owe & Lent</span>
           </a>
 
+          <a routerLink="/dues" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
+            <mat-icon>pending_actions</mat-icon>
+            <span>Dues</span>
+          </a>
+
           <a routerLink="/stock" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
             <mat-icon>inventory_2</mat-icon>
             <span>Stock</span>
@@ -71,11 +76,6 @@ import { MatIconModule } from '@angular/material/icon';
             <span>Suppliers</span>
           </a>
         }
-
-        <a routerLink="/market-prices" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
-          <mat-icon>trending_up</mat-icon>
-          <span>Market Prices</span>
-        </a>
 
         <a routerLink="/tasks" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
           <mat-icon>view_kanban</mat-icon>
