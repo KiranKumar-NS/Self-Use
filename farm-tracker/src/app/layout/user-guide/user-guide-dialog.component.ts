@@ -57,6 +57,7 @@ interface GuideSection {
           <div class="section-content">
             <div class="overview-text">
               Farm Tracker helps you manage your entire farming operation — animals, crops, finances, loans, inventory, and team tasks — all in one app.
+              Working offline? A chip appears in the header — your changes save locally and sync automatically when you're back online.
             </div>
             <div class="example-box">
               <div class="example-title">
@@ -199,6 +200,9 @@ interface GuideSection {
                 <div class="role-name viewer">Viewer</div>
                 <div class="role-desc">Dashboard analytics (read-only) and personal task management only</div>
               </div>
+            </div>
+            <div class="overview-text role-note">
+              New users start as <strong>Viewer</strong> until an admin assigns their role. A role change takes effect after the user signs out and back in.
             </div>
           </div>
         </div>
@@ -475,6 +479,7 @@ interface GuideSection {
     .role-name.manager { background: var(--color-income-bg); color: var(--color-income); }
     .role-name.viewer { background: var(--color-info-light); color: var(--color-info); }
     .role-desc { font-size: 0.83rem; color: var(--color-text-secondary); line-height: 1.4; }
+    .role-note { margin: 12px 0 0; }
 
     @media (max-width: 600px) {
       .guide-container { height: 95vh; width: 100vw; }
@@ -546,6 +551,7 @@ export class UserGuideDialogComponent implements OnInit {
       steps: [
         { action: 'Add Expense', detail: 'Amount, category (Feed/Medicine/Labor), segment, who paid, payment method (Cash/UPI)' },
         { action: 'Add Income', detail: 'Amount, category (Animal Sales/Milk), link buyer, set payment status (Received/Pending)' },
+        { action: 'Set product (income)', detail: 'e.g. "tomato", "goat", "milk" — enables product-wise sales totals and market-rate comparison' },
         { action: 'Link to animals', detail: 'When adding an expense, click "Link Animals" to split cost across specific animals' },
         { action: 'Distribute income', detail: 'Split income among partners — set each person\'s share amount' },
         { action: 'Add tags', detail: 'Type tags like "vaccination-drive" or "eid-season" for easy filtering later' },
@@ -570,6 +576,7 @@ export class UserGuideDialogComponent implements OnInit {
         { skip: 'Don\'t link buyer to income', result: 'Buyer\'s purchase history won\'t update — you can\'t see how much Ahmed bought this year or his average rate' },
         { skip: 'Don\'t link supplier to expense', result: 'Supplier stats won\'t track — you can\'t compare which supplier is cheaper or see pending payments per supplier' },
         { skip: 'Don\'t add tags', result: 'No way to filter related transactions together — e.g., can\'t see "all vaccination costs" or "eid season spending" in one view' },
+        { skip: 'Don\'t set product on sales', result: 'Product-wise sales analytics and the Market Prices comparison won\'t include those sales — you can\'t see how much tomato or milk you sold, or compare your rate with the market' },
         { skip: 'Don\'t set payment status', result: 'Pending income/expenses won\'t show on dashboard — you lose track of who owes you money' },
         { skip: 'Don\'t distribute income', result: 'Partners don\'t know their share — dashboard shows undistributed income piling up' },
       ],
@@ -578,6 +585,7 @@ export class UserGuideDialogComponent implements OnInit {
         'Mark credit sales as "Pending" and flip to "Received" when buyer pays',
         'Use tags to group related transactions (e.g., all vaccination costs in one view)',
         'Adding suppliers/buyers is optional but highly recommended — it takes 30 seconds and gives you lifetime tracking',
+        'Set the product on every sale and keep the spelling consistent — it powers the Market Prices comparison',
       ],
     },
     {
@@ -625,6 +633,7 @@ export class UserGuideDialogComponent implements OnInit {
         'Always record vaccinations with next-due date — the app will remind you',
         'Log weight monthly to track growth and identify underperforming animals early',
         'Record death causes — the mortality dashboard helps prevent future losses',
+        'Sales & Cost Analytics loads the last 12 months by default — tap "Load full history" for all-time figures',
       ],
     },
     {
@@ -892,6 +901,41 @@ export class UserGuideDialogComponent implements OnInit {
         'Record GST numbers — useful at tax time',
         'Track pending payments to suppliers to avoid disputes',
         'Even if optional, supplier tracking pays for itself — knowing which supplier is cheapest saves real money',
+      ],
+    },
+    {
+      id: 'market-prices',
+      icon: 'trending_up',
+      title: 'Market Prices',
+      route: '/market-prices',
+      overview: 'Record the prevailing market rate for your products and compare it against your own average sale rates — so you always know whether you\'re selling at a good price.',
+      prerequisites: [
+        '<strong>Product on sales</strong> — the "My Rate vs Market" comparison uses this year\'s income transactions that have a product set (harvest sales fill it automatically from the crop name)',
+        '<strong>Manager or Admin role</strong> — needed to add market prices (viewers can still view the page)',
+      ],
+      steps: [
+        { action: 'Add a market price', detail: 'Date, product (e.g. tomato), price, per-unit (kg/head/litre/…), and optionally the market/mandi name' },
+        { action: 'Check the comparison', detail: '"My Rate vs Market" table shows quantity sold, your average rate, the latest market rate, and the % difference per product' },
+        { action: 'Review recent prices', detail: 'The list below shows all recorded rates — admins can delete wrong entries' },
+      ],
+      example: {
+        title: 'Tomato Rate Check',
+        scenario: 'You sold tomatoes all season and want to know if your rate was fair.',
+        steps: [
+          'Every market day, record the mandi rate: <strong>Market Prices → Add</strong> → Product: <strong>tomato</strong> | Price: <strong>₹28/kg</strong> | Market: <strong>local mandi</strong>',
+          'Your sales this year (with product "tomato") total <strong>450 kg</strong> at an average of <strong>₹25/kg</strong>',
+          'Comparison table shows: My Avg <strong>₹25</strong> vs Market <strong>₹28</strong> → <strong>−10.7%</strong> below market',
+          'Action: negotiate a better rate with your buyers, or try selling to a different market',
+        ],
+      },
+      consequences: [
+        { skip: 'Don\'t record market prices', result: 'The market rate and difference columns stay empty — you have no benchmark to judge your selling price against' },
+        { skip: 'Don\'t set product on income transactions', result: 'Those sales never appear in the comparison table — the app can\'t total sales per product without a product name' },
+      ],
+      tips: [
+        'Use the same product spelling everywhere — names are normalized to lowercase, but "tomato" and "tomatoes" count as different products',
+        'Record rates on your regular market day each week — trends need consistent data',
+        'Harvest sales set the product automatically from the crop name — animal and other sales need it typed in the transaction form',
       ],
     },
     {
