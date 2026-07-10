@@ -167,11 +167,10 @@ import {
                         <strong>{{ cat.name }}</strong>
                         <span class="item-id">{{ cat.id }}</span>
                       </div>
-                      <span class="type-chip expense">EXPENSE</span>
+                      <button mat-icon-button color="warn" class="cat-delete" (click)="deleteCategory(cat.id)" aria-label="Delete category">
+                        <mat-icon>delete</mat-icon>
+                      </button>
                     </div>
-                    <button mat-icon-button color="warn" class="delete-btn" (click)="deleteCategory(cat.id)">
-                      <mat-icon>delete</mat-icon>
-                    </button>
                   </mat-card>
                 }
               </div>
@@ -190,11 +189,10 @@ import {
                         <strong>{{ cat.name }}</strong>
                         <span class="item-id">{{ cat.id }}</span>
                       </div>
-                      <span class="type-chip income">INCOME</span>
+                      <button mat-icon-button color="warn" class="cat-delete" (click)="deleteCategory(cat.id)" aria-label="Delete category">
+                        <mat-icon>delete</mat-icon>
+                      </button>
                     </div>
-                    <button mat-icon-button color="warn" class="delete-btn" (click)="deleteCategory(cat.id)">
-                      <mat-icon>delete</mat-icon>
-                    </button>
                   </mat-card>
                 }
               </div>
@@ -334,9 +332,8 @@ import {
     .delete-btn { position: absolute; top: 4px; right: 4px; }
     .expense-card { border-left: 3px solid var(--color-expense); }
     .income-card { border-left: 3px solid var(--color-income); }
-    .type-chip { padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; margin-left: auto; }
-    .type-chip.expense { background: var(--color-expense-bg); color: var(--color-expense); }
-    .type-chip.income { background: var(--color-income-bg); color: var(--color-income); }
+    .cat-delete { margin: -8px -8px -8px auto; }
+    .expense-card .item-header, .income-card .item-header { min-height: 24px; }
     .sub-heading { margin: 1rem 0 0.5rem; font-size: 0.9rem; color: var(--color-text-subtle); }
     .no-data { color: var(--color-text-muted); font-size: 0.85rem; padding: 0.5rem 0; }
     .add-form-card { padding: 1.25rem; margin-bottom: 1.5rem; background: var(--color-bg); }
