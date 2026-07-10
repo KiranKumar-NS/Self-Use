@@ -59,18 +59,6 @@ interface GuideSection {
               Farm Tracker helps you manage your entire farming operation — animals, crops, finances, loans, inventory, and team tasks — all in one app.
               Working offline? A chip appears in the header — your changes save locally and sync automatically when you're back online.
             </div>
-            <div class="example-box">
-              <div class="example-title">
-                <mat-icon>lightbulb</mat-icon> First-Time Setup
-              </div>
-              <ol class="example-steps">
-                <li><strong>Admin logs in</strong> → Goes to <em>Data Setup</em></li>
-                <li><strong>Create Segments</strong> → e.g. "Goats" (animal, unit: head), "Dragon Fruit" (crop, unit: trees)</li>
-                <li><strong>Create Categories</strong> → e.g. Feed, Medicine, Labor (expenses) | Animal Sales, Milk (income)</li>
-                <li><strong>Create Users</strong> → Assign roles: Admin (full), Manager (edit), Viewer (read-only)</li>
-                <li><strong>Set Budgets</strong> → Monthly expense limit per segment for overspending alerts</li>
-              </ol>
-            </div>
             <div class="prereq-box">
               <div class="prereq-title">
                 <mat-icon>checklist</mat-icon> Recommended Setup Order
