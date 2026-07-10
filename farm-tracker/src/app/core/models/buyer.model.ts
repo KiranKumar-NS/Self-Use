@@ -9,6 +9,7 @@ export interface Buyer {
 
   // Denormalized stats
   totalPurchases: number;
+  // Total billed sale value including pending sales; outstanding dues are computed live via DuesService
   totalAmountPaid: number;
   averageRate?: number;
   lastPurchaseDate?: Timestamp;

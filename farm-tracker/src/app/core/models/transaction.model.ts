@@ -106,6 +106,8 @@ export interface TransactionFormData {
   animalCostSplit?: Record<string, number>;
   linkedBuyerId?: string;
   linkedBuyerName?: string;
+  linkedSupplierId?: string;
+  linkedSupplierName?: string;
   tags?: string[];
   product?: string;
   month: string;

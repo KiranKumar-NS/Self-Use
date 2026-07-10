@@ -147,6 +147,8 @@ async function importBackup(wb, dryRun) {
         animalCostSplit: str(r['Animal Cost Split']) ? Object.fromEntries(str(r['Animal Cost Split']).split(';').map(s => s.trim()).filter(s => s).map(s => { const [id, amt] = s.split(':'); return [id.trim(), num(amt)]; })) : null,
         linkedBuyerId: str(r['Linked Buyer ID']) || null,
         linkedBuyerName: str(r['Linked Buyer Name']) || null,
+        linkedSupplierId: str(r['Linked Supplier ID']) || null,
+        linkedSupplierName: str(r['Linked Supplier Name']) || null,
         month, year: txnDate.getFullYear(),
       });
       stats.expenses++;

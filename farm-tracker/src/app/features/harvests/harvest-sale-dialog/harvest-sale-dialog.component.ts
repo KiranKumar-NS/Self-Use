@@ -10,6 +10,8 @@ import { HarvestService } from '../../../core/services/harvest.service';
 import { Harvest } from '../../../core/models/harvest.model';
 import { BuyerService } from '../../../core/services/buyer.service';
 import { Buyer } from '../../../core/models/buyer.model';
+import { IncomePaymentStatus } from '../../../core/models/transaction.model';
+import { normalizeName } from '../../../core/utils/name.utils';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { ToastService } from '../../../core/services/toast.service';
 
@@ -45,6 +47,22 @@ export interface HarvestSaleDialogData {
             @for (buyer of buyers(); track buyer.id) {
               <mat-option [value]="buyer.id">{{ buyer.name }}</mat-option>
             }
+            <mat-option value="__new__">+ Add New Buyer</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        @if (buyerId === '__new__') {
+          <mat-form-field appearance="outline">
+            <mat-label>New Buyer Name</mat-label>
+            <input matInput [(ngModel)]="newBuyerName" placeholder="e.g. Raju Sharma" />
+          </mat-form-field>
+        }
+
+        <mat-form-field appearance="outline">
+          <mat-label>Payment Status</mat-label>
+          <mat-select [(ngModel)]="paymentStatus">
+            <mat-option value="received">Received</mat-option>
+            <mat-option value="pending">Pending</mat-option>
           </mat-select>
         </mat-form-field>
 
@@ -95,6 +113,8 @@ export class HarvestSaleDialogComponent implements OnInit {
   ratePerUnit: number | null = null;
   buyerId = '';
   buyerName = '';
+  newBuyerName = '';
+  paymentStatus: IncomePaymentStatus = 'received';
   note = '';
 
   async ngOnInit(): Promise<void> {
@@ -107,6 +127,11 @@ export class HarvestSaleDialogComponent implements OnInit {
   }
 
   onBuyerChange(): void {
+    if (this.buyerId === '__new__') {
+      this.buyerName = '';
+      return;
+    }
+    this.newBuyerName = '';
     const buyer = this.buyers().find(b => b.id === this.buyerId);
     this.buyerName = buyer?.name || '';
   }
@@ -119,13 +144,27 @@ export class HarvestSaleDialogComponent implements OnInit {
     this.saving.set(true);
     this.error.set('');
     try {
+      // Resolve '__new__' to a real buyer; blank name falls back to no buyer
+      let buyerId = this.buyerId;
+      let buyerName = this.buyerName;
+      if (buyerId === '__new__') {
+        const name = normalizeName(this.newBuyerName || '');
+        if (name) {
+          buyerId = await this.buyerService.create({ name });
+          buyerName = name;
+        } else {
+          buyerId = '';
+          buyerName = '';
+        }
+      }
       await this.harvestService.recordSale(this.data.harvest.id, {
         quantity: this.quantity!,
         unit: this.data.harvest.unit,
         ratePerUnit: this.ratePerUnit!,
-        buyerId: this.buyerId || undefined,
-        buyerName: this.buyerName || undefined,
+        buyerId: buyerId || undefined,
+        buyerName: buyerName || undefined,
         note: this.note || undefined,
+        paymentStatus: this.paymentStatus,
       });
       this.dialogRef.close(true);
     } catch (err: any) {

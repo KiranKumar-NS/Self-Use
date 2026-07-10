@@ -12,6 +12,10 @@ import { AppUser } from '../../../core/models/user.model';
 import { TransactionFormData, PaymentMethod, IncomePaymentStatus, ExpensePaymentStatus, SaleUnit } from '../../../core/models/transaction.model';
 import { AnimalService } from '../../../core/services/animal.service';
 import { Animal } from '../../../core/models/animal.model';
+import { BuyerService } from '../../../core/services/buyer.service';
+import { Buyer } from '../../../core/models/buyer.model';
+import { SupplierService } from '../../../core/services/supplier.service';
+import { Supplier } from '../../../core/models/supplier.model';
 
 import { MatIconModule } from '@angular/material/icon';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -193,6 +197,54 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
           }
         </div>
 
+        <!-- Customer link (income only) -->
+        @if (type === 'income') {
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Customer (optional)</mat-label>
+              <mat-select [(ngModel)]="linkedBuyerId" name="linkedBuyerId">
+                <mat-option value="">No customer</mat-option>
+                @for (b of buyers(); track b.id) {
+                  <mat-option [value]="b.id">{{ b.name }}</mat-option>
+                }
+                <mat-option value="__new__">+ Add New Customer</mat-option>
+              </mat-select>
+              <mat-hint>Links this sale to a customer for dues tracking</mat-hint>
+            </mat-form-field>
+
+            @if (linkedBuyerId === '__new__') {
+              <mat-form-field appearance="outline">
+                <mat-label>New Customer Name</mat-label>
+                <input matInput [(ngModel)]="newBuyerName" name="newBuyerName" placeholder="e.g. Raju Sharma" />
+              </mat-form-field>
+            }
+          </div>
+        }
+
+        <!-- Supplier link (expense only) -->
+        @if (type === 'expense') {
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Supplier (optional)</mat-label>
+              <mat-select [(ngModel)]="linkedSupplierId" name="linkedSupplierId">
+                <mat-option value="">No supplier</mat-option>
+                @for (s of suppliers(); track s.id) {
+                  <mat-option [value]="s.id">{{ s.name }}</mat-option>
+                }
+                <mat-option value="__new__">+ Add New Supplier</mat-option>
+              </mat-select>
+              <mat-hint>Links this purchase to a supplier for dues tracking</mat-hint>
+            </mat-form-field>
+
+            @if (linkedSupplierId === '__new__') {
+              <mat-form-field appearance="outline">
+                <mat-label>New Supplier Name</mat-label>
+                <input matInput [(ngModel)]="newSupplierName" name="newSupplierName" placeholder="e.g. Kisan Feed Store" />
+              </mat-form-field>
+            }
+          </div>
+        }
+
         <!-- Link to Animals (expense + animal segment) -->
         @if (type === 'expense' && isAnimalSegment()) {
           <div class="animal-link-section">
@@ -313,6 +365,8 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   private categoryService = inject(CategoryService);
   private segmentService = inject(SegmentService);
   private userService = inject(UserService);
+  private buyerService = inject(BuyerService);
+  private supplierService = inject(SupplierService);
   animalService = inject(AnimalService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
@@ -346,6 +400,12 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   allCategories = signal<Category[]>([]);
   allSegments = signal<Segment[]>([]);
   users = signal<AppUser[]>([]);
+  buyers = signal<Buyer[]>([]);
+  suppliers = signal<Supplier[]>([]);
+  linkedBuyerId = '';
+  newBuyerName = '';
+  linkedSupplierId = '';
+  newSupplierName = '';
   filteredCategories = signal<Category[]>([]);
   filteredSegments = signal<Segment[]>([]);
 
@@ -374,15 +434,19 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   }
 
   private async loadFormData(): Promise<void> {
-    const [categories, segments, users] = await Promise.all([
+    const [categories, segments, users, buyers, suppliers] = await Promise.all([
       this.categoryService.getAll(),
       this.segmentService.getAll(),
       this.userService.getAll(),
+      this.buyerService.getAll(),
+      this.supplierService.getAll(),
     ]);
 
     this.allCategories.set(categories);
     this.allSegments.set(segments);
     this.users.set(users.filter((u) => u.isActive));
+    this.buyers.set(buyers);
+    this.suppliers.set(suppliers);
     this.paidBy = this.authService.currentUser()?.uid || '';
 
     // Load known custom names for duplicate detection
@@ -430,6 +494,21 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         this.paymentStatus = txn.paymentStatus || 'received';
         this.expensePaymentStatus = txn.expensePaymentStatus || 'paid';
         this.tags = txn.tags ? [...txn.tags] : [];
+
+        // Prefill customer/supplier link; keep the link visible even if the
+        // party was soft-deleted since (inject a synthetic option)
+        if (txn.type === 'income' && txn.linkedBuyerId) {
+          this.linkedBuyerId = txn.linkedBuyerId;
+          if (!this.buyers().some(b => b.id === txn.linkedBuyerId)) {
+            this.buyers.update(list => [...list, { id: txn.linkedBuyerId!, name: txn.linkedBuyerName || 'Unknown' } as Buyer]);
+          }
+        }
+        if (txn.type === 'expense' && txn.linkedSupplierId) {
+          this.linkedSupplierId = txn.linkedSupplierId;
+          if (!this.suppliers().some(s => s.id === txn.linkedSupplierId)) {
+            this.suppliers.update(list => [...list, { id: txn.linkedSupplierId!, name: txn.linkedSupplierName || 'Unknown' } as Supplier]);
+          }
+        }
         this.onTypeChange();
 
         // Load existing animal links
@@ -546,6 +625,14 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
     if (!this.isEdit()) {
       this.paymentMethod = this.type === 'expense' ? 'upi' : 'cash';
     }
+    // Clear the link that doesn't apply to the current type
+    if (this.type === 'income') {
+      this.linkedSupplierId = '';
+      this.newSupplierName = '';
+    } else {
+      this.linkedBuyerId = '';
+      this.newBuyerName = '';
+    }
   }
 
   async save(): Promise<void> {
@@ -560,6 +647,37 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
       const paidByUser = isCustom ? null : this.users().find((u) => u.uid === this.paidBy);
       const resolvedPaidBy = isCustom ? 'other' : this.paidBy;
       const resolvedPaidByName = isCustom ? normalizeName(this.customPaidByName) : paidByUser?.displayName;
+
+      // Resolve customer/supplier link ('__new__' creates the record first;
+      // blank new-name falls back to no link — never persist the sentinel)
+      let buyerId = '';
+      let buyerName = '';
+      if (this.type === 'income') {
+        if (this.linkedBuyerId === '__new__') {
+          const name = normalizeName(this.newBuyerName || '');
+          if (name) {
+            buyerId = await this.buyerService.create({ name });
+            buyerName = name;
+          }
+        } else if (this.linkedBuyerId) {
+          buyerId = this.linkedBuyerId;
+          buyerName = this.buyers().find(b => b.id === buyerId)?.name || '';
+        }
+      }
+      let supplierId = '';
+      let supplierName = '';
+      if (this.type === 'expense') {
+        if (this.linkedSupplierId === '__new__') {
+          const name = normalizeName(this.newSupplierName || '');
+          if (name) {
+            supplierId = await this.supplierService.create({ name });
+            supplierName = name;
+          }
+        } else if (this.linkedSupplierId) {
+          supplierId = this.linkedSupplierId;
+          supplierName = this.suppliers().find(s => s.id === supplierId)?.name || '';
+        }
+      }
 
       const formData: TransactionFormData = {
         type: this.type,
@@ -579,6 +697,10 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         expensePaymentStatus: this.type === 'expense' ? this.expensePaymentStatus : undefined,
         paidBy: resolvedPaidBy,
         paidByName: resolvedPaidByName,
+        linkedBuyerId: buyerId || undefined,
+        linkedBuyerName: buyerName || undefined,
+        linkedSupplierId: supplierId || undefined,
+        linkedSupplierName: supplierName || undefined,
         tags: this.tags.length ? this.tags : undefined,
         month: getMonthString(this.date),
         year: getYear(this.date),

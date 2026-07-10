@@ -3,8 +3,11 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DatePipe } from '@angular/common';
 import { BuyerService } from '../../../core/services/buyer.service';
 import { AnimalService } from '../../../core/services/animal.service';
+import { DuesService } from '../../../core/services/dues.service';
 import { Buyer } from '../../../core/models/buyer.model';
 import { Animal } from '../../../core/models/animal.model';
+import { Transaction } from '../../../core/models/transaction.model';
+import { nameKey } from '../../../core/utils/name.utils';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { BuyerFormDialogComponent } from '../buyer-form-dialog/buyer-form-dialog.component';
@@ -49,8 +52,12 @@ import { ToastService } from '../../../core/services/toast.service';
             <span class="stat-value">{{ buyer()!.totalPurchases }}</span>
           </div>
           <div class="detail-item">
-            <label>Total Amount Paid</label>
+            <label>Total Purchase Value</label>
             <span class="stat-value income">{{ buyer()!.totalAmountPaid | currencyInr }}</span>
+          </div>
+          <div class="detail-item">
+            <label>Pending (Unpaid)</label>
+            <span class="stat-value" [class.pending]="pendingDues() > 0">{{ pendingDues() | currencyInr }}</span>
           </div>
           <div class="detail-item">
             <label>Average Rate</label>
@@ -68,6 +75,33 @@ import { ToastService } from '../../../core/services/toast.service';
           }
         </div>
       </mat-card>
+
+      <!-- Pending Payments -->
+      @if (pendingTxns().length > 0) {
+        <h3 class="section-title">Pending Payments</h3>
+        <mat-card class="table-card">
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (txn of pendingTxns(); track txn.id) {
+                  <tr class="clickable-row" (click)="viewTransaction(txn.id)">
+                    <td class="date-cell">{{ txn.date.toDate() | date:'dd MMM yyyy' }}</td>
+                    <td>{{ txn.description || txn.categoryName }}</td>
+                    <td class="amount-cell pending-amount">{{ txn.amount | currencyInr }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </mat-card>
+      }
 
       <!-- Purchase History -->
       <h3 class="section-title">Purchase History</h3>
@@ -112,6 +146,8 @@ import { ToastService } from '../../../core/services/toast.service';
     .detail-item.full { grid-column: 1 / -1; }
     .stat-value { font-weight: 700; font-size: 1.25rem !important; }
     .stat-value.income { color: var(--color-income); }
+    .stat-value.pending { color: var(--color-danger, #c62828); }
+    .amount-cell.pending-amount { color: var(--color-danger, #c62828); font-weight: 600; }
     .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; }
     .amount-cell.income { color: var(--color-income); font-weight: 600; }
     .empty { padding: 1.5rem; color: var(--color-text-secondary); }
@@ -123,6 +159,7 @@ import { ToastService } from '../../../core/services/toast.service';
 })
 export class BuyerDetailComponent implements OnInit {
   private buyerService = inject(BuyerService);
+  private duesService = inject(DuesService);
   animalService = inject(AnimalService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
@@ -131,6 +168,8 @@ export class BuyerDetailComponent implements OnInit {
 
   buyer = signal<Buyer | null>(null);
   purchaseHistory = signal<Animal[]>([]);
+  pendingDues = signal(0);
+  pendingTxns = signal<Transaction[]>([]);
   loading = signal(true);
   private buyerId = '';
 
@@ -141,12 +180,18 @@ export class BuyerDetailComponent implements OnInit {
 
   async loadData(): Promise<void> {
     await safeLoad(this.loading, async () => {
-      const [buyer, animals] = await Promise.all([
+      const [buyer, animals, receivables] = await Promise.all([
         this.buyerService.getById(this.buyerId),
         this.animalService.getAll({ status: 'sold' }),
+        this.duesService.getReceivables(),
       ]);
       this.buyer.set(buyer);
       this.purchaseHistory.set(animals.filter(a => a.buyerId === this.buyerId));
+      // Match both id-linked dues and name-only dues recorded before this buyer was linked
+      const nameGroupKey = buyer ? `name:${nameKey(buyer.name)}` : '';
+      const dues = receivables.filter(g => g.partyId === this.buyerId || (nameGroupKey && g.key === nameGroupKey));
+      this.pendingDues.set(dues.reduce((sum, g) => sum + g.total, 0));
+      this.pendingTxns.set(dues.flatMap(g => g.transactions));
     }, this.toast);
   }
 
@@ -164,5 +209,6 @@ export class BuyerDetailComponent implements OnInit {
   }
 
   viewAnimal(id: string): void { this.router.navigate(['/stock', id]); }
+  viewTransaction(id: string): void { this.router.navigate(['/transactions', id]); }
   back(): void { this.router.navigate(['/buyers']); }
 }

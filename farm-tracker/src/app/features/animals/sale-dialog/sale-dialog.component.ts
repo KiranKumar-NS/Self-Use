@@ -19,6 +19,7 @@ import { Animal } from '../../../core/models/animal.model';
 import { Buyer } from '../../../core/models/buyer.model';
 import { PaymentMethod, IncomePaymentStatus, SaleUnit } from '../../../core/models/transaction.model';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
+import { normalizeName } from '../../../core/utils/name.utils';
 
 export interface SaleDialogData {
   animal: Animal;
@@ -176,8 +177,9 @@ export class SaleDialogComponent implements OnInit {
 
       // Create new buyer if needed
       if (this.buyerId === '__new__' && this.newBuyerName.trim()) {
-        resolvedBuyerId = await this.buyerService.create({ name: this.newBuyerName.trim() });
-        resolvedBuyerName = this.newBuyerName.trim();
+        const name = normalizeName(this.newBuyerName);
+        resolvedBuyerId = await this.buyerService.create({ name });
+        resolvedBuyerName = name;
       } else if (this.buyerId && this.buyerId !== '__new__') {
         const buyer = this.buyers().find(b => b.id === this.buyerId);
         resolvedBuyerName = buyer?.name || '';

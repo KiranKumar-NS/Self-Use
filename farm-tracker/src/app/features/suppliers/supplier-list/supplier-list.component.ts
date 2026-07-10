@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } 
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { SupplierService } from '../../../core/services/supplier.service';
+import { DuesService } from '../../../core/services/dues.service';
 import { Supplier } from '../../../core/models/supplier.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
@@ -122,6 +123,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 })
 export class SupplierListComponent implements OnInit {
   private supplierService = inject(SupplierService);
+  private duesService = inject(DuesService);
   private dialog = inject(MatDialog);
   private toast = inject(ToastService);
 
@@ -140,7 +142,14 @@ export class SupplierListComponent implements OnInit {
 
   async loadData(): Promise<void> {
     await safeLoad(this.loading, async () => {
-      this.suppliers.set(await this.supplierService.getAll());
+      const [suppliers, payables] = await Promise.all([
+        this.supplierService.getAll(),
+        this.duesService.getPayables(),
+      ]);
+      // The stored pendingAmount field is unused (always 0); overlay live
+      // dues so the Pending column and its sort reflect reality
+      const pendingById = new Map(payables.filter(g => g.partyId).map(g => [g.partyId!, g.total]));
+      this.suppliers.set(suppliers.map(s => ({ ...s, pendingAmount: pendingById.get(s.id) || 0 })));
     }, this.toast);
   }
 

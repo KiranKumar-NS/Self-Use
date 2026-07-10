@@ -13,6 +13,15 @@ export class SupplierService {
 
   private get ref() { return collection(this.firestore, 'suppliers'); }
 
+  private cache: Supplier[] | null = null;
+  private cacheTime = 0;
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  clearCache(): void {
+    this.cache = null;
+    this.cacheTime = 0;
+  }
+
   async create(data: Partial<Supplier>): Promise<string> {
     const user = this.authService.requireUser();
     const docRef = doc(this.ref);
@@ -33,17 +42,24 @@ export class SupplierService {
       createdAt: serverTimestamp(),
       isDeleted: false,
     });
+    this.clearCache();
     return docRef.id;
   }
 
   async update(id: string, data: Partial<Supplier>): Promise<void> {
     await updateDoc(doc(this.firestore, 'suppliers', id), { ...data });
+    this.clearCache();
   }
 
   async getAll(): Promise<Supplier[]> {
+    if (this.cache && Date.now() - this.cacheTime < this.CACHE_TTL) {
+      return this.cache;
+    }
     const q = query(this.ref, where('isDeleted', '==', false), orderBy('name', 'asc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => d.data() as Supplier);
+    this.cache = snapshot.docs.map(d => d.data() as Supplier);
+    this.cacheTime = Date.now();
+    return this.cache;
   }
 
   async getById(id: string): Promise<Supplier | null> {
@@ -80,5 +96,6 @@ export class SupplierService {
 
   async softDelete(id: string): Promise<void> {
     await updateDoc(doc(this.firestore, 'suppliers', id), { isDeleted: true });
+    this.clearCache();
   }
 }

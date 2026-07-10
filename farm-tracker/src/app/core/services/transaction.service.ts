@@ -196,6 +196,8 @@ export class TransactionService {
     if (data.animalCostSplit) txnDoc['animalCostSplit'] = data.animalCostSplit;
     if (data.linkedBuyerId) txnDoc['linkedBuyerId'] = data.linkedBuyerId;
     if (data.linkedBuyerName) txnDoc['linkedBuyerName'] = data.linkedBuyerName;
+    if (data.linkedSupplierId) txnDoc['linkedSupplierId'] = data.linkedSupplierId;
+    if (data.linkedSupplierName) txnDoc['linkedSupplierName'] = data.linkedSupplierName;
     if (data.tags?.length) txnDoc['tags'] = data.tags;
     if (data.product) txnDoc['product'] = this.productKey(data.product);
 
@@ -263,6 +265,14 @@ export class TransactionService {
       const newExpPayStatus = data.type === 'expense' ? (data.expensePaymentStatus || 'paid') : 'paid';
       if (oldData.type === 'expense' && data.type === 'expense' && oldExpPayStatus !== newExpPayStatus) {
         changesList.push(`expense payment: ${oldExpPayStatus}→${newExpPayStatus}`);
+      }
+      const newBuyerId = data.type === 'income' ? (data.linkedBuyerId || null) : null;
+      const newSupplierId = data.type === 'expense' ? (data.linkedSupplierId || null) : null;
+      if ((oldData.linkedBuyerId || null) !== newBuyerId) {
+        changesList.push(`customer: ${oldData.linkedBuyerName || 'none'}→${data.linkedBuyerName || 'none'}`);
+      }
+      if ((oldData.linkedSupplierId || null) !== newSupplierId) {
+        changesList.push(`supplier: ${oldData.linkedSupplierName || 'none'}→${data.linkedSupplierName || 'none'}`);
       }
       const changesStr = changesList.length > 0 ? changesList.join(', ') : 'details updated';
 
@@ -481,6 +491,10 @@ export class TransactionService {
         paidByName: data.paidByName || user.displayName,
         paymentStatus: data.type === 'income' ? (data.paymentStatus || 'received') : null,
         expensePaymentStatus: data.type === 'expense' ? (data.expensePaymentStatus || 'paid') : null,
+        linkedBuyerId: data.type === 'income' ? (data.linkedBuyerId || null) : null,
+        linkedBuyerName: data.type === 'income' ? (data.linkedBuyerName || null) : null,
+        linkedSupplierId: data.type === 'expense' ? (data.linkedSupplierId || null) : null,
+        linkedSupplierName: data.type === 'expense' ? (data.linkedSupplierName || null) : null,
         quantity: data.quantity || null,
         unit: data.unit || null,
         ratePerUnit: data.ratePerUnit || null,

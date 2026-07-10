@@ -4,7 +4,7 @@ import {
   query, orderBy, where, limit, serverTimestamp, Timestamp,
 } from '@angular/fire/firestore';
 import { Harvest, HarvestSaleEntry } from '../models/harvest.model';
-import { TransactionFormData } from '../models/transaction.model';
+import { TransactionFormData, IncomePaymentStatus } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 import { TransactionService } from './transaction.service';
 import { BuyerService } from './buyer.service';
@@ -79,6 +79,7 @@ export class HarvestService {
   async recordSale(harvestId: string, saleData: {
     quantity: number; unit: string; ratePerUnit: number;
     buyerId?: string; buyerName?: string; note?: string;
+    paymentStatus?: IncomePaymentStatus;
   }): Promise<void> {
     const harvest = await this.getById(harvestId);
     if (!harvest) throw new Error('Harvest not found');
@@ -101,6 +102,7 @@ export class HarvestService {
       segmentName: harvest.segmentName,
       description: `${harvest.cropName} sale from harvest`,
       paymentMethod: 'upi',
+      paymentStatus: saleData.paymentStatus || 'received',
       tags: ['harvest-sale'],
       product: harvest.cropName,
       month: getMonthString(saleDate),

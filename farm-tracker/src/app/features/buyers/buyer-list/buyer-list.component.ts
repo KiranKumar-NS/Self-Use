@@ -64,7 +64,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
                 <th>Phone</th>
                 <th>Location</th>
                 <th class="sortable" (click)="toggleSort('totalPurchases')">Purchases</th>
-                <th class="sortable" (click)="toggleSort('totalAmountPaid')">Total Paid</th>
+                <th class="sortable" (click)="toggleSort('totalAmountPaid')">Total Value</th>
                 <th class="sortable" (click)="toggleSort('averageRate')">Avg Rate</th>
                 <th class="sortable" (click)="toggleSort('lastPurchaseDate')">Last Purchase</th>
                 <th class="actions-th">Actions</th>

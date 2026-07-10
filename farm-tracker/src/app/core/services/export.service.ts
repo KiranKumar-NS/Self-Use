@@ -564,6 +564,8 @@ export class ExportService {
       'Animal Cost Split': t.animalCostSplit ? Object.entries(t.animalCostSplit).map(([id, amt]) => `${id}:${amt}`).join('; ') : '',
       'Linked Buyer ID': t.linkedBuyerId || '',
       'Linked Buyer Name': t.linkedBuyerName || '',
+      'Linked Supplier ID': t.linkedSupplierId || '',
+      'Linked Supplier Name': t.linkedSupplierName || '',
       'Created By': t.createdBy,
       'Created By Name': t.createdByName,
       'Created At': ts(t.createdAt),
