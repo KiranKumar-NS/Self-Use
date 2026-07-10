@@ -11,7 +11,6 @@ import { safeLoad } from '../../../core/utils/async.utils';
 import { ToastService } from '../../../core/services/toast.service';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
-import { SummaryCardsComponent } from '../summary-cards/summary-cards.component';
 import { SegmentBreakdownChartComponent } from '../segment-breakdown-chart/segment-breakdown-chart.component';
 import { MonthlyTrendChartComponent } from '../monthly-trend-chart/monthly-trend-chart.component';
 import { LoanSummaryWidgetComponent } from '../loan-summary-widget/loan-summary-widget.component';
@@ -28,7 +27,7 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    SummaryCardsComponent, SegmentBreakdownChartComponent, MonthlyTrendChartComponent,
+    SegmentBreakdownChartComponent, MonthlyTrendChartComponent,
     LoanSummaryWidgetComponent, BudgetWidgetComponent, StockWidgetComponent,
     AnalyticsTabComponent,
     LoadingSpinnerComponent, LoadingSkeletonComponent, DateRangeFilterComponent,
@@ -62,14 +61,6 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
       @if (loading()) {
         <app-loading-spinner />
       } @else {
-        <app-summary-cards
-          [totalIncome]="totals().totalIncome"
-          [totalExpense]="totals().totalExpense"
-          [netProfit]="totals().netProfit"
-          [totalDistributed]="totalDistributed()"
-          [pendingIncome]="totals().pendingIncome"
-        />
-
         <app-stock-widget [segments]="segments()" />
 
         <div class="charts-grid hide-mobile">
@@ -104,7 +95,6 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
     .page-title { margin: 0; font-size: var(--font-2xl); color: var(--color-text); }
     .header-actions { display: flex; gap: 0.25rem; }
     .wa-share-btn { color: #25D366 !important; }
-    :host app-summary-cards,
     :host app-stock-widget,
     :host app-recent-transactions { display: block; margin-bottom: 1rem; }
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
@@ -136,10 +126,8 @@ export class DashboardPageComponent implements OnInit {
   currentSelection = signal<DateRangeSelection | null>(null);
   trendTitle = signal('Monthly Trend (Last 6 Months)');
   currentMonthSummaries = signal<MonthlySummary[]>([]);
-  totals = signal({ totalIncome: 0, totalExpense: 0, netProfit: 0, pendingIncome: 0 });
   personBreakdown = signal<Record<string, Record<string, { income: number; expense: number }>>>({});
   loanSummary = signal({ totalGiven: 0, totalReceived: 0, pendingGiven: 0, pendingReceived: 0, totalSanctioned: 0, totalOutstanding: 0, upcomingEMICount: 0, upcomingEMIAmount: 0, totalInterestPaid: 0 });
-  totalDistributed = signal(0);
   segments = signal<Segment[]>([]);
   trendData = signal<{ month: string; income: number; expense: number }[]>([]);
 
@@ -203,9 +191,7 @@ export class DashboardPageComponent implements OnInit {
       }
 
       this.currentMonthSummaries.set(summaries);
-      this.totals.set(this.summaryService.aggregateSummaries(summaries));
       this.personBreakdown.set(this.buildPersonBreakdownFromSummaries(summaries));
-      this.totalDistributed.set(summaries.reduce((s, sum) => s + (sum.totalDistributed || 0), 0));
     }, this.toast);
   }
 

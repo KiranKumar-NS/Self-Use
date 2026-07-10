@@ -495,7 +495,7 @@ export class UserGuideDialogComponent implements OnInit {
       overview: 'Your financial command center. See income, expenses, profit, and trends at a glance. Filter by date range, segment, or person.',
       prerequisites: [],
       steps: [
-        { action: 'View summary cards', detail: 'Total Income, Expense, Net Profit, Distributions, and Pending Income for the selected period' },
+        { action: 'View summary cards', detail: 'Total Expense, Total Income, Net Profit/Loss, and Undistributed for the selected period — filter by person, segment, or tag chips' },
         { action: 'Change date range', detail: 'Use the date filter to view any month or custom range' },
         { action: 'Check segment breakdown', detail: 'See which farm segment earns or costs the most' },
         { action: 'Monitor budgets', detail: 'Budget widget shows actual spending vs. your limits per segment' },
@@ -520,7 +520,7 @@ export class UserGuideDialogComponent implements OnInit {
       tips: [
         'Export Excel monthly as a backup — you can always re-import if needed',
         'Use the WhatsApp share to quickly update partners on farm performance',
-        'Pending income shows money buyers owe you — follow up on old pending items',
+        'Check the Dues page for money buyers owe you — follow up on old pending items',
       ],
     },
     {
@@ -565,7 +565,7 @@ export class UserGuideDialogComponent implements OnInit {
         { skip: 'Don\'t link supplier to expense', result: 'Supplier stats won\'t track — you can\'t compare which supplier is cheaper or see pending payments per supplier' },
         { skip: 'Don\'t add tags', result: 'No way to filter related transactions together — e.g., can\'t see "all vaccination costs" or "eid season spending" in one view' },
         { skip: 'Don\'t set product on sales', result: 'Product-wise sales analytics and the Market Prices comparison won\'t include those sales — you can\'t see how much tomato or milk you sold, or compare your rate with the market' },
-        { skip: 'Don\'t set payment status', result: 'Pending income/expenses won\'t show on dashboard — you lose track of who owes you money' },
+        { skip: 'Don\'t set payment status', result: 'Pending income/expenses won\'t show on the Dues page — you lose track of who owes you money' },
         { skip: 'Don\'t distribute income', result: 'Partners don\'t know their share — dashboard shows undistributed income piling up' },
       ],
       tips: [
