@@ -136,8 +136,8 @@ export class TransactionService {
       fields['pendingExpense'] = increment(data.amount);
     }
 
-    // Per-product sales aggregates — enables product-level sales comparison
-    // and market-rate analytics without raw transaction scans
+    // Per-product sales aggregates — enables product-level sales totals
+    // without raw transaction scans
     if (data.type === 'income' && data.product && data.quantity) {
       const key = this.productKey(data.product);
       fields[`salesQtyByProduct.${key}`] = increment(data.quantity);

@@ -110,7 +110,7 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
             <mat-form-field appearance="outline">
               <mat-label>Product (optional)</mat-label>
               <input matInput [(ngModel)]="product" name="product" placeholder="e.g. tomato, goat, milk" />
-              <mat-hint>Enables product-wise sales & market-rate analytics</mat-hint>
+              <mat-hint>Enables product-wise sales totals</mat-hint>
             </mat-form-field>
           }
         </div>

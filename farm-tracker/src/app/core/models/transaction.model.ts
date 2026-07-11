@@ -70,7 +70,7 @@ export interface Transaction {
   tags?: string[];
 
   // Normalized commodity key (e.g. 'tomato', 'goat', 'milk') — enables
-  // product-level sales/price analytics and market-rate comparison
+  // product-level sales totals
   product?: string;
 
   // For queries
