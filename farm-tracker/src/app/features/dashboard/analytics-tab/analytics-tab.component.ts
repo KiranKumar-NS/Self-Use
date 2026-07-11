@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal, Input, OnChanges, SimpleChanges, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { Transaction } from '../../../core/models/transaction.model';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { LoanService } from '../../../core/services/loan.service';
@@ -86,6 +87,13 @@ import { MatIconModule } from '@angular/material/icon';
           <span class="stat-label">Net Profit/Loss</span>
           <span class="stat-value" [class.income-text]="(hasFilters() ? netProfit() : summaryNetProfit()) >= 0" [class.expense-text]="(hasFilters() ? netProfit() : summaryNetProfit()) < 0">{{ (hasFilters() ? netProfit() : summaryNetProfit()) | currencyInr }}</span>
         </mat-card>
+        @if ((hasFilters() ? pendingIncomeAmount() : summaryPendingIncome()) > 0) {
+          <mat-card class="stat-card pending-card" (click)="goToDues()">
+            <span class="stat-label">Pending Income</span>
+            <span class="stat-value pending-text">{{ (hasFilters() ? pendingIncomeAmount() : summaryPendingIncome()) | currencyInr }}</span>
+            <span class="stat-count">to receive — view dues</span>
+          </mat-card>
+        }
         @if (totalUndistributed() > 0) {
           <mat-card class="stat-card undistributed-card">
             <span class="stat-label">Undistributed</span>
@@ -256,6 +264,8 @@ import { MatIconModule } from '@angular/material/icon';
     .income-text { color: var(--color-income); }
     .holding-text { color: var(--color-warning); }
     .undistributed-card { border-color: var(--color-warning); background: var(--color-warning-light); }
+    .pending-text { color: var(--color-expense); }
+    .pending-card { border-color: var(--color-expense); background: var(--color-expense-bg); cursor: pointer; }
     .stat-label { font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
     .stat-value {
       font-size: var(--font-2xl); font-weight: 700; color: var(--color-text); margin: 4px 0;
@@ -322,6 +332,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   private loanService = inject(LoanService);
   private dialog = inject(MatDialog);
   private toast = inject(ToastService);
+  private router = inject(Router);
 
   loading = signal(true);
   allTransactions = signal<Transaction[]>([]);
@@ -344,9 +355,11 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   tagProductivity = signal<{ income: number; expense: number; net: number; incomeCount: number; expenseCount: number } | null>(null);
 
   // Summary-based totals (accurate, from pre-aggregated Firestore summaries)
+  // Income/profit count received money only; pending sales are shown separately
   summaryTotalExpense = signal(0);
   summaryTotalIncome = signal(0);
   summaryNetProfit = signal(0);
+  summaryPendingIncome = signal(0);
 
   // Computed stats (from loaded transactions — used for charts/breakdowns)
   totalExpense = signal(0);
@@ -369,6 +382,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   totalIncomeAmount = signal(0);
   netProfit = signal(0);
   totalUndistributed = signal(0);
+  pendingIncomeAmount = signal(0);
   filteredIncome = signal<Transaction[]>([]);
 
   // Cached data (loaded once, reused across filter changes)
@@ -437,10 +451,13 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
         this.loadSummaryTotals(),
       ]);
 
-      // Set accurate totals from summaries
+      // Set accurate totals from summaries.
+      // Summaries count income at billing time, so strip pending (unreceived)
+      // sales out of income/profit and surface them as Pending Income instead.
       this.summaryTotalExpense.set(summaryTotals.totalExpense);
-      this.summaryTotalIncome.set(summaryTotals.totalIncome);
-      this.summaryNetProfit.set(summaryTotals.netProfit);
+      this.summaryTotalIncome.set(summaryTotals.totalIncome - summaryTotals.pendingIncome);
+      this.summaryNetProfit.set(summaryTotals.netProfit - summaryTotals.pendingIncome);
+      this.summaryPendingIncome.set(summaryTotals.pendingIncome);
 
       let txns = result.transactions;
 
@@ -468,7 +485,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   }
 
   /** Load accurate totals from pre-aggregated monthly/yearly summaries */
-  private async loadSummaryTotals(): Promise<{ totalExpense: number; totalIncome: number; netProfit: number }> {
+  private async loadSummaryTotals(): Promise<{ totalExpense: number; totalIncome: number; netProfit: number; pendingIncome: number }> {
     try {
       if (this.currentSelection.mode === 'monthly' && this.currentSelection.month) {
         const summaries = await this.summaryService.getForMonth(this.currentSelection.month);
@@ -483,7 +500,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
         return this.summaryService.aggregateSummaries(summaries);
       }
     } catch {
-      return { totalExpense: 0, totalIncome: 0, netProfit: 0 };
+      return { totalExpense: 0, totalIncome: 0, netProfit: 0, pendingIncome: 0 };
     }
   }
 
@@ -543,6 +560,9 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       }
       if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segment === this.filterSegment);
       this.filteredIncome.set(incomeForRange);
+      this.pendingIncomeAmount.set(
+        incomeForRange.filter(t => t.paymentStatus === 'pending').reduce((s, t) => s + t.amount, 0)
+      );
 
       let distributedTotal = 0;
       let undistributedTotal = 0;
@@ -561,10 +581,11 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
           distributedTotal += d.amount;
         }
 
-        // Undistributed = total income - everything allocated (including reinvestment)
+        // Undistributed = total income - everything allocated (including reinvestment).
+        // Pending (unreceived) income is not money in hand — it belongs in Dues, not here.
         const receiver = resolveKey(txn.paidBy, txn.paidByName || txn.createdByName);
         const undistributed = txn.amount - totalAllocated;
-        if (undistributed > 0) {
+        if (undistributed > 0 && txn.paymentStatus !== 'pending') {
           ensurePerson(receiver);
           personMap[receiver].holding += undistributed;
           undistributedTotal += undistributed;
@@ -620,6 +641,10 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     this.investmentSummary.set(summary);
     this.maxInvestment.set(summary.length > 0 ? Math.max(...summary.map(s => s.net)) : 0);
     this.totalUndistributed.set(Object.values(personMap).reduce((s, p) => s + p.holding, 0));
+  }
+
+  goToDues(): void {
+    this.router.navigate(['/dues']);
   }
 
   setFilter(type: 'all' | 'person' | 'segment', value: string): void {
@@ -716,6 +741,9 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     if (this.filterCategory) incomeForRange = incomeForRange.filter(t => t.categoryName === this.filterCategory);
     if (this.filterTag) incomeForRange = incomeForRange.filter(t => t.tags?.includes(this.filterTag));
     this.filteredIncome.set(incomeForRange);
+    this.pendingIncomeAmount.set(
+      incomeForRange.filter(t => t.paymentStatus === 'pending').reduce((s, t) => s + t.amount, 0)
+    );
 
     // Compute tag productivity when a tag is selected
     if (this.filterTag) {
@@ -763,7 +791,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       }
       const receiver = resolveKey2(t.paidBy, t.paidByName || t.createdByName);
       const undistributed = t.amount - totalAllocated;
-      if (undistributed > 0) {
+      if (undistributed > 0 && t.paymentStatus !== 'pending') {
         ensurePerson2(receiver);
         investMap[receiver].holding += undistributed;
       }

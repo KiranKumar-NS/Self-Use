@@ -161,13 +161,18 @@ export class ExportService {
         }
       }
 
+      // Undistributed counts only received income — pending sales are dues, not money in hand
+      const receivedIncome = transactions
+        .filter(t => t.type === 'income' && t.paymentStatus !== 'pending')
+        .reduce((s, t) => s + t.amount, 0);
+
       autoTable(pdf, {
         startY: 30,
         head: [['Person', 'Total Received']],
         body: [
           ...Object.entries(personTotals).map(([name, amt]) => [name, pdfCurrency(amt)]),
           ['Total Distributed', pdfCurrency(totalDist)],
-          ['Undistributed', pdfCurrency(totalIncome - totalDist)],
+          ['Undistributed', pdfCurrency(receivedIncome - totalDist)],
         ],
         theme: 'grid',
         didParseCell: (data: any) => {
