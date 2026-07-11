@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal, OnInit, ViewChild } from '@angular/core';
 import { SummaryService } from '../../../core/services/summary.service';
 import { UserService } from '../../../core/services/user.service';
 import { LoanService } from '../../../core/services/loan.service';
@@ -68,21 +68,25 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
           <app-monthly-trend-chart [trendData]="trendData()" [chartTitle]="trendTitle()" />
         </div>
 
-        <div class="widgets-row">
-          @if (currentMode() === 'monthly') {
-            <app-budget-widget [segments]="segments()" [summaries]="currentMonthSummaries()" />
-          }
-          <app-loan-summary-widget
-              [totalGiven]="loanSummary().totalGiven"
-              [totalReceived]="loanSummary().totalReceived"
-              [pendingGiven]="loanSummary().pendingGiven"
-              [pendingReceived]="loanSummary().pendingReceived"
-              [totalSanctioned]="loanSummary().totalSanctioned"
-              [totalOutstanding]="loanSummary().totalOutstanding"
-              [upcomingEMICount]="loanSummary().upcomingEMICount"
-              [upcomingEMIAmount]="loanSummary().upcomingEMIAmount"
-              [totalInterestPaid]="loanSummary().totalInterestPaid" />
-        </div>
+        @if (currentMode() === 'monthly' || hasLoanData()) {
+          <div class="widgets-row">
+            @if (currentMode() === 'monthly') {
+              <app-budget-widget [segments]="segments()" [summaries]="currentMonthSummaries()" />
+            }
+            @if (hasLoanData()) {
+              <app-loan-summary-widget
+                  [totalGiven]="loanSummary().totalGiven"
+                  [totalReceived]="loanSummary().totalReceived"
+                  [pendingGiven]="loanSummary().pendingGiven"
+                  [pendingReceived]="loanSummary().pendingReceived"
+                  [totalSanctioned]="loanSummary().totalSanctioned"
+                  [totalOutstanding]="loanSummary().totalOutstanding"
+                  [upcomingEMICount]="loanSummary().upcomingEMICount"
+                  [upcomingEMIAmount]="loanSummary().upcomingEMIAmount"
+                  [totalInterestPaid]="loanSummary().totalInterestPaid" />
+            }
+          </div>
+        }
 
         <hr class="section-divider" />
 
@@ -128,6 +132,7 @@ export class DashboardPageComponent implements OnInit {
   currentMonthSummaries = signal<MonthlySummary[]>([]);
   personBreakdown = signal<Record<string, Record<string, { income: number; expense: number }>>>({});
   loanSummary = signal({ totalGiven: 0, totalReceived: 0, pendingGiven: 0, pendingReceived: 0, totalSanctioned: 0, totalOutstanding: 0, upcomingEMICount: 0, upcomingEMIAmount: 0, totalInterestPaid: 0 });
+  hasLoanData = computed(() => Object.values(this.loanSummary()).some(v => v > 0));
   segments = signal<Segment[]>([]);
   trendData = signal<{ month: string; income: number; expense: number }[]>([]);
 
