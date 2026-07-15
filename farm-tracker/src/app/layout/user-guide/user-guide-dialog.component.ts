@@ -539,7 +539,6 @@ export class UserGuideDialogComponent implements OnInit {
       steps: [
         { action: 'Add Expense', detail: 'Amount, category (Feed/Medicine/Labor), segment, who paid, payment method (Cash/UPI)' },
         { action: 'Add Income', detail: 'Amount, category (Animal Sales/Milk), link buyer, set payment status (Received/Pending)' },
-        { action: 'Set product (income)', detail: 'e.g. "tomato", "goat", "milk" — enables product-wise sales totals' },
         { action: 'Link to animals', detail: 'When adding an expense, click "Link Animals" to split cost across specific animals' },
         { action: 'Distribute income', detail: 'Split income among partners — set each person\'s share amount' },
         { action: 'Add tags', detail: 'Type tags like "vaccination-drive" or "eid-season" for easy filtering later' },
@@ -564,7 +563,6 @@ export class UserGuideDialogComponent implements OnInit {
         { skip: 'Don\'t link buyer to income', result: 'Buyer\'s purchase history won\'t update — you can\'t see how much Ahmed bought this year or his average rate' },
         { skip: 'Don\'t link supplier to expense', result: 'Supplier stats won\'t track — you can\'t compare which supplier is cheaper or see pending payments per supplier' },
         { skip: 'Don\'t add tags', result: 'No way to filter related transactions together — e.g., can\'t see "all vaccination costs" or "eid season spending" in one view' },
-        { skip: 'Don\'t set product on sales', result: 'Product-wise sales totals won\'t include those sales — you can\'t see how much tomato or milk you sold' },
         { skip: 'Don\'t set payment status', result: 'Pending income/expenses won\'t show on the Dues page — you lose track of who owes you money' },
         { skip: 'Don\'t distribute income', result: 'Partners don\'t know their share — dashboard shows undistributed income piling up' },
       ],
@@ -573,7 +571,6 @@ export class UserGuideDialogComponent implements OnInit {
         'Mark credit sales as "Pending" and flip to "Received" when buyer pays',
         'Use tags to group related transactions (e.g., all vaccination costs in one view)',
         'Adding suppliers/buyers is optional but highly recommended — it takes 30 seconds and gives you lifetime tracking',
-        'Set the product on every sale and keep the spelling consistent — it keeps product-wise sales totals accurate',
       ],
     },
     {

@@ -38,8 +38,6 @@ interface SummaryAccumulator {
   pendingExpense: number;
   totalDistributed: number;
   distributionByPerson: Record<string, number>;
-  salesQtyByProduct: Record<string, number>;
-  salesAmtByProduct: Record<string, number>;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -70,8 +68,6 @@ export class SummaryReconciliationService {
       pendingExpense: 0,
       totalDistributed: 0,
       distributionByPerson: {},
-      salesQtyByProduct: {},
-      salesAmtByProduct: {},
     };
   }
 
@@ -95,12 +91,6 @@ export class SummaryReconciliationService {
 
       if ((txn.paymentStatus || 'received') === 'pending') {
         acc.pendingIncome += txn.amount;
-      }
-
-      // Per-product sales aggregates (mirrors TransactionService.buildApplyFields)
-      if (txn.product && txn.quantity) {
-        acc.salesQtyByProduct[txn.product] = (acc.salesQtyByProduct[txn.product] || 0) + txn.quantity;
-        acc.salesAmtByProduct[txn.product] = (acc.salesAmtByProduct[txn.product] || 0) + txn.amount;
       }
     }
 
@@ -210,8 +200,6 @@ export class SummaryReconciliationService {
           pendingExpense: acc.pendingExpense,
           totalDistributed: acc.totalDistributed,
           distributionByPerson: acc.distributionByPerson,
-          salesQtyByProduct: acc.salesQtyByProduct,
-          salesAmtByProduct: acc.salesAmtByProduct,
           updatedAt: serverTimestamp() as any,
         },
       });
@@ -237,8 +225,6 @@ export class SummaryReconciliationService {
           pendingExpense: acc.pendingExpense,
           totalDistributed: acc.totalDistributed,
           distributionByPerson: acc.distributionByPerson,
-          salesQtyByProduct: acc.salesQtyByProduct,
-          salesAmtByProduct: acc.salesAmtByProduct,
           updatedAt: serverTimestamp() as any,
         },
       });

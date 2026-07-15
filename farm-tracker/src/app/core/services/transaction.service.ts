@@ -39,11 +39,6 @@ export class TransactionService {
     return paidBy || fallbackUid;
   }
 
-  /** Sanitize a product key for use in Firestore map field paths */
-  private productKey(product: string): string {
-    return product.trim().toLowerCase().replace(/[.$/\[\]#]/g, '_');
-  }
-
   /**
    * Build summary reversal fields for a transaction.
    * Used by update (reverse old), softDelete, and hardDelete to avoid code duplication.
@@ -92,13 +87,6 @@ export class TransactionService {
       }
     }
 
-    // Reverse per-product sales aggregates
-    if (txn.type === 'income' && txn.product && txn.quantity) {
-      const key = this.productKey(txn.product);
-      fields[`salesQtyByProduct.${key}`] = increment(-txn.quantity);
-      fields[`salesAmtByProduct.${key}`] = increment(-txn.amount);
-    }
-
     return fields;
   }
 
@@ -134,14 +122,6 @@ export class TransactionService {
     }
     if (data.type === 'expense' && (data.expensePaymentStatus || 'paid') === 'pending') {
       fields['pendingExpense'] = increment(data.amount);
-    }
-
-    // Per-product sales aggregates — enables product-level sales totals
-    // without raw transaction scans
-    if (data.type === 'income' && data.product && data.quantity) {
-      const key = this.productKey(data.product);
-      fields[`salesQtyByProduct.${key}`] = increment(data.quantity);
-      fields[`salesAmtByProduct.${key}`] = increment(data.amount);
     }
 
     return fields;
@@ -199,7 +179,6 @@ export class TransactionService {
     if (data.linkedSupplierId) txnDoc['linkedSupplierId'] = data.linkedSupplierId;
     if (data.linkedSupplierName) txnDoc['linkedSupplierName'] = data.linkedSupplierName;
     if (data.tags?.length) txnDoc['tags'] = data.tags;
-    if (data.product) txnDoc['product'] = this.productKey(data.product);
 
     if (data.type === 'income') {
       txnDoc['paymentStatus'] = data.paymentStatus || 'received';
@@ -499,7 +478,6 @@ export class TransactionService {
         unit: data.unit || null,
         ratePerUnit: data.ratePerUnit || null,
         tags: data.tags || [],
-        product: data.product ? this.productKey(data.product) : null,
         month: data.month,
         year: data.year,
         timeline: appendTimelineCapped(oldData.timeline, {

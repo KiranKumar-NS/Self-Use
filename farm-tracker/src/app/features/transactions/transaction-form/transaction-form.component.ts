@@ -105,14 +105,6 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
             <mat-label>Rate/Unit (₹)</mat-label>
             <input matInput type="number" [(ngModel)]="ratePerUnit" name="ratePerUnit" min="0" step="0.5" (ngModelChange)="onQtyRateChange()" />
           </mat-form-field>
-
-          @if (type === 'income') {
-            <mat-form-field appearance="outline">
-              <mat-label>Product (optional)</mat-label>
-              <input matInput [(ngModel)]="product" name="product" placeholder="e.g. tomato, goat, milk" />
-              <mat-hint>Enables product-wise sales totals</mat-hint>
-            </mat-form-field>
-          }
         </div>
 
         <div class="form-row">
@@ -386,7 +378,6 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   quantity: number | null = null;
   unit: SaleUnit | '' = '';
   ratePerUnit: number | null = null;
-  product = '';
   segment = '';
   category = '';
   description = '';
@@ -489,7 +480,6 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         this.quantity = txn.quantity || null;
         this.unit = txn.unit || '';
         this.ratePerUnit = txn.ratePerUnit || null;
-        this.product = txn.product || '';
         this.paymentMethod = txn.paymentMethod || 'cash';
         this.paymentStatus = txn.paymentStatus || 'received';
         this.expensePaymentStatus = txn.expensePaymentStatus || 'paid';
@@ -686,7 +676,6 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         quantity: this.quantity || undefined,
         unit: this.unit || undefined,
         ratePerUnit: this.ratePerUnit || undefined,
-        product: (this.type === 'income' && this.product.trim()) ? this.product.trim() : undefined,
         category: this.category,
         categoryName: selectedCategory?.name || this.category,
         segment: this.segment,

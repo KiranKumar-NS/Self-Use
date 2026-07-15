@@ -69,10 +69,6 @@ export interface Transaction {
   // Freeform tags for ad-hoc grouping (e.g. "vaccination-drive", "eid-season")
   tags?: string[];
 
-  // Normalized commodity key (e.g. 'tomato', 'goat', 'milk') — enables
-  // product-level sales totals
-  product?: string;
-
   // For queries
   month: string;
   year: number;
@@ -109,7 +105,6 @@ export interface TransactionFormData {
   linkedSupplierId?: string;
   linkedSupplierName?: string;
   tags?: string[];
-  product?: string;
   month: string;
   year: number;
 }

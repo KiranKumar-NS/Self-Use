@@ -104,7 +104,6 @@ export class HarvestService {
       paymentMethod: 'upi',
       paymentStatus: saleData.paymentStatus || 'received',
       tags: ['harvest-sale'],
-      product: harvest.cropName,
       month: getMonthString(saleDate),
       year: getYear(saleDate),
     };
