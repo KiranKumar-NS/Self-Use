@@ -27,6 +27,7 @@
 
 var PROJECT_ID = 'farm-tracker-tn70';
 var FOLDER_NAME = 'FarmTracker Backups';
+var BACKUP_EVERY_DAYS = 1; // 1 = daily; e.g. 10 or 15 for less often (re-run installTrigger after changing)
 var RETENTION_DAYS = 30;
 var PAGE_SIZE = 300;
 var TZ = 'Asia/Kolkata';
@@ -68,11 +69,11 @@ function installTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (handlers.indexOf(t.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(t);
   });
-  // Daily, fires between 6 and 7 PM IST (script timezone is Asia/Kolkata)
-  ScriptApp.newTrigger('runDailyBackup').timeBased().everyDays(1).atHour(18).create();
-  // Weekly safety net: email if the newest backup is older than 48 hours
+  // Fires between 6 and 7 PM IST (script timezone is Asia/Kolkata)
+  ScriptApp.newTrigger('runDailyBackup').timeBased().everyDays(BACKUP_EVERY_DAYS).atHour(18).create();
+  // Weekly safety net: email if the newest backup is overdue
   ScriptApp.newTrigger('checkBackupFreshness').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(9).create();
-  Logger.log('Triggers installed: daily 6 PM IST backup + Monday 9 AM freshness check.');
+  Logger.log('Triggers installed: backup every ' + BACKUP_EVERY_DAYS + ' day(s) at 6 PM IST + Monday 9 AM freshness check.');
 }
 
 /** Weekly trigger target: alert if backups silently stopped running. */
@@ -87,7 +88,7 @@ function checkBackupFreshness() {
   var ageDays = newest
     ? (Date.now() - new Date(newest + 'T00:00:00+05:30').getTime()) / 86400000
     : Infinity;
-  if (ageDays > 2) {
+  if (ageDays > BACKUP_EVERY_DAYS + 2) {
     notify_(
       'FarmTracker backup is STALE',
       'The newest backup in Drive folder "' + FOLDER_NAME + '" is ' +
