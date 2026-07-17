@@ -2,9 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal, OnInit, V
 import { SummaryService } from '../../../core/services/summary.service';
 import { UserService } from '../../../core/services/user.service';
 import { LoanService } from '../../../core/services/loan.service';
-import { InventoryService } from '../../../core/services/inventory.service';
-import { AnimalService } from '../../../core/services/animal.service';
-import { BuyerService } from '../../../core/services/buyer.service';
+import { BackupService } from '../../../core/services/backup.service';
 import { MonthlySummary } from '../../../core/models/monthly-summary.model';
 import { getMonthName, getLast6MonthsFrom, getMonthRange } from '../../../core/utils/date.utils';
 import { safeLoad } from '../../../core/utils/async.utils';
@@ -44,7 +42,7 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
       <div class="page-header">
         <h1 class="page-title">Dashboard</h1>
         <div class="header-actions">
-          <button mat-icon-button (click)="exportExcel()" aria-label="Export Excel backup">
+          <button mat-icon-button (click)="exportExcel()" [disabled]="exporting()" aria-label="Export Excel backup">
             <mat-icon>download</mat-icon>
           </button>
           <button mat-icon-button (click)="exportPdf()" aria-label="Export PDF report">
@@ -119,11 +117,10 @@ export class DashboardPageComponent implements OnInit {
   private segmentService = inject(SegmentService);
   private userService = inject(UserService);
   private loanService = inject(LoanService);
-  private inventoryService = inject(InventoryService);
-  private animalService = inject(AnimalService);
-  private buyerService = inject(BuyerService);
+  private backupService = inject(BackupService);
   private toast = inject(ToastService);
 
+  exporting = signal(false);
   initialLoading = signal(true);
   loading = signal(false);
   currentMode = signal<'monthly' | 'custom' | 'alltime'>('monthly');
@@ -236,38 +233,21 @@ export class DashboardPageComponent implements OnInit {
     return breakdown;
   }
 
-  private get rangeLabel(): string {
-    const selection = this.currentSelection();
-    if (!selection) return 'all';
-    if (selection.mode === 'monthly') return selection.month || 'all';
-    if (selection.mode === 'custom') return `${selection.fromMonth}_to_${selection.toMonth}`;
-    return 'all-time';
-  }
-
   async exportExcel(): Promise<void> {
-    if (!this.analyticsTab) return;
+    if (this.exporting()) return;
+    this.exporting.set(true);
+    this.toast.info('Preparing full backup — fetching all data…');
     try {
       const { ExportService } = await import('../../../core/services/export.service');
-      const exportService = new ExportService();
-      // Fetch all data for backup including animals and buyers
-      const [loanResult, inventoryEvents, animals, buyers] = await Promise.all([
-        this.loanService.getAll({}, 200),
-        this.inventoryService.getEvents(undefined, 500),
-        this.animalService.getAll(),
-        this.buyerService.getAll(),
-      ]);
-      await exportService.exportBackupExcel(
-        this.analyticsTab.filtered(),
-        this.analyticsTab.filteredIncome(),
-        loanResult.loans,
-        inventoryEvents,
-        this.rangeLabel,
-        animals,
-        buyers,
-      );
+      const data = await this.backupService.collectFullBackup();
+      await new ExportService().exportBackupExcel(data);
+      const txnCount = data.expenses.length + data.income.length;
+      this.toast.success(`Backup exported: ${txnCount} transactions, ${data.loans.length} loans, ${data.animals.length} animals`);
     } catch (err) {
       console.error('[exportExcel]', err);
       this.toast.error('Failed to export Excel backup. Check your connection and try again.');
+    } finally {
+      this.exporting.set(false);
     }
   }
 

@@ -81,7 +81,56 @@ node scripts/clean-db.js seed
 
 ---
 
-### 3. `set-custom-claims.js` (in `/firebase` folder)
+### 3. `import-backup.js` — Restore from Excel Backup
+
+Restores data from a dashboard Excel backup or a per-loan detail export. Auto-detects the file type by its sheets. Writes are upserts keyed on the `ID` column (chunked batches, safe for any size).
+
+```bash
+# Full backup (v2, exported from the dashboard download button)
+node import-backup.js farm-backup-all-time-2026-07-17.xlsx
+
+# Older transaction backup (v1) — still supported
+node import-backup.js farm-backup-July-2026.xlsx
+
+# Per-loan detail export
+node import-backup.js loan-SBI-detail.xlsx
+
+# Preview without writing
+node import-backup.js farm-backup.xlsx --dry-run
+
+# Skip automatic monthly/yearly summary rebuild
+node import-backup.js farm-backup.xlsx --skip-summaries
+```
+
+**Full backup (v2) covers every persisted collection:** transactions (Expenses/Income), loans + formal-loan detail (deductions/collateral/rate changes/documents) + repayment subcollections, inventory events, animals + cost/vaccination/medical/weight detail, buyers, suppliers, categories, segments, users, tasks, schedules, harvests + sales, breeding records, crop activities, consumables (inventoryItems) + stock movements, and tags. The `Meta` sheet records the format version and per-sheet counts; import verifies its counts against what it wrote.
+
+After a (non-dry-run) import, `monthlySummaries`/`yearlySummaries` are rebuilt automatically from the imported transactions.
+
+**Not covered (by design):** soft-deleted docs and per-doc `timeline` audit arrays are not in the backup; Firebase Auth accounts are not restored (the Users sheet restores Firestore profile docs only — re-run set-custom-claims for roles).
+
+---
+
+### 4. `verify-backup.js` — Verify Backup vs Firestore
+
+Read-only round-trip check: compares every sheet row/column of a backup file against the live Firestore data (and Meta counts vs live collection counts). Exits non-zero on any difference.
+
+```bash
+node verify-backup.js farm-backup-all-time-2026-07-17.xlsx
+
+# Against the local emulator (Git Bash)
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node verify-backup.js farm-backup.xlsx
+```
+
+Typical wipe-and-restore validation:
+```bash
+firebase emulators:start --only firestore --project <project-id>
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node import-backup.js farm-backup.xlsx
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node verify-backup.js farm-backup.xlsx
+```
+
+---
+
+### 5. `set-custom-claims.js` (in `/firebase` folder)
 
 Sets role custom claims on an existing Firebase Auth user.
 
@@ -94,6 +143,19 @@ Use this if you created a user through the app UI and need to set their role:
 # Get the UID from Firebase Console > Authentication
 node firebase/set-custom-claims.js abc123def456 admin
 ```
+
+---
+
+## Automatic Daily Backup to Google Drive
+
+Besides the manual dashboard export, a Google Apps Script backs up the entire
+Firestore database to Google Drive **every evening at 6 PM IST** (JSON + Excel,
+30-day retention, email alerts on failure). It lives in
+[`../backup-script/`](../backup-script/) — see
+[`backup-script/SETUP.md`](../backup-script/SETUP.md) for the one-time setup.
+
+Unlike the dashboard export, the Drive backup includes soft-deleted docs, and
+its JSON file preserves exact Firestore types for disaster recovery.
 
 ---
 
@@ -132,4 +194,11 @@ node scripts/clean-db.js seed
 | `transactions` | All expense and income records |
 | `loans` | Loan records (given/received) with repayment status |
 | `loans/{id}/repayments` | Repayment history for each loan |
-| `monthlySummaries` | Precomputed monthly totals per segment (auto-updated) |
+| `monthlySummaries` / `yearlySummaries` | Precomputed totals per segment (auto-updated; rebuilt on import) |
+| `inventoryEvents` | Animal stock change events (birth/death/purchase/sale) |
+| `animals` | Animal/batch registry with embedded cost & health detail |
+| `buyers` / `suppliers` | Buyer and supplier registries with denormalized stats |
+| `tasks` / `schedules` | Task board and recurring schedules/reminders |
+| `harvests` / `breedingRecords` / `cropActivities` | Crop & breeding operations |
+| `inventoryItems` | Consumables (feed/medicine/...) with embedded stock movements |
+| `meta/tags` | Single doc holding all freeform transaction tags |

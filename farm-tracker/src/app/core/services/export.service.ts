@@ -7,6 +7,7 @@ import { Animal } from '../models/animal.model';
 import { Buyer } from '../models/buyer.model';
 import { MonthlySummary } from '../models/monthly-summary.model';
 import { getMonthName } from '../utils/date.utils';
+import type { BackupData } from './backup.service';
 
 /** RFC 4180 CSV field escaping: wrap in quotes if field contains comma, quote, or newline */
 function csvField(value: string | number | null | undefined): string {
@@ -469,7 +470,8 @@ export class ExportService {
         Principal: r.principalPortion ?? '', Interest: r.interestPortion ?? '',
         'Part Payment': r.isPartPayment ?? false, 'Pre-closure': r.isPreClosure ?? false,
         'Pre-closure Charges': r.preClosureCharges ?? '', Penalty: r.penaltyAmount ?? '',
-        Reference: r.paymentReference ?? '', 'Paid By': r.paidBy ?? '',
+        Reference: r.paymentReference ?? '', 'Transaction ID': r.transactionId ?? '',
+        'Scheduled Due Date': ts(r.scheduledDueDate), 'Paid By': r.paidBy ?? '',
         'Paid By Name': r.paidByName ?? '', 'Recorded By': r.recordedBy, Note: r.note,
       }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(repRows), 'Repayments');
@@ -505,6 +507,9 @@ export class ExportService {
         Weight: c.weight ?? '', Purity: c.purity ?? '', 'Document Ref': c.documentReference ?? '',
         Note: c.note ?? '', Status: c.isReleased ? 'Released' : 'Pledged',
         'Released Date': ts(c.releasedDate),
+        'Item Name': c.itemName ?? '', Quantity: c.quantity ?? '',
+        'Gross Weight': c.grossWeight ?? '', 'Net Weight': c.netWeight ?? '',
+        'Gold Rate Per Gram': c.goldRatePerGram ?? '', 'Gold Value': c.goldValue ?? '',
       }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(colRows), 'Collateral');
     }
@@ -530,18 +535,18 @@ export class ExportService {
     XLSX.writeFile(wb, `loan-${sourceName}-detail.xlsx`);
   }
 
-  async exportBackupExcel(
-    expenses: Transaction[],
-    income: Transaction[],
-    loans: Loan[],
-    inventoryEvents: any[],
-    period: string,
-    animals?: Animal[],
-    buyers?: Buyer[]
-  ): Promise<void> {
+  async exportBackupExcel(data: BackupData): Promise<void> {
     const XLSX = await import('xlsx');
 
+    // Business dates: DD/MM/YYYY (en-IN). Audit timestamps: ISO (lossless round-trip).
     const ts = (t: any) => t?.toDate?.()?.toLocaleDateString('en-IN') ?? '';
+    const tsIso = (t: any) => t?.toDate?.()?.toISOString() ?? '';
+    const joinSemi = (arr: any[] | null | undefined) => arr?.join('; ') ?? '';
+    const mapIdAmt = (m: Record<string, number> | null | undefined) =>
+      m ? Object.entries(m).map(([id, amt]) => `${id}:${amt}`).join('; ') : '';
+    const json = (v: any) => (v == null ? '' : JSON.stringify(v));
+
+    const { expenses, income, loans, inventoryEvents, animals, buyers } = data;
 
     // --- Expenses Sheet (all fields for re-import) ---
     const expenseRows = expenses.map(t => ({
@@ -571,11 +576,12 @@ export class ExportService {
       'Linked Buyer Name': t.linkedBuyerName || '',
       'Linked Supplier ID': t.linkedSupplierId || '',
       'Linked Supplier Name': t.linkedSupplierName || '',
+      'Linked Harvest ID': t.linkedHarvestId || '',
+      'Linked Harvest Name': t.linkedHarvestName || '',
       'Created By': t.createdBy,
       'Created By Name': t.createdByName,
-      'Created At': ts(t.createdAt),
+      'Created At': tsIso(t.createdAt),
     }));
-    const expenseSheet = XLSX.utils.json_to_sheet(expenseRows);
 
     // --- Income Sheet (all fields for re-import) ---
     const incomeRows = income.map(t => {
@@ -607,12 +613,13 @@ export class ExportService {
         'Animal Cost Split': t.animalCostSplit ? Object.entries(t.animalCostSplit).map(([id, amt]) => `${id}:${amt}`).join('; ') : '',
         'Linked Buyer ID': t.linkedBuyerId || '',
         'Linked Buyer Name': t.linkedBuyerName || '',
+        'Linked Harvest ID': t.linkedHarvestId || '',
+        'Linked Harvest Name': t.linkedHarvestName || '',
         'Created By': t.createdBy,
         'Created By Name': t.createdByName,
-        'Created At': ts(t.createdAt),
+        'Created At': tsIso(t.createdAt),
       };
     });
-    const incomeSheet = XLSX.utils.json_to_sheet(incomeRows);
 
     // --- Inventory Events Sheet (all fields for re-import) ---
     const eventRows = inventoryEvents.map((e: any) => ({
@@ -627,11 +634,11 @@ export class ExportService {
       'Month': e.month,
       'Year': e.year,
       'Estimated Value': e.estimatedValue ?? '',
+      'Linked Animal IDs': joinSemi(e.linkedAnimalIds),
       'Created By': e.createdBy,
       'Created By Name': e.createdByName,
-      'Created At': ts(e.createdAt),
+      'Created At': tsIso(e.createdAt),
     }));
-    const eventSheet = XLSX.utils.json_to_sheet(eventRows);
 
     // --- Loans Sheet (all fields for re-import) ---
     const loanRows = loans.map(l => ({
@@ -656,18 +663,23 @@ export class ExportService {
       'Sanctioned': l.sanctionedAmount ?? '',
       'Net Disbursed': l.netDisbursedAmount ?? '',
       'Total Deductions': l.totalDeductions ?? '',
+      'Disbursement Date': ts(l.disbursementDate),
       'Repayment Type': l.repaymentType ?? '',
       'Interest Type': l.interestType ?? '',
       'Interest Frequency': l.interestFrequency ?? '',
       'Interest Rate Input': l.interestRateInput ?? '',
       'Interest Rate Annual': l.interestRate ?? '',
       'Is Subsidized': l.isSubsidized ?? false,
+      'Subsidy Details': l.subsidyDetails ?? '',
       'Effective Rate': l.effectiveRate ?? '',
       'Tenure': l.tenure ?? '',
       'EMI Amount': l.emiAmount ?? '',
       'Total EMIs': l.totalEMIs ?? '',
       'EMIs Paid': l.emisPaid ?? '',
       'Moratorium': l.moratoriumMonths ?? '',
+      'EMI Start Date': ts(l.emiStartDate),
+      'Next Payment Due': ts(l.nextPaymentDueDate),
+      'Next Payment Number': l.nextPaymentNumber ?? '',
       'Interest Payment Freq': l.interestPaymentFrequency ?? '',
       'Interest Per Period': l.interestAmountPerPeriod ?? '',
       'Interest Payments Made': l.totalInterestPaymentsMade ?? '',
@@ -688,89 +700,423 @@ export class ExportService {
       'Is Balance Transfer': l.isBalanceTransfer ?? false,
       'Parent Formal Loan': l.parentFormalLoanId ?? '',
       'Segments': (l.segments ?? []).join('; '),
+      'Segment Names': (l.segmentNames ?? []).join('; '),
       'Collateral Value': l.totalCollateralValue ?? '',
+      'Pledge Receipt': l.pledgeReceiptNumber ?? '',
+      'LTV Ratio': l.ltvRatio ?? '',
+      'Total Gold Weight': l.totalGoldWeight ?? '',
+      'Total Gold Value': l.totalGoldValue ?? '',
+      'Eligible Loan Amount': l.eligibleLoanAmount ?? '',
+      'Renewed From Loan': l.renewedFromLoanId ?? '',
+      'Renewed By Loan': l.renewedByLoanId ?? '',
+      'Is Renewal': l.isRenewal ?? false,
       'Recorded By': l.recordedBy,
       'Recorded By Name': l.recordedByName,
+      'Created At': tsIso(l.createdAt),
     }));
-    const loanSheet = XLSX.utils.json_to_sheet(loanRows);
+
+    // --- Loan child sheets (formal-loan nested detail + repayment subcollections) ---
+    const loanDeductionRows = loans.flatMap(l => (l.deductions ?? []).map(d => ({
+      'Loan ID': l.id, 'ID': d.id, 'Type': d.type, 'Custom Label': d.customLabel ?? '',
+      'Amount': d.amount, 'Paid To': d.paidTo, 'Date': ts(d.date),
+      'Reference': d.paymentReference ?? '', 'Financed': d.isFinanced ? 'Yes' : 'No',
+      'Note': d.note ?? '',
+    })));
+
+    const loanCollateralRows = loans.flatMap(l => (l.collaterals ?? []).map(c => ({
+      'Loan ID': l.id, 'ID': c.id, 'Type': c.type, 'Description': c.description,
+      'Value': c.estimatedValue, 'Weight': c.weight ?? '', 'Purity': c.purity ?? '',
+      'Document Ref': c.documentReference ?? '', 'Note': c.note ?? '',
+      'Status': c.isReleased ? 'Released' : 'Pledged', 'Released Date': ts(c.releasedDate),
+      'Item Name': c.itemName ?? '', 'Quantity': c.quantity ?? '',
+      'Gross Weight': c.grossWeight ?? '', 'Net Weight': c.netWeight ?? '',
+      'Gold Rate Per Gram': c.goldRatePerGram ?? '', 'Gold Value': c.goldValue ?? '',
+    })));
+
+    const loanRateChangeRows = loans.flatMap(l => (l.rateChanges ?? []).map(rc => ({
+      'Loan ID': l.id, 'ID': rc.id, 'Date': ts(rc.date), 'Old Rate': rc.oldRate,
+      'New Rate': rc.newRate, 'New EMI': rc.newEMI ?? '',
+      'Recorded By': rc.recordedBy, 'Recorded By Name': rc.recordedByName,
+      'Note': rc.note ?? '',
+    })));
+
+    const loanDocumentRows = loans.flatMap(l => (l.documents ?? []).map(d => ({
+      'Loan ID': l.id, 'ID': d.id, 'Type': d.type, 'Custom Label': d.customLabel ?? '',
+      'Reference Number': d.referenceNumber ?? '', 'Date': ts(d.date), 'Note': d.note ?? '',
+    })));
+
+    const loanRepaymentRows = data.repaymentsByLoan.flatMap(entry => entry.repayments.map(r => ({
+      'Loan ID': entry.loanId, 'ID': r.id, 'Date': ts(r.date), 'Amount': r.amount,
+      'Note': r.note, 'Paid By': r.paidBy ?? '', 'Paid By Name': r.paidByName ?? '',
+      'Recorded By': r.recordedBy, 'Recorded By Name': r.recordedByName,
+      'Created At': tsIso(r.createdAt), 'Scheduled Due Date': ts(r.scheduledDueDate),
+      'EMI Payment': r.isEMIPayment ?? false, 'EMI Number': r.emiNumber ?? '',
+      'Principal': r.principalPortion ?? '', 'Interest': r.interestPortion ?? '',
+      'Reference': r.paymentReference ?? '', 'Transaction ID': r.transactionId ?? '',
+      'Part Payment': r.isPartPayment ?? false, 'Pre-closure': r.isPreClosure ?? false,
+      'Pre-closure Charges': r.preClosureCharges ?? '', 'Penalty': r.penaltyAmount ?? '',
+    })));
 
     // --- Animals Sheet ---
-    let animalSheet: any = null;
-    if (animals?.length) {
-      const animalRows = animals.map(a => ({
-        'ID': a.id,
-        'Segment': a.segment,
-        'Segment Name': a.segmentName,
-        'Tracking Mode': a.trackingMode,
-        'Tag': a.tag ?? '',
-        'Name': a.name ?? '',
-        'Breed': a.breed ?? '',
-        'Gender': a.gender ?? '',
-        'Batch Label': a.batchLabel ?? '',
-        'Batch Size': a.batchSize,
-        'Current Count': a.currentCount,
-        'Origin': a.origin,
-        'Origin Date': ts(a.originDate),
-        'Purchase Price': a.purchasePrice ?? '',
-        'Status': a.status,
-        'Total Costs': a.totalCosts,
-        'Total Invested': a.totalInvested,
-        'Sale Price': a.salePrice ?? '',
-        'Profit': a.profit ?? '',
-        'Profit Margin %': a.profitMargin ?? '',
-        'Buyer': a.buyerName ?? '',
-        'Buyer ID': a.buyerId ?? '',
-        'Exit Date': ts(a.exitDate),
-        'Exit Type': a.exitType ?? '',
-        'Sale Txn ID': a.saleTransactionId ?? '',
-        'Note': a.note ?? '',
-        'Cost Entries': a.costEntries?.length ?? 0,
-        'Created By': a.createdBy,
-        'Created By Name': a.createdByName,
-      }));
-      animalSheet = XLSX.utils.json_to_sheet(animalRows);
-    }
+    const animalRows = animals.map(a => ({
+      'ID': a.id,
+      'Segment': a.segment,
+      'Segment Name': a.segmentName,
+      'Tracking Mode': a.trackingMode,
+      'Tag': a.tag ?? '',
+      'Name': a.name ?? '',
+      'Breed': a.breed ?? '',
+      'Gender': a.gender ?? '',
+      'Batch Label': a.batchLabel ?? '',
+      'Batch Size': a.batchSize,
+      'Current Count': a.currentCount,
+      'Origin': a.origin,
+      'Origin Date': ts(a.originDate),
+      'Origin Event ID': a.originInventoryEventId ?? '',
+      'Purchase Price': a.purchasePrice ?? '',
+      'Purchase Price Per Head': a.purchasePricePerHead ?? '',
+      'Status': a.status,
+      'Total Costs': a.totalCosts,
+      'Total Invested': a.totalInvested,
+      'Sale Price': a.salePrice ?? '',
+      'Sale Price Per Head': a.salePricePerHead ?? '',
+      'Profit': a.profit ?? '',
+      'Profit Margin %': a.profitMargin ?? '',
+      'Buyer': a.buyerName ?? '',
+      'Buyer ID': a.buyerId ?? '',
+      'Exit Date': ts(a.exitDate),
+      'Exit Type': a.exitType ?? '',
+      'Sale Txn ID': a.saleTransactionId ?? '',
+      'Sale Event ID': a.saleInventoryEventId ?? '',
+      'Death Cause': a.deathCause ?? '',
+      'Death Note': a.deathNote ?? '',
+      'Age At Death Days': a.ageAtDeathDays ?? '',
+      'Note': a.note ?? '',
+      'Created By': a.createdBy,
+      'Created By Name': a.createdByName,
+      'Created At': tsIso(a.createdAt),
+    }));
+
+    // --- Animal child sheets (embedded cost/health detail) ---
+    const animalCostRows = animals.flatMap(a => (a.costEntries ?? []).map(c => ({
+      'Animal ID': a.id, 'Transaction ID': c.transactionId, 'Date': ts(c.date),
+      'Category': c.category, 'Category Name': c.categoryName,
+      'Amount': c.amount, 'Description': c.description ?? '',
+    })));
+
+    const animalVaccinationRows = animals.flatMap(a => (a.vaccinationHistory ?? []).map(v => ({
+      'Animal ID': a.id, 'ID': v.id, 'Date': ts(v.date), 'Vaccine': v.vaccineName,
+      'Dosage': v.dosage ?? '', 'Administered By': v.administeredBy ?? '',
+      'Next Due Date': ts(v.nextDueDate), 'Batch Number': v.batchNumber ?? '',
+      'Cost': v.cost ?? '', 'Linked Txn ID': v.linkedTransactionId ?? '', 'Note': v.note ?? '',
+    })));
+
+    const animalMedicalRows = animals.flatMap(a => (a.medicalHistory ?? []).map(m => ({
+      'Animal ID': a.id, 'ID': m.id, 'Date': ts(m.date), 'Type': m.type,
+      'Disease': m.disease ?? '', 'Symptoms': m.symptoms ?? '', 'Medicine': m.medicine ?? '',
+      'Dosage': m.dosage ?? '', 'Doctor': m.doctor ?? '', 'Temperature': m.temperature ?? '',
+      'Weight': m.weight ?? '', 'Cost': m.cost ?? '',
+      'Linked Txn ID': m.linkedTransactionId ?? '', 'Note': m.note ?? '',
+    })));
+
+    const animalWeightRows = animals.flatMap(a => (a.weightLogs ?? []).map(w => ({
+      'Animal ID': a.id, 'ID': w.id, 'Date': ts(w.date),
+      'Weight': w.weight, 'Remarks': w.remarks ?? '',
+    })));
 
     // --- Buyers Sheet ---
-    let buyerSheet: any = null;
-    if (buyers?.length) {
-      const buyerRows = buyers.map(b => ({
-        'ID': b.id,
-        'Name': b.name,
-        'Phone': b.phone ?? '',
-        'Location': b.location ?? '',
-        'Total Purchases': b.totalPurchases,
-        'Total Amount Paid': b.totalAmountPaid,
-        'Average Rate': b.averageRate ?? '',
-        'Last Purchase': ts(b.lastPurchaseDate),
-        'Note': b.note ?? '',
-        'Created By': b.createdBy,
-        'Created By Name': b.createdByName,
-      }));
-      buyerSheet = XLSX.utils.json_to_sheet(buyerRows);
-    }
+    const buyerRows = buyers.map(b => ({
+      'ID': b.id,
+      'Name': b.name,
+      'Phone': b.phone ?? '',
+      'Location': b.location ?? '',
+      'Total Purchases': b.totalPurchases,
+      'Total Amount Paid': b.totalAmountPaid,
+      'Average Rate': b.averageRate ?? '',
+      'Last Purchase': ts(b.lastPurchaseDate),
+      'Purchases By Segment': mapIdAmt(b.purchasesBySegment),
+      'Amount By Segment': mapIdAmt(b.amountBySegment),
+      'Note': b.note ?? '',
+      'Created By': b.createdBy,
+      'Created By Name': b.createdByName,
+      'Created At': tsIso(b.createdAt),
+    }));
 
-    // Build workbook
+    // --- Suppliers Sheet ---
+    const supplierRows = data.suppliers.map(s => ({
+      'ID': s.id,
+      'Name': s.name,
+      'Phone': s.phone ?? '',
+      'Location': s.location ?? '',
+      'GST Number': s.gstNumber ?? '',
+      'Item Categories': joinSemi(s.itemCategories),
+      'Total Orders': s.totalOrders,
+      'Total Amount Paid': s.totalAmountPaid,
+      'Pending Amount': s.pendingAmount,
+      'Average Rate': s.averageRate ?? '',
+      'Last Order Date': ts(s.lastOrderDate),
+      'Orders By Segment': mapIdAmt(s.ordersBySegment),
+      'Amount By Segment': mapIdAmt(s.amountBySegment),
+      'Note': s.note ?? '',
+      'Created By': s.createdBy,
+      'Created By Name': s.createdByName,
+      'Created At': tsIso(s.createdAt),
+    }));
+
+    // --- Categories Sheet ---
+    const categoryRows = data.categories.map(c => ({
+      'ID': c.id, 'Name': c.name, 'Type': c.type, 'Active': c.isActive,
+    }));
+
+    // --- Segments Sheet ---
+    const segmentRows = data.segments.map(s => ({
+      'ID': s.id,
+      'Name': s.name,
+      'Description': s.description,
+      'Icon': s.icon,
+      'Active': s.isActive,
+      'Segment Type': s.segmentType ?? '',
+      'Unit': s.unit ?? '',
+      'Current Stock': s.currentStock ?? '',
+      'Breeds': joinSemi(s.breeds),
+      'Monthly Expense Limit': s.budgets?.monthlyExpenseLimit ?? '',
+      'Monthly Income Target': s.budgets?.monthlyIncomeTarget ?? '',
+      'Created At': tsIso(s.createdAt),
+    }));
+
+    // --- Users Sheet ---
+    const userRows = data.users.map(u => ({
+      'UID': u.uid || (u as any).id,
+      'Email': u.email,
+      'Display Name': u.displayName,
+      'Role': u.role,
+      'Assigned Segments': joinSemi(u.assignedSegments),
+      'Active': u.isActive,
+      'Created By': u.createdBy,
+      'Created At': tsIso(u.createdAt),
+      'Updated At': tsIso(u.updatedAt),
+    }));
+
+    // --- Tasks Sheet ---
+    const taskRows = data.tasks.map(t => ({
+      'ID': t.id,
+      'Title': t.title,
+      'Description': t.description,
+      'Priority': t.priority,
+      'Status': t.status,
+      'Visibility': t.visibility,
+      'Assignee': t.assignee ?? '',
+      'Assignee Name': t.assigneeName ?? '',
+      'Due Date': ts(t.dueDate),
+      'Subtasks': t.subtasks?.length ? json(t.subtasks) : '',
+      'Tags': t.tags?.join(', ') ?? '',
+      'Kanban Order': t.kanbanOrder,
+      'Created By': t.createdBy,
+      'Created By Name': t.createdByName,
+      'Created At': tsIso(t.createdAt),
+      'Updated At': tsIso(t.updatedAt),
+      'Completed At': tsIso(t.completedAt),
+    }));
+
+    // --- Schedules Sheet ---
+    const scheduleRows = data.schedules.map(s => ({
+      'ID': s.id,
+      'Type': s.type,
+      'Title': s.title,
+      'Description': s.description,
+      'Frequency': s.frequency,
+      'Start Date': ts(s.startDate),
+      'End Date': ts(s.endDate),
+      'Next Due Date': ts(s.nextDueDate),
+      'Last Processed': tsIso(s.lastProcessedDate),
+      'Active': s.isActive,
+      'Processed Count': s.processedCount,
+      'Transaction Template': s.transactionTemplate ? json(s.transactionTemplate) : '',
+      'Reminder Config': s.reminderConfig ? json(s.reminderConfig) : '',
+      'Created By': s.createdBy,
+      'Created By Name': s.createdByName,
+      'Created At': tsIso(s.createdAt),
+    }));
+
+    // --- Harvests Sheet + Harvest Sales child sheet ---
+    const harvestRows = data.harvests.map(h => ({
+      'ID': h.id,
+      'Segment': h.segment,
+      'Segment Name': h.segmentName,
+      'Status': h.status,
+      'Harvest Date': ts(h.harvestDate),
+      'Crop Name': h.cropName,
+      'Variety': h.variety ?? '',
+      'Total Quantity': h.totalQuantity,
+      'Unit': h.unit,
+      'Grade': h.grade ?? '',
+      'Storage Location': h.storageLocation ?? '',
+      'Storage Date': ts(h.storageDate),
+      'Total Sold': h.totalSold,
+      'Total Revenue': h.totalRevenue,
+      'Wastage Quantity': h.wastageQuantity,
+      'Wastage Reason': h.wastageReason ?? '',
+      'Wastage Date': ts(h.wastageDate),
+      'Remaining Quantity': h.remainingQuantity,
+      'Average Rate': h.averageRate ?? '',
+      'Harvest Cost': h.harvestCost ?? '',
+      'Linked Crop Activity ID': h.linkedCropActivityId ?? '',
+      'Note': h.note ?? '',
+      'Month': h.month,
+      'Year': h.year,
+      'Created By': h.createdBy,
+      'Created By Name': h.createdByName,
+      'Created At': tsIso(h.createdAt),
+    }));
+
+    const harvestSaleRows = data.harvests.flatMap(h => (h.sales ?? []).map(s => ({
+      'Harvest ID': h.id, 'ID': s.id, 'Date': ts(s.date), 'Quantity': s.quantity,
+      'Unit': s.unit, 'Rate Per Unit': s.ratePerUnit, 'Total Amount': s.totalAmount,
+      'Buyer ID': s.buyerId ?? '', 'Buyer Name': s.buyerName ?? '',
+      'Linked Txn ID': s.linkedTransactionId ?? '', 'Note': s.note ?? '',
+    })));
+
+    // --- Breeding Sheet ---
+    const breedingRows = data.breedingRecords.map(b => ({
+      'ID': b.id,
+      'Segment': b.segment,
+      'Segment Name': b.segmentName,
+      'Sire ID': b.sireId ?? '',
+      'Sire Name': b.sireName ?? '',
+      'Dam ID': b.damId,
+      'Dam Name': b.damName,
+      'Mating Date': ts(b.matingDate),
+      'Mating Method': b.matingMethod ?? '',
+      'Status': b.status,
+      'Expected Delivery': ts(b.expectedDeliveryDate),
+      'Gestation Days': b.gestationDays ?? '',
+      'Actual Delivery': ts(b.actualDeliveryDate),
+      'Offspring Count': b.offspringCount ?? '',
+      'Offspring Male': b.offspringMale ?? '',
+      'Offspring Female': b.offspringFemale ?? '',
+      'Offspring Animal IDs': joinSemi(b.offspringAnimalIds),
+      'Complications': b.complications ?? '',
+      'Veterinary Cost': b.veterinaryCost ?? '',
+      'Linked Txn ID': b.linkedTransactionId ?? '',
+      'Note': b.note ?? '',
+      'Month': b.month,
+      'Year': b.year,
+      'Created By': b.createdBy,
+      'Created By Name': b.createdByName,
+      'Created At': tsIso(b.createdAt),
+    }));
+
+    // --- Crop Activities Sheet ---
+    const cropActivityRows = data.cropActivities.map(c => ({
+      'ID': c.id,
+      'Date': ts(c.date),
+      'Segment': c.segment,
+      'Segment Name': c.segmentName,
+      'Activity Type': c.activityType,
+      'Description': c.description,
+      'Product Used': c.productUsed ?? '',
+      'Quantity': c.quantity ?? '',
+      'Unit': c.unit ?? '',
+      'Area': c.area ?? '',
+      'Duration': c.duration ?? '',
+      'Labor Count': c.laborCount ?? '',
+      'Cost': c.cost ?? '',
+      'Linked Txn ID': c.linkedTransactionId ?? '',
+      'Weather': c.weather ?? '',
+      'Temperature': c.temperature ?? '',
+      'Note': c.note ?? '',
+      'Month': c.month,
+      'Year': c.year,
+      'Created By': c.createdBy,
+      'Created By Name': c.createdByName,
+      'Created At': tsIso(c.createdAt),
+    }));
+
+    // --- Consumables (inventoryItems) Sheet + Stock Movements child sheet ---
+    const consumableRows = data.inventoryItems.map(i => ({
+      'ID': i.id,
+      'Name': i.name,
+      'Category': i.category,
+      'Unit': i.unit,
+      'Current Stock': i.currentStock,
+      'Minimum Stock': i.minimumStock ?? '',
+      'Segments': joinSemi(i.segments),
+      'Segment Names': joinSemi(i.segmentNames),
+      'Total Purchased': i.totalPurchased,
+      'Total Used': i.totalUsed,
+      'Total Wastage': i.totalWastage,
+      'Total Spent': i.totalSpent,
+      'Last Purchase Rate': i.lastPurchaseRate ?? '',
+      'Average Purchase Rate': i.averagePurchaseRate ?? '',
+      'Note': i.note ?? '',
+      'Created By': i.createdBy,
+      'Created By Name': i.createdByName,
+      'Created At': tsIso(i.createdAt),
+    }));
+
+    const stockMovementRows = data.inventoryItems.flatMap(i => (i.movements ?? []).map(m => ({
+      'Item ID': i.id, 'ID': m.id, 'Date': ts(m.date), 'Type': m.type,
+      'Quantity': m.quantity, 'Unit Cost': m.unitCost ?? '', 'Total Cost': m.totalCost ?? '',
+      'Linked Txn ID': m.linkedTransactionId ?? '', 'Supplier ID': m.supplierId ?? '',
+      'Supplier Name': m.supplierName ?? '', 'Note': m.note ?? '',
+      'Recorded By': m.recordedBy, 'Recorded By Name': m.recordedByName,
+    })));
+
+    // --- Tags Sheet (meta/tags single doc) ---
+    const tagRows = data.tags.map(t => ({ 'Tag': t }));
+
+    // --- Assemble workbook: Meta first, then data sheets (empty sheets skipped) ---
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, expenseSheet, 'Expenses');
-    XLSX.utils.book_append_sheet(wb, incomeSheet, 'Income');
-    XLSX.utils.book_append_sheet(wb, loanSheet, 'Loans');
-    if (eventRows.length > 0) {
-      XLSX.utils.book_append_sheet(wb, eventSheet, 'Inventory Events');
-    }
-    if (animalSheet) {
-      XLSX.utils.book_append_sheet(wb, animalSheet, 'Animals');
-    }
-    if (buyerSheet) {
-      XLSX.utils.book_append_sheet(wb, buyerSheet, 'Buyers');
+
+    const sheetDefs: [string, any[]][] = [
+      ['Expenses', expenseRows],
+      ['Income', incomeRows],
+      ['Loans', loanRows],
+      ['Loan Deductions', loanDeductionRows],
+      ['Loan Collateral', loanCollateralRows],
+      ['Loan Rate Changes', loanRateChangeRows],
+      ['Loan Documents', loanDocumentRows],
+      ['Loan Repayments', loanRepaymentRows],
+      ['Inventory Events', eventRows],
+      ['Animals', animalRows],
+      ['Animal Costs', animalCostRows],
+      ['Animal Vaccinations', animalVaccinationRows],
+      ['Animal Medical', animalMedicalRows],
+      ['Animal Weights', animalWeightRows],
+      ['Buyers', buyerRows],
+      ['Suppliers', supplierRows],
+      ['Categories', categoryRows],
+      ['Segments', segmentRows],
+      ['Users', userRows],
+      ['Tasks', taskRows],
+      ['Schedules', scheduleRows],
+      ['Harvests', harvestRows],
+      ['Harvest Sales', harvestSaleRows],
+      ['Breeding', breedingRows],
+      ['Crop Activities', cropActivityRows],
+      ['Consumables', consumableRows],
+      ['Stock Movements', stockMovementRows],
+      ['Tags', tagRows],
+    ];
+
+    const metaRows: { Field: string; Value: string | number }[] = [
+      { Field: 'Format Version', Value: 2 },
+      { Field: 'Exported At', Value: data.exportedAt.toISOString() },
+      { Field: 'Exported By', Value: data.exportedBy },
+      { Field: 'Scope', Value: 'all-time' },
+      ...sheetDefs.map(([name, rows]) => ({ Field: `Count: ${name}`, Value: rows.length })),
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(metaRows), 'Meta');
+
+    for (const [name, rows] of sheetDefs) {
+      if (rows.length > 0) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), name);
+      }
     }
 
     // Auto-width columns
-    const allSheets = [expenseSheet, incomeSheet, loanSheet,
-      ...(eventRows.length > 0 ? [eventSheet] : []),
-      ...(animalSheet ? [animalSheet] : []),
-      ...(buyerSheet ? [buyerSheet] : [])];
-    allSheets.forEach(ws => {
+    wb.SheetNames.forEach(name => {
+      const ws = wb.Sheets[name];
       const ref = ws['!ref'];
       if (!ref) return;
       const range = XLSX.utils.decode_range(ref);
@@ -786,8 +1132,8 @@ export class ExportService {
       ws['!cols'] = colWidths.map(w => ({ wch: w }));
     });
 
-    const periodLabel = this.formatPeriodLabel(period);
-    XLSX.writeFile(wb, `farm-backup-${periodLabel.replace(/\s/g, '-')}.xlsx`);
+    const dateLabel = data.exportedAt.toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `farm-backup-all-time-${dateLabel}.xlsx`);
   }
 
   private downloadFile(content: string, filename: string, mimeType: string): void {
