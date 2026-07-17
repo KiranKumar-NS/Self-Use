@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Farm Tracker — System Map &amp; Gap Analysis</title>
+<style>
+  :root {
+    --bg: #f6f8f4;
+    --surface: #ffffff;
+    --surface-2: #eef2ea;
+    --ink: #20291e;
+    --muted: #5d6a58;
+    --line: #dce3d6;
+    --accent: #2e7d33;
+    --accent-ink: #ffffff;
+    --sev-high: #b03a2e;
+    --sev-high-bg: #f9e9e7;
+    --sev-med: #96690f;
+    --sev-med-bg: #f7efdd;
+    --sev-low: #3a6ea5;
+    --sev-low-bg: #e7eef7;
+    --done: #2e7d33;
+    --done-bg: #e6f2e6;
+    --code-bg: #eef2ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131711;
+      --surface: #1b211a;
+      --surface-2: #222a20;
+      --ink: #e4eae0;
+      --muted: #96a390;
+      --line: #2c352a;
+      --accent: #79c47d;
+      --accent-ink: #10240f;
+      --sev-high: #e58275;
+      --sev-high-bg: #3a201c;
+      --sev-med: #dcb15f;
+      --sev-med-bg: #352a13;
+      --sev-low: #8ab4e0;
+      --sev-low-bg: #1c2a3a;
+      --done: #79c47d;
+      --done-bg: #1d2f1d;
+      --code-bg: #222a20;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f6f8f4; --surface: #ffffff; --surface-2: #eef2ea; --ink: #20291e;
+    --muted: #5d6a58; --line: #dce3d6; --accent: #2e7d33; --accent-ink: #ffffff;
+    --sev-high: #b03a2e; --sev-high-bg: #f9e9e7; --sev-med: #96690f; --sev-med-bg: #f7efdd;
+    --sev-low: #3a6ea5; --sev-low-bg: #e7eef7; --done: #2e7d33; --done-bg: #e6f2e6; --code-bg: #eef2ea;
+  }
+  :root[data-theme="dark"] {
+    --bg: #131711; --surface: #1b211a; --surface-2: #222a20; --ink: #e4eae0;
+    --muted: #96a390; --line: #2c352a; --accent: #79c47d; --accent-ink: #10240f;
+    --sev-high: #e58275; --sev-high-bg: #3a201c; --sev-med: #dcb15f; --sev-med-bg: #352a13;
+    --sev-low: #8ab4e0; --sev-low-bg: #1c2a3a; --done: #79c47d; --done-bg: #1d2f1d; --code-bg: #222a20;
+  }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 20px 96px; }
+
+  h1, h2, h3 {
+    font-family: Charter, "Bitstream Charter", "Source Serif Pro", Georgia, serif;
+    text-wrap: balance;
+    line-height: 1.2;
+  }
+  h1 { font-size: 2.3rem; font-weight: 700; margin: 0 0 10px; }
+  h2 { font-size: 1.55rem; margin: 0 0 6px; }
+  h3 { font-size: 1.15rem; margin: 26px 0 8px; }
+
+  .eyebrow {
+    text-transform: uppercase; letter-spacing: 0.13em; font-size: 0.72rem;
+    font-weight: 600; color: var(--accent); margin: 0 0 8px;
+  }
+  header.masthead { padding: 52px 0 8px; border-bottom: 1px solid var(--line); }
+  .lede { color: var(--muted); max-width: 66ch; margin: 0 0 24px; font-size: 1.02rem; }
+
+  nav.toc {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+    display: flex; gap: 4px; overflow-x: auto;
+    padding: 8px 0; margin-bottom: 8px;
+  }
+  nav.toc a {
+    color: var(--muted); text-decoration: none; white-space: nowrap;
+    font-size: 0.85rem; font-weight: 600; padding: 5px 11px; border-radius: 999px;
+  }
+  nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); background: var(--surface-2); }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 26px 0 0; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat .num {
+    font-family: Charter, Georgia, serif; font-size: 1.7rem; font-weight: 700;
+    font-variant-numeric: tabular-nums; color: var(--accent); line-height: 1.1;
+  }
+  .stat .lbl { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 3px; }
+
+  section { padding-top: 44px; }
+  section > p.intro { color: var(--muted); max-width: 70ch; margin: 4px 0 18px; }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px; overflow-x: auto;
+  }
+  .panel + .panel { margin-top: 16px; }
+  .panel .caption { font-size: 0.82rem; color: var(--muted); margin: 0 0 10px; }
+  pre.mermaid { margin: 0; min-width: 640px; }
+
+  code, .path {
+    font-family: ui-monospace, Consolas, "Cascadia Mono", Menlo, monospace;
+    font-size: 0.83em; background: var(--code-bg);
+    padding: 1px 5px; border-radius: 4px; white-space: nowrap;
+  }
+
+  .callout {
+    border-left: 3px solid var(--accent); background: var(--surface);
+    border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 16px 0;
+    font-size: 0.95rem;
+  }
+  .callout strong:first-child { color: var(--accent); }
+
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  th {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.09em;
+    color: var(--muted); background: var(--surface-2); font-weight: 700;
+  }
+  td.nowrap { white-space: nowrap; }
+
+  .chip {
+    display: inline-block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
+    padding: 2px 10px; border-radius: 999px; white-space: nowrap;
+  }
+  .chip.high { color: var(--sev-high); background: var(--sev-high-bg); }
+  .chip.med  { color: var(--sev-med);  background: var(--sev-med-bg); }
+  .chip.low  { color: var(--sev-low);  background: var(--sev-low-bg); }
+  .chip.done { color: var(--done); background: var(--done-bg); }
+  .chip.plan { color: var(--sev-low); background: var(--sev-low-bg); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; margin-top: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .card h3 { margin: 0 0 6px; }
+  .card p { margin: 6px 0; font-size: 0.92rem; color: var(--muted); }
+  .card ul { margin: 8px 0 0; padding-left: 18px; font-size: 0.9rem; }
+  .card li { margin: 4px 0; }
+
+  footer { margin-top: 64px; border-top: 1px solid var(--line); padding-top: 16px; color: var(--muted); font-size: 0.82rem; }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">farm-tracker-tn70 · Angular PWA · Firebase · analyzed 17 Jul 2026</p>
+  <h1>Farm Tracker — System Map &amp; Gap Analysis</h1>
+  <p class="lede">
+    Every rupee in this system becomes a <strong>Transaction</strong>, and everything else — dues,
+    harvest profit, loan books, dashboards, backups — is built around that one collection. This page
+    maps the full flow in five diagrams, then lists the missing cases found in the code and how the
+    current architecture supports what's planned next.
+  </p>
+  <div class="stats">
+    <div class="stat"><div class="num">30+</div><div class="lbl">Routes / pages</div></div>
+    <div class="stat"><div class="num">19</div><div class="lbl">Firestore collections</div></div>
+    <div class="stat"><div class="num">~30</div><div class="lbl">Core services</div></div>
+    <div class="stat"><div class="num">12</div><div class="lbl">Gaps identified</div></div>
+    <div class="stat"><div class="num">6 PM</div><div class="lbl">Daily backup (IST)</div></div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <a href="#architecture">Architecture</a>
+  <a href="#userflow">User flow</a>
+  <a href="#datamodel">Data model</a>
+  <a href="#moneyflow">Money flow</a>
+  <a href="#ops">Ops pipeline</a>
+  <a href="#gaps">Gap analysis</a>
+  <a href="#roadmap">Roadmap</a>
+</nav>
+
+<!-- ══════════════════ 1. ARCHITECTURE ══════════════════ -->
+<section id="architecture">
+  <p class="eyebrow">1 · Big picture</p>
+  <h2>System architecture</h2>
+  <p class="intro">
+    Everything runs client-side: the Angular PWA talks directly to Firestore (offline cache included),
+    and there are <strong>no Cloud Functions</strong>. Backups run independently in Google Apps Script
+    with a read-only service account; admin repairs run from your laptop with the admin key.
+  </p>
+  <div class="panel">
+    <pre class="mermaid">
+flowchart LR
+  subgraph DEVICE["Your phone / laptop"]
+    APP["Angular 21 PWA<br/>signals + standalone components"]
+    SW["Service worker (ngsw)<br/>checks update every 30s"]
+    CACHE["Firestore offline cache<br/>(persistent, multi-tab)"]
+    APP --- SW
+    APP --- CACHE
+  end
+  subgraph FIREBASE["Firebase (farm-tracker-tn70)"]
+    HOST["Hosting<br/>CSP + no-cache on ngsw.json / index.html"]
+    AUTH["Auth (email+password)<br/>role in custom claims"]
+    FS[("Firestore<br/>19 collections + rules")]
+  end
+  subgraph GOOGLE["Google Workspace (automated)"]
+    GAS["Apps Script backup<br/>daily 6 PM IST"]
+    DRIVE["Drive: FarmTracker Backups<br/>JSON + XLSX, 30-day retention"]
+    MAIL["Email alerts<br/>fail / shrink &gt;20% / stale"]
+  end
+  subgraph ADMIN["Admin laptop (manual)"]
+    CLI["ng build → firebase deploy"]
+    SCRIPTS["Node scripts: import-backup,<br/>verify-backup, set-custom-claims"]
+  end
+  APP -->|"login"| AUTH
+  APP <-->|"reads + writes<br/>(queued offline)"| FS
+  HOST -->|"serves app shell"| APP
+  GAS -->|"REST read-only<br/>service account"| FS
+  GAS --> DRIVE
+  GAS --> MAIL
+  CLI --> HOST
+  SCRIPTS -->|"admin SDK"| FS
+    </pre>
+  </div>
+  <div class="callout">
+    <strong>Design choice to remember:</strong> integrity lives in the client.
+    <code>transaction.service.ts</code> maintains summary counters, <code>loan.service.ts</code>
+    auto-creates linked transactions, and Firestore rules only validate types, roles and doc-ID
+    shape. A buggy or old client version can drift the counters — that's why
+    <code>summary-reconciliation.service.ts</code> exists.
+  </div>
+</section>
+
+<!-- ══════════════════ 2. USER FLOW ══════════════════ -->
+<section id="userflow">
+  <p class="eyebrow">2 · Navigation</p>
+  <h2>User flow</h2>
+  <p class="intro">
+    All pages sit inside an authenticated shell (sidebar / header / bottom-nav). Viewers only get
+    Dashboard, Tasks and Reminders; managers are scoped to their assigned segments; admins see
+    everything including Data Setup and Users.
+  </p>
+  <div class="panel">
+    <pre class="mermaid">
+flowchart TB
+  LOGIN["Login<br/>/auth/login"] --> DASH
+  subgraph OPEN["Any signed-in user"]
+    DASH["Dashboard<br/>KPIs · charts · budgets · exports"]
+    TASKS["Tasks (kanban)"]
+    SCHED["Reminders / Schedules"]
+  end
+  subgraph MGR["Manager + Admin (segment-scoped)"]
+    TXN["Transactions<br/>list · form · detail"]
+    DUES["Dues<br/>To Receive / To Pay"]
+    LOANS["Owe &amp; Lent<br/>simple + formal loans"]
+    STOCK["Stock<br/>animals · log · mortality · analytics"]
+    HARV["Harvests<br/>yields · sales · costs"]
+    BUY["Buyers"]
+    SUPP["Suppliers"]
+    MORE["Breeding · Crops · Consumables"]
+  end
+  subgraph ADM["Admin only"]
+    USERS["Users"]
+    SETUP["Data Setup<br/>segments · categories · budgets"]
+  end
+  DASH -->|"pending income card"| DUES
+  DASH -->|"loan widget"| LOANS
+  DASH -->|"recent txns"| TXN
+  DUES -->|"party name"| BUY
+  DUES -->|"row"| TXN
+  DUES -->|"mark received / paid"| TXN
+  HARV -->|"Add Expense<br/>?harvestId= prefill"| TXN
+  HARV -->|"record sale → income txn"| TXN
+  STOCK -->|"sale / cost attribution"| TXN
+  LOANS -->|"EMI / utilization<br/>auto-creates txn"| TXN
+    </pre>
+  </div>
+</section>
+
+<!-- ══════════════════ 3. DATA MODEL ══════════════════ -->
+<section id="datamodel">
+  <p class="eyebrow">3 · Firestore</p>
+  <h2>Data model — Transaction is the hub</h2>
+  <p class="intro">
+    Nine other entities link into <code>transactions</code>. Summary docs are keyed
+    <code>{month}-{segment}</code> / <code>{year}-{segment}</code> and enforced by rules, so a
+    manager can't corrupt another segment's counters.
+  </p>
+  <div class="panel">
+    <pre class="mermaid">
+erDiagram
+  TRANSACTION {
+    string type "expense | income"
+    number amount "rules enforce > 0"
+    string paymentStatus "received | pending (income)"
+    string expensePaymentStatus "paid | pending (expense)"
+    string month_year "summary keys"
+    array timeline "audit, capped 50"
+  }
+  SEGMENT ||--o{ TRANSACTION : "segments"
+  CATEGORY ||--o{ TRANSACTION : "categorizes"
+  BUYER |o--o{ TRANSACTION : "linkedBuyerId (income)"
+  SUPPLIER |o--o{ TRANSACTION : "linkedSupplierId (expense)"
+  HARVEST |o--o{ TRANSACTION : "linkedHarvestId (costs + sales)"
+  LOAN |o--o{ TRANSACTION : "linkedLoanId (auto-created)"
+  ANIMAL }o--o{ TRANSACTION : "linkedAnimalIds + cost split"
+  MONTHLY_SUMMARY ||--o{ TRANSACTION : "aggregates {month}-{segment}"
+  YEARLY_SUMMARY ||--o{ TRANSACTION : "aggregates {year}-{segment}"
+  LOAN ||--o{ REPAYMENT : "subcollection"
+  LOAN |o--o{ LOAN : "personal withdrawal (parentFormalLoanId)"
+  HARVEST |o--|| CROP_ACTIVITY : "linkedCropActivityId"
+  ANIMAL }o--|| SEGMENT : "belongs to"
+  INVENTORY_EVENT }o--|| SEGMENT : "mutates currentStock"
+  BREEDING_RECORD }o--o{ ANIMAL : "dam / sire → offspring"
+  BUYER ||--o{ HARVEST_SALE : "embedded in harvest.sales[]"
+  APP_USER ||--o{ TRANSACTION : "createdBy / paidBy"
+    </pre>
+  </div>
+  <div class="callout">
+    <strong>Two aggregation strategies, on purpose:</strong>
+    summaries are <em>denormalized counters</em> (fast dashboard, needs reconciliation);
+    dues are <em>live queries</em> (<code>dues.service.ts:40,55</code> — always correct, no drift).
+    Harvest profit mixes both: revenue denormalized on the harvest doc, costs queried live via
+    <code>linkedHarvestId</code>. Buyer/Supplier stats are a third, weaker case — counters with
+    <em>no</em> reconciliation tool (see gap G4).
+  </div>
+</section>
+
+<!-- ══════════════════ 4. MONEY FLOW ══════════════════ -->
+<section id="moneyflow">
+  <p class="eyebrow">4 · One rupee's journey</p>
+  <h2>Money flow</h2>
+  <p class="intro">
+    Four entry points create transactions. Every write atomically increments both summary docs;
+    pending amounts split off into Dues and rejoin the totals only when marked received/paid.
+  </p>
+  <div class="panel">
+    <pre class="mermaid">
+flowchart LR
+  subgraph IN["Money enters"]
+    F1["Transaction form<br/>(manual entry)"]
+    F2["Harvest sale dialog<br/>(income + buyer stats)"]
+    F3["Loan engine<br/>EMI · utilization · deductions"]
+    F4["Recurring schedule<br/>(processed on app open)"]
+  end
+  TXN[("transactions<br/>collection")]
+  F1 --> TXN
+  F2 --> TXN
+  F3 -->|"linkedLoanId"| TXN
+  F4 --> TXN
+  TXN ==>|"atomic increment()<br/>same batch / runTransaction"| MS[("monthlySummaries<br/>{month}-{segment}")]
+  TXN ==> YS[("yearlySummaries<br/>{year}-{segment}")]
+  TXN -->|"paymentStatus = pending"| DUES["Dues page<br/>live query, grouped by party"]
+  DUES -->|"mark received / paid"| TXN
+  MS --> DASH["Dashboard analytics<br/>income − pendingIncome = received"]
+  YS --> DASH
+  TXN -->|"loaded txns"| CHARTS["Charts · person investment<br/>· tag / category breakdowns"]
+  MS -.->|"drift?"| RECON["summary-reconciliation.service<br/>(admin repair)"]
+  RECON -.-> MS
+    </pre>
+  </div>
+</section>
+
+<!-- ══════════════════ 5. OPS ══════════════════ -->
+<section id="ops">
+  <p class="eyebrow">5 · Operations</p>
+  <h2>Backup, deploy &amp; update pipeline</h2>
+  <p class="intro">
+    The Apps Script backup (<code>backup-script/Code.gs</code>) auto-discovers all root collections,
+    keeps soft-deleted docs, preserves Firestore types losslessly, and emails you only when something
+    is wrong. Deploys are manual; PWA clients self-update within ~30 seconds of a deploy.
+  </p>
+  <div class="panel">
+    <pre class="mermaid">
+flowchart LR
+  subgraph BK["Daily backup — 6 PM IST"]
+    TRIG["Time trigger<br/>+ Monday 9 AM freshness check"]
+    RUN["performBackup_()<br/>auto-discovers collections<br/>+ repayments subgroup"]
+    SAN["Sanity check:<br/>collection shrank &gt;20% &amp; &gt;20 docs?"]
+    TRIG --> RUN --> SAN
+  end
+  FS[("Firestore")]
+  RUN -->|"read-only SA<br/>RS256 JWT"| FS
+  RUN --> J["farm-backup-DATE.json<br/>(lossless, restore source)"]
+  RUN --> X["farm-backup-DATE.xlsx<br/>(human-readable)"]
+  J --> DRIVE["Drive folder<br/>30-day retention"]
+  X --> DRIVE
+  SAN -->|"warn / fail / stale"| MAIL["Email alert"]
+  DRIVE -.->|"disaster recovery"| REST["scripts/import-backup.js<br/>(admin SDK, rebuilds summaries)"]
+  REST -.-> FS
+  subgraph DEP["Deploy + update"]
+    BUILD["rm -rf dist → ng build"] --> DEPLOY["firebase deploy<br/>hosting + rules + indexes"]
+    DEPLOY --> UPD["ngsw polls every 30s →<br/>'Update' snackbar → reload"]
+  end
+    </pre>
+  </div>
+</section>
+
+<!-- ══════════════════ 6. GAPS ══════════════════ -->
+<section id="gaps">
+  <p class="eyebrow">6 · What's missing</p>
+  <h2>Gap analysis — 12 missing cases (7 fixed on 17 Jul 2026)</h2>
+  <p class="intro">
+    Found by reading the code, not guessing. Each gap cites the file that proves it. <span class="chip done">Fixed</span> = resolved and deployed on 17 Jul 2026; G3 and G6–G9 were deliberately deferred.
+    <span class="chip high">High</span> = loses or hides money data today ·
+    <span class="chip med">Medium</span> = risk grows over time ·
+    <span class="chip low">Low</span> = quality of life.
+  </p>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>#</th><th>Severity</th><th>Gap</th><th>Why it matters</th><th>Evidence</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="nowrap">G1</td><td><span class="chip done">Fixed</span></td>
+          <td><strong>No partial payments on dues.</strong> Payment status is binary — received or pending.</td>
+          <td>A buyer paying ₹6,000 of a ₹10,000 pending sale can't be recorded. You either mark it fully received (wrong) or leave it fully pending (wrong).</td>
+          <td><span class="path">transaction.model.ts</span> — <code>paymentStatus: 'received'|'pending'</code></td>
+        </tr>
+        <tr>
+          <td class="nowrap">G2</td><td><span class="chip done">Fixed</span></td>
+          <td><strong>No due dates or aging on dues.</strong> Notifications cover loans, tasks, budgets and schedules — never dues.</td>
+          <td>A 6-month-old receivable looks identical to yesterday's. No reminder ever fires for money owed to you.</td>
+          <td><span class="path">notification.service.ts</span> — no dues scan in <code>refresh()</code></td>
+        </tr>
+        <tr>
+          <td class="nowrap">G3</td><td><span class="chip high">High</span></td>
+          <td><strong>Recurring schedules only run when the app is opened.</strong> <code>processOverdueSchedules()</code> fires on shell init only.</td>
+          <td>Don't open the app for two weeks → no recurring transactions are created and no reminders advance. There is no server-side executor.</td>
+          <td><span class="path">shell.component.ts</span> · <span class="path">schedule.service.ts</span></td>
+        </tr>
+        <tr>
+          <td class="nowrap">G4</td><td><span class="chip done">Fixed</span></td>
+          <td><strong>Buyer / Supplier counters can drift and have no repair tool.</strong> Summaries got a reconciliation service; counterparty stats didn't.</td>
+          <td><code>totalPurchases</code>, <code>amountBySegment</code> etc. are incremented on writes but never re-derived. Edits/deletes of old transactions slowly corrupt them.</td>
+          <td><span class="path">buyer.service.ts</span> / <span class="path">supplier.service.ts</span> — <code>updateStats()</code></td>
+        </tr>
+        <tr>
+          <td class="nowrap">G5</td><td><span class="chip done">Fixed</span></td>
+          <td><strong>Consumable purchases are disconnected from expenses.</strong> Buying feed = one expense transaction <em>and</em> one stock movement, with no link.</td>
+          <td>Double entry, and no way to verify inventory spend against the books. <code>StockMovement</code> has no <code>linkedTransactionId</code>.</td>
+          <td><span class="path">inventory-item.model.ts</span> · <span class="path">inventory-item.service.ts</span></td>
+        </tr>
+        <tr>
+          <td class="nowrap">G6</td><td><span class="chip med">Medium</span></td>
+          <td><strong>Backup silently misses future subcollections.</strong> Root collections are auto-discovered; subcollections are a hard-coded list.</td>
+          <td>Only <code>repayments</code> is listed. Any new subcollection (e.g. from the loan-disbursement feature) is not backed up until someone remembers to edit the script.</td>
+          <td><span class="path">Code.gs:34</span> — <code>SUBCOLLECTION_GROUPS = ['repayments']</code></td>
+        </tr>
+        <tr>
+          <td class="nowrap">G7</td><td><span class="chip med">Medium</span></td>
+          <td><strong>Restore has never been drilled.</strong> The JSON restore path is documented but untested end-to-end.</td>
+          <td>A backup you've never restored is a hope, not a backup. The <code>_ts</code>/<code>_ref</code> revival + batch-write path in SETUP.md should be proven against the emulator once.</td>
+          <td><span class="path">backup-script/SETUP.md</span> · <span class="path">scripts/verify-backup.js</span></td>
+        </tr>
+        <tr>
+          <td class="nowrap">G8</td><td><span class="chip med">Medium</span></td>
+          <td><strong>No receipt / photo attachments on transactions.</strong> Firebase Storage is not used at all.</td>
+          <td>Bills, weighment slips and mandi receipts live only on paper or in the phone gallery, unlinked to the record they prove.</td>
+          <td><span class="path">transaction.model.ts</span> — no attachment field; no Storage in <span class="path">app.config.ts</span></td>
+        </tr>
+        <tr>
+          <td class="nowrap">G9</td><td><span class="chip med">Medium</span></td>
+          <td><strong>No server-side integrity layer.</strong> All invariants (summary math, loan balances, auto-created transactions) run in the browser.</td>
+          <td>Rules validate types and roles only. An outdated cached PWA client or a bug ships wrong counters straight to Firestore.</td>
+          <td><span class="path">firestore.rules</span> — no Cloud Functions in repo</td>
+        </tr>
+        <tr>
+          <td class="nowrap">G10</td><td><span class="chip done">Fixed</span></td>
+          <td><strong>Tag list grows forever.</strong> <code>meta/tags</code> is arrayUnion-only — no rename, merge or delete.</td>
+          <td>Auto-generated tags (<code>feed-jul-2026</code>, <code>monsoon-2026</code>…) accumulate monthly; typo tags can never be cleaned up.</td>
+          <td><span class="path">tag.service.ts</span></td>
+        </tr>
+        <tr>
+          <td class="nowrap">G11</td><td><span class="chip done">Fixed</span></td>
+          <td><strong>Audit timeline capped at 50 entries.</strong> Older history is silently dropped (keeps <code>created</code> + last 49).</td>
+          <td>Fine for most records, but a long-lived formal loan edited often will lose its early history with no export.</td>
+          <td><span class="path">timeline.utils.ts</span> — <code>appendTimelineCapped()</code></td>
+        </tr>
+        <tr>
+          <td class="nowrap">G12</td><td><span class="chip done">Fixed</span></td>
+          <td><strong>July audit leftovers.</strong> Two items from the 10 Jul 2026 audit are still open.</td>
+          <td>(a) CSP headers not yet verified against the live site; (b) a summary reconciliation run hasn't been executed against production data.</td>
+          <td><span class="path">firebase.json</span> · <span class="path">summary-reconciliation.service.ts</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ══════════════════ 7. ROADMAP ══════════════════ -->
+<section id="roadmap">
+  <p class="eyebrow">7 · Where this goes</p>
+  <h2>Future roadmap — what the architecture already supports</h2>
+  <p class="intro">
+    The Transaction-hub design means most future features are "one more link field + one more
+    service" rather than a rewrite. Two features are already planned; the gaps above suggest four more.
+  </p>
+  <div class="cards">
+    <div class="card">
+      <h3><span class="chip plan">Planned</span> Loan disbursement suite</h3>
+      <p>Formal loans with EMI, deductions, utilization, balance transfer and personal holdings — the design already exists.</p>
+      <ul>
+        <li>Engine is largely built: <span class="path">loan-math.ts</span> (unit-tested EMI schedules), utilization + child-loan links already in the model.</li>
+        <li>Remember G6: any new subcollection must be added to the backup script.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="chip plan">Planned</span> Per-animal cost tracking</h3>
+      <p>Individual animal P&amp;L, buyer management, profit-per-animal analysis.</p>
+      <ul>
+        <li>Hooks exist: <code>costEntries</code>, cost attribution by days-active, <code>saleTransactionId</code>, mortality loss estimates.</li>
+        <li>Missing piece is the analysis layer — <span class="path">animal-analytics</span> can grow into it.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="chip high">From G1+G2</span> Dues, done properly</h3>
+      <p>Partial payments, expected-payment dates, aging buckets (30/60/90 days), dues in the notification bell.</p>
+      <ul>
+        <li>Add <code>amountReceived</code> + <code>expectedDate</code> to Transaction; the live-query design of <span class="path">dues.service.ts</span> absorbs this without counter migration.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="chip high">From G3+G9</span> A small server-side layer</h3>
+      <p>One scheduled executor fixes recurring transactions, dues reminders and future push notifications in a single stroke.</p>
+      <ul>
+        <li>Cheapest path: extend the existing Apps Script (already authenticated, already scheduled) — or a single Cloud Function cron.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="chip med">From G4+G12</span> One reconciliation night</h3>
+      <p>Run the summary reconciliation on prod, then extend the same pattern to buyer/supplier stats.</p>
+      <ul>
+        <li><span class="path">summary-reconciliation.service.ts</span> is the template: re-derive from raw transactions, report drift, rewrite.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="chip med">From G5+G8</span> Close the paper trail</h3>
+      <p>Link stock movements to their expense transactions; attach receipt photos via Firebase Storage.</p>
+      <ul>
+        <li>Same pattern as harvest costs: a <code>linkedTransactionId</code> on <code>StockMovement</code> + a live query.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Generated from code exploration of <code>d:\kk\self-use-repo\farm-tracker</code> on 17 Jul 2026.
+  Diagram claims spot-checked against <span class="path">dues.service.ts</span>,
+  <span class="path">transaction.service.ts</span> and <span class="path">backup-script/Code.gs</span>.
+</footer>
+
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'default' });
+</script>
+</body>
+</html>

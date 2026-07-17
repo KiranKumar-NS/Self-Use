@@ -168,6 +168,19 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
           </div>
         }
 
+        <!-- Expected payment date (pending dues only) -->
+        @if ((type === 'income' && paymentStatus === 'pending') || (type === 'expense' && expensePaymentStatus === 'pending')) {
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Expected payment date (optional)</mat-label>
+              <input matInput [matDatepicker]="expectedPicker" [(ngModel)]="expectedPaymentDate" name="expectedPaymentDate" />
+              <mat-datepicker-toggle matIconSuffix [for]="expectedPicker" />
+              <mat-datepicker #expectedPicker />
+              <mat-hint>Used for dues aging and overdue alerts</mat-hint>
+            </mat-form-field>
+          </div>
+        }
+
         <!-- Paid By -->
         <div class="form-row">
           <mat-form-field appearance="outline">
@@ -406,6 +419,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   paymentMethod: PaymentMethod = 'upi';
   paymentStatus: IncomePaymentStatus = 'received';
   expensePaymentStatus: ExpensePaymentStatus = 'paid';
+  expectedPaymentDate: Date | null = null;
 
   allCategories = signal<Category[]>([]);
   allSegments = signal<Segment[]>([]);
@@ -507,6 +521,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         this.paymentMethod = txn.paymentMethod || 'cash';
         this.paymentStatus = txn.paymentStatus || 'received';
         this.expensePaymentStatus = txn.expensePaymentStatus || 'paid';
+        this.expectedPaymentDate = txn.expectedPaymentDate ? txn.expectedPaymentDate.toDate() : null;
         this.tags = txn.tags ? [...txn.tags] : [];
 
         // Prefill customer/supplier link; keep the link visible even if the
@@ -739,6 +754,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         paymentMethod: this.paymentMethod,
         paymentStatus: this.type === 'income' ? this.paymentStatus : undefined,
         expensePaymentStatus: this.type === 'expense' ? this.expensePaymentStatus : undefined,
+        expectedPaymentDate: this.expectedPaymentDate || undefined,
         paidBy: resolvedPaidBy,
         paidByName: resolvedPaidByName,
         linkedBuyerId: buyerId || undefined,

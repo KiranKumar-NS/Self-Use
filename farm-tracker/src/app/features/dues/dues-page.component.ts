@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { DuesService, PartyDues } from '../../core/services/dues.service';
+import { DuesService, PartyDues, dueAgeDays, isDueOverdue } from '../../core/services/dues.service';
 import { TransactionService } from '../../core/services/transaction.service';
 import { ToastService } from '../../core/services/toast.service';
+import { Transaction, pendingRemaining } from '../../core/models/transaction.model';
 import { CurrencyInrPipe } from '../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
 import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
@@ -12,15 +14,18 @@ import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 
 @Component({
   selector: 'app-dues-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    DatePipe, RouterLink, CurrencyInrPipe,
+    DatePipe, FormsModule, RouterLink, CurrencyInrPipe,
     LoadingSpinnerComponent, EmptyStateComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatTabsModule,
+    MatFormFieldModule, MatInputModule,
   ],
   template: `
     <div class="page-header">
@@ -56,7 +61,13 @@ import { MatTabsModule } from '@angular/material/tabs';
                       } @else {
                         <span class="party-name">{{ group.partyName }}</span>
                       }
-                      <span class="party-count">{{ group.count }} pending {{ group.count === 1 ? 'sale' : 'sales' }}</span>
+                      <span class="party-count">
+                        {{ group.count }} pending {{ group.count === 1 ? 'sale' : 'sales' }}
+                        · oldest {{ group.oldestDays }}d
+                        @if (group.overdueCount > 0) {
+                          <span class="overdue-chip">{{ group.overdueCount }} overdue</span>
+                        }
+                      </span>
                     </div>
                     <div class="party-total income">{{ group.total | currencyInr }}</div>
                     <mat-icon class="expand-icon">{{ expandedKey() === group.key ? 'expand_less' : 'expand_more' }}</mat-icon>
@@ -64,21 +75,51 @@ import { MatTabsModule } from '@angular/material/tabs';
                   @if (expandedKey() === group.key) {
                     <div class="txn-list">
                       @for (txn of group.transactions; track txn.id) {
-                        <div class="txn-row">
+                        <div class="txn-row" [class.overdue-row]="overdue(txn)">
                           <div class="txn-info">
-                            <span class="txn-date">{{ txn.date.toDate() | date: 'dd MMM yyyy' }}</span>
+                            <span class="txn-date">
+                              {{ txn.date.toDate() | date: 'dd MMM yyyy' }}
+                              · <span class="age" [class.age-old]="age(txn) > 30">{{ age(txn) }}d old</span>
+                              @if (txn.expectedPaymentDate) {
+                                · <span [class.overdue-text]="overdue(txn)">expected {{ txn.expectedPaymentDate.toDate() | date: 'dd MMM' }}</span>
+                              }
+                            </span>
                             <span class="txn-desc">{{ txn.description || txn.categoryName }}</span>
+                            @if (txn.quantity) {
+                              <span class="qty-info">{{ txn.quantity }} {{ txn.unit || '' }} × {{ txn.ratePerUnit | currencyInr }}/{{ txn.unit || 'unit' }}</span>
+                            }
                             <span class="txn-segment">{{ txn.segmentName }}</span>
                           </div>
-                          <span class="txn-amount">{{ txn.amount | currencyInr }}</span>
+                          <div class="txn-amounts">
+                            <span class="txn-amount">{{ remaining(txn) | currencyInr }}</span>
+                            @if (txn.amountReceived) {
+                              <span class="partial-note">{{ txn.amountReceived | currencyInr }} of {{ txn.amount | currencyInr }} received</span>
+                            }
+                          </div>
                           <a mat-icon-button [routerLink]="['/transactions', txn.id]" aria-label="View details">
                             <mat-icon>open_in_new</mat-icon>
                           </a>
+                          <button mat-icon-button (click)="togglePartial(txn.id)" aria-label="Record partial payment" title="Record partial payment">
+                            <mat-icon>payments</mat-icon>
+                          </button>
                           <button mat-stroked-button color="primary" [disabled]="marking() === txn.id"
                                   (click)="markReceived(txn.id)">
                             {{ marking() === txn.id ? 'Saving…' : 'Mark received' }}
                           </button>
                         </div>
+                        @if (partialFor() === txn.id) {
+                          <div class="partial-form">
+                            <mat-form-field appearance="outline" class="partial-field" subscriptSizing="dynamic">
+                              <mat-label>Amount received (₹)</mat-label>
+                              <input matInput type="number" [(ngModel)]="partialAmount" min="1" [max]="remaining(txn)" />
+                            </mat-form-field>
+                            <span class="partial-hint">of {{ remaining(txn) | currencyInr }} pending</span>
+                            <button mat-flat-button color="primary"
+                                    [disabled]="marking() === txn.id || !partialAmount || partialAmount! <= 0"
+                                    (click)="recordPartial(txn)">Record</button>
+                            <button mat-button (click)="togglePartial('')">Cancel</button>
+                          </div>
+                        }
                       }
                     </div>
                   }
@@ -106,7 +147,13 @@ import { MatTabsModule } from '@angular/material/tabs';
                   <div class="party-row" (click)="toggle(group.key)">
                     <div class="party-info">
                       <span class="party-name">{{ group.partyName }}</span>
-                      <span class="party-count">{{ group.count }} pending {{ group.count === 1 ? 'purchase' : 'purchases' }}</span>
+                      <span class="party-count">
+                        {{ group.count }} pending {{ group.count === 1 ? 'purchase' : 'purchases' }}
+                        · oldest {{ group.oldestDays }}d
+                        @if (group.overdueCount > 0) {
+                          <span class="overdue-chip">{{ group.overdueCount }} overdue</span>
+                        }
+                      </span>
                     </div>
                     <div class="party-total expense">{{ group.total | currencyInr }}</div>
                     <mat-icon class="expand-icon">{{ expandedKey() === group.key ? 'expand_less' : 'expand_more' }}</mat-icon>
@@ -114,21 +161,51 @@ import { MatTabsModule } from '@angular/material/tabs';
                   @if (expandedKey() === group.key) {
                     <div class="txn-list">
                       @for (txn of group.transactions; track txn.id) {
-                        <div class="txn-row">
+                        <div class="txn-row" [class.overdue-row]="overdue(txn)">
                           <div class="txn-info">
-                            <span class="txn-date">{{ txn.date.toDate() | date: 'dd MMM yyyy' }}</span>
+                            <span class="txn-date">
+                              {{ txn.date.toDate() | date: 'dd MMM yyyy' }}
+                              · <span class="age" [class.age-old]="age(txn) > 30">{{ age(txn) }}d old</span>
+                              @if (txn.expectedPaymentDate) {
+                                · <span [class.overdue-text]="overdue(txn)">expected {{ txn.expectedPaymentDate.toDate() | date: 'dd MMM' }}</span>
+                              }
+                            </span>
                             <span class="txn-desc">{{ txn.description || txn.categoryName }}</span>
+                            @if (txn.quantity) {
+                              <span class="qty-info">{{ txn.quantity }} {{ txn.unit || '' }} × {{ txn.ratePerUnit | currencyInr }}/{{ txn.unit || 'unit' }}</span>
+                            }
                             <span class="txn-segment">{{ txn.segmentName }}</span>
                           </div>
-                          <span class="txn-amount">{{ txn.amount | currencyInr }}</span>
+                          <div class="txn-amounts">
+                            <span class="txn-amount">{{ remaining(txn) | currencyInr }}</span>
+                            @if (txn.amountPaid) {
+                              <span class="partial-note">{{ txn.amountPaid | currencyInr }} of {{ txn.amount | currencyInr }} paid</span>
+                            }
+                          </div>
                           <a mat-icon-button [routerLink]="['/transactions', txn.id]" aria-label="View details">
                             <mat-icon>open_in_new</mat-icon>
                           </a>
+                          <button mat-icon-button (click)="togglePartial(txn.id)" aria-label="Record partial payment" title="Record partial payment">
+                            <mat-icon>payments</mat-icon>
+                          </button>
                           <button mat-stroked-button color="primary" [disabled]="marking() === txn.id"
                                   (click)="markPaid(txn.id)">
                             {{ marking() === txn.id ? 'Saving…' : 'Mark paid' }}
                           </button>
                         </div>
+                        @if (partialFor() === txn.id) {
+                          <div class="partial-form">
+                            <mat-form-field appearance="outline" class="partial-field" subscriptSizing="dynamic">
+                              <mat-label>Amount paid (₹)</mat-label>
+                              <input matInput type="number" [(ngModel)]="partialAmount" min="1" [max]="remaining(txn)" />
+                            </mat-form-field>
+                            <span class="partial-hint">of {{ remaining(txn) | currencyInr }} pending</span>
+                            <button mat-flat-button color="primary"
+                                    [disabled]="marking() === txn.id || !partialAmount || partialAmount! <= 0"
+                                    (click)="recordPartial(txn)">Record</button>
+                            <button mat-button (click)="togglePartial('')">Cancel</button>
+                          </div>
+                        }
                       }
                     </div>
                   }
@@ -170,6 +247,16 @@ import { MatTabsModule } from '@angular/material/tabs';
     a.party-name { color: var(--color-primary); }
     a.party-name:hover { text-decoration: underline; }
     .party-count { font-size: var(--font-sm, 0.8rem); color: var(--color-text-secondary); }
+    .overdue-chip {
+      display: inline-block;
+      margin-left: 4px;
+      padding: 0 6px;
+      border-radius: 8px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      background: var(--color-expense-bg, rgba(198, 40, 40, 0.1));
+      color: var(--color-expense, #c62828);
+    }
     .party-total { font-weight: 700; font-size: 1.05rem; white-space: nowrap; }
     .party-total.income { color: var(--color-income, #2e7d32); }
     .party-total.expense { color: var(--color-expense, #c62828); }
@@ -183,11 +270,28 @@ import { MatTabsModule } from '@angular/material/tabs';
       border-bottom: 1px solid var(--color-border, #f0f0f0);
     }
     .txn-row:last-child { border-bottom: none; }
+    .txn-row.overdue-row { background: var(--color-expense-bg, rgba(198, 40, 40, 0.04)); border-radius: 6px; padding-left: 6px; padding-right: 6px; }
     .txn-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
     .txn-date { font-size: var(--font-sm, 0.8rem); color: var(--color-text-secondary); }
+    .age { font-weight: 600; }
+    .age-old { color: var(--color-warning, #b26a00); }
+    .overdue-text { color: var(--color-expense, #c62828); font-weight: 600; }
     .txn-desc { font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .qty-info { display: block; font-size: var(--font-xs); font-weight: 500; color: var(--color-text-muted); }
     .txn-segment { font-size: var(--font-sm, 0.75rem); color: var(--color-text-secondary); }
+    .txn-amounts { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
     .txn-amount { font-weight: 600; white-space: nowrap; }
+    .partial-note { font-size: 0.72rem; color: var(--color-text-secondary); white-space: nowrap; }
+    .partial-form {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 8px 6px 12px;
+      border-bottom: 1px solid var(--color-border, #f0f0f0);
+    }
+    .partial-field { width: 190px; }
+    .partial-hint { font-size: 0.8rem; color: var(--color-text-secondary); }
     @media (max-width: 600px) {
       .txn-row { flex-wrap: wrap; }
       .txn-info { flex-basis: 100%; }
@@ -204,6 +308,8 @@ export class DuesPageComponent implements OnInit {
   payables = signal<PartyDues[]>([]);
   expandedKey = signal('');
   marking = signal('');
+  partialFor = signal('');
+  partialAmount: number | null = null;
 
   receivablesTotal = computed(() => this.receivables().reduce((sum, g) => sum + g.total, 0));
   payablesTotal = computed(() => this.payables().reduce((sum, g) => sum + g.total, 0));
@@ -225,6 +331,31 @@ export class DuesPageComponent implements OnInit {
 
   toggle(key: string): void {
     this.expandedKey.set(this.expandedKey() === key ? '' : key);
+  }
+
+  remaining(txn: Transaction): number {
+    return pendingRemaining(txn);
+  }
+
+  age(txn: Transaction): number {
+    return dueAgeDays(txn);
+  }
+
+  overdue(txn: Transaction): boolean {
+    return isDueOverdue(txn);
+  }
+
+  togglePartial(id: string): void {
+    this.partialFor.set(this.partialFor() === id ? '' : id);
+    this.partialAmount = null;
+  }
+
+  async recordPartial(txn: Transaction): Promise<void> {
+    const amount = this.partialAmount;
+    if (!amount || amount <= 0) return;
+    await this.mark(txn.id, () => this.transactionService.recordPartialPayment(txn.id, amount), 'Partial payment recorded');
+    this.partialFor.set('');
+    this.partialAmount = null;
   }
 
   async markReceived(txnId: string): Promise<void> {

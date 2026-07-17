@@ -6,7 +6,7 @@ export type IncomePaymentStatus = 'received' | 'pending';
 export type ExpensePaymentStatus = 'paid' | 'pending';
 
 export interface TimelineEntry {
-  action: 'created' | 'updated' | 'deleted' | 'distributed' | 'payment_received' | 'payment_paid';
+  action: 'created' | 'updated' | 'deleted' | 'distributed' | 'payment_received' | 'payment_paid' | 'partial_payment';
   by: string;
   byName: string;
   at: Timestamp;
@@ -50,6 +50,13 @@ export interface Transaction {
   paymentStatus?: IncomePaymentStatus;           // income: received | pending
   expensePaymentStatus?: ExpensePaymentStatus;   // expense: paid | pending
 
+  // Partial payments while status is pending (cumulative)
+  amountReceived?: number;                       // income: portion already received
+  amountPaid?: number;                           // expense: portion already paid
+
+  // When the pending amount is expected to be settled (dues aging/alerts)
+  expectedPaymentDate?: Timestamp;
+
   // Loan linkage (auto-created transactions from loan operations)
   linkedLoanId?: string;
 
@@ -78,6 +85,20 @@ export interface Transaction {
   year: number;
 }
 
+/**
+ * Outstanding (unsettled) amount of a transaction, net of partial payments.
+ * 0 for received/paid transactions. Single source of truth for dues math,
+ * summary pending counters, and reconciliation.
+ */
+export function pendingRemaining(t: Transaction): number {
+  if (t.type === 'income') {
+    if ((t.paymentStatus || 'received') !== 'pending') return 0;
+    return Math.max(0, t.amount - (t.amountReceived || 0));
+  }
+  if ((t.expensePaymentStatus || 'paid') !== 'pending') return 0;
+  return Math.max(0, t.amount - (t.amountPaid || 0));
+}
+
 export interface DistributionEntry {
   uid: string;        // user UID or 'reinvestment'
   name: string;       // display name or 'Reinvestment'
@@ -101,6 +122,7 @@ export interface TransactionFormData {
   paidByName?: string;
   paymentStatus?: IncomePaymentStatus;
   expensePaymentStatus?: ExpensePaymentStatus;
+  expectedPaymentDate?: Date;
   linkedAnimalIds?: string[];
   linkedAnimalNames?: string[];
   animalCostSplit?: Record<string, number>;

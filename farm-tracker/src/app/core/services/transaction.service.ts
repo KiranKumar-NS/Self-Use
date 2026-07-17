@@ -17,7 +17,7 @@ import {
   Timestamp,
   DocumentSnapshot,
 } from '@angular/fire/firestore';
-import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatus, ExpensePaymentStatus } from '../models/transaction.model';
+import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatus, ExpensePaymentStatus, pendingRemaining } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 import { SummaryService } from './summary.service';
 import { appendTimelineCapped } from '../utils/timeline.utils';
@@ -68,14 +68,14 @@ export class TransactionService {
       : `incomeByPerson.${personKey}`;
     fields[personField] = increment(-txn.amount);
 
-    // Reverse pending income
+    // Reverse pending income (net of partial payments already received)
     if (txn.type === 'income' && (txn.paymentStatus || 'received') === 'pending') {
-      fields['pendingIncome'] = increment(-txn.amount);
+      fields['pendingIncome'] = increment(-pendingRemaining(txn));
     }
 
-    // Reverse pending expense
+    // Reverse pending expense (net of partial payments already made)
     if (txn.type === 'expense' && (txn.expensePaymentStatus || 'paid') === 'pending') {
-      fields['pendingExpense'] = increment(-txn.amount);
+      fields['pendingExpense'] = increment(-pendingRemaining(txn));
     }
 
     // Reverse distributions
@@ -93,7 +93,11 @@ export class TransactionService {
   /**
    * Build summary application fields for new/updated transaction data.
    */
-  private buildApplyFields(data: TransactionFormData, userUid: string): Record<string, any> {
+  private buildApplyFields(
+    data: TransactionFormData,
+    userUid: string,
+    pendingOverride?: { income: number; expense: number }
+  ): Record<string, any> {
     const incField = data.type === 'expense' ? 'totalExpense' : 'totalIncome';
     const profitDelta = data.type === 'income' ? data.amount : -data.amount;
     const catField = data.type === 'expense'
@@ -117,12 +121,16 @@ export class TransactionService {
       : `incomeByPerson.${personKey}`;
     fields[personField] = increment(data.amount);
 
-    if (data.type === 'income' && (data.paymentStatus || 'received') === 'pending') {
-      fields['pendingIncome'] = increment(data.amount);
-    }
-    if (data.type === 'expense' && (data.expensePaymentStatus || 'paid') === 'pending') {
-      fields['pendingExpense'] = increment(data.amount);
-    }
+    // Pending counters — on updates the caller passes the remaining amount
+    // (net of partial payments carried through the edit)
+    const pendingInc = pendingOverride
+      ? pendingOverride.income
+      : (data.type === 'income' && (data.paymentStatus || 'received') === 'pending' ? data.amount : 0);
+    const pendingExp = pendingOverride
+      ? pendingOverride.expense
+      : (data.type === 'expense' && (data.expensePaymentStatus || 'paid') === 'pending' ? data.amount : 0);
+    if (pendingInc !== 0) fields['pendingIncome'] = increment(pendingInc);
+    if (pendingExp !== 0) fields['pendingExpense'] = increment(pendingExp);
 
     return fields;
   }
@@ -190,6 +198,12 @@ export class TransactionService {
     if (data.type === 'expense') {
       txnDoc['expensePaymentStatus'] = data.expensePaymentStatus || 'paid';
     }
+    const isPendingCreate =
+      (data.type === 'income' && (data.paymentStatus || 'received') === 'pending') ||
+      (data.type === 'expense' && (data.expensePaymentStatus || 'paid') === 'pending');
+    if (isPendingCreate && data.expectedPaymentDate) {
+      txnDoc['expectedPaymentDate'] = Timestamp.fromDate(data.expectedPaymentDate);
+    }
 
     batch.set(txnRef, txnDoc);
 
@@ -249,6 +263,26 @@ export class TransactionService {
       if (oldData.type === 'expense' && data.type === 'expense' && oldExpPayStatus !== newExpPayStatus) {
         changesList.push(`expense payment: ${oldExpPayStatus}→${newExpPayStatus}`);
       }
+
+      // Carry partial payments through the edit (clamped to the new amount);
+      // if prior payments already cover the new amount, the txn auto-settles.
+      let effectivePayStatus = newPayStatus;
+      let keepReceived = 0;
+      if (oldData.type === 'income' && data.type === 'income' && newPayStatus === 'pending') {
+        keepReceived = Math.min(oldData.amountReceived || 0, data.amount);
+        if (keepReceived >= data.amount) effectivePayStatus = 'received';
+      }
+      let effectiveExpPayStatus = newExpPayStatus;
+      let keepPaid = 0;
+      if (oldData.type === 'expense' && data.type === 'expense' && newExpPayStatus === 'pending') {
+        keepPaid = Math.min(oldData.amountPaid || 0, data.amount);
+        if (keepPaid >= data.amount) effectiveExpPayStatus = 'paid';
+      }
+      // Pending counter deltas, net of partial payments on both sides
+      const oldPendingInc = oldData.type === 'income' ? pendingRemaining(oldData) : 0;
+      const oldPendingExp = oldData.type === 'expense' ? pendingRemaining(oldData) : 0;
+      const newPendingInc = data.type === 'income' && effectivePayStatus === 'pending' ? data.amount - keepReceived : 0;
+      const newPendingExp = data.type === 'expense' && effectiveExpPayStatus === 'pending' ? data.amount - keepPaid : 0;
       const newBuyerId = data.type === 'income' ? (data.linkedBuyerId || null) : null;
       const newSupplierId = data.type === 'expense' ? (data.linkedSupplierId || null) : null;
       if ((oldData.linkedBuyerId || null) !== newBuyerId) {
@@ -285,7 +319,7 @@ export class TransactionService {
       }
 
       // Build apply fields for new data
-      const applyFields = this.buildApplyFields(data, user.uid);
+      const applyFields = this.buildApplyFields(data, user.uid, { income: newPendingInc, expense: newPendingExp });
 
       // Monthly summaries
       const oldSummaryId = `${oldData.month}-${oldData.segment}`;
@@ -344,16 +378,10 @@ export class TransactionService {
           combined[newPersonField] = increment(data.amount);
         }
 
-        // Pending income
-        const oldPendingInc = oldData.type === 'income' && oldPayStatus === 'pending' ? oldData.amount : 0;
-        const newPendingInc = data.type === 'income' && newPayStatus === 'pending' ? data.amount : 0;
+        // Pending income/expense (deltas net of partial payments, computed above)
         if (oldPendingInc !== 0 || newPendingInc !== 0) {
           combined['pendingIncome'] = increment(newPendingInc - oldPendingInc);
         }
-
-        // Pending expense
-        const oldPendingExp = oldData.type === 'expense' && oldExpPayStatus === 'pending' ? oldData.amount : 0;
-        const newPendingExp = data.type === 'expense' && newExpPayStatus === 'pending' ? data.amount : 0;
         if (oldPendingExp !== 0 || newPendingExp !== 0) {
           combined['pendingExpense'] = increment(newPendingExp - oldPendingExp);
         }
@@ -437,14 +465,9 @@ export class TransactionService {
           combined[newPersonField] = increment(data.amount);
         }
 
-        const oldPendingInc = oldData.type === 'income' && oldPayStatus === 'pending' ? oldData.amount : 0;
-        const newPendingInc = data.type === 'income' && newPayStatus === 'pending' ? data.amount : 0;
         if (oldPendingInc !== 0 || newPendingInc !== 0) {
           combined['pendingIncome'] = increment(newPendingInc - oldPendingInc);
         }
-
-        const oldPendingExp = oldData.type === 'expense' && oldExpPayStatus === 'pending' ? oldData.amount : 0;
-        const newPendingExp = data.type === 'expense' && newExpPayStatus === 'pending' ? data.amount : 0;
         if (oldPendingExp !== 0 || newPendingExp !== 0) {
           combined['pendingExpense'] = increment(newPendingExp - oldPendingExp);
         }
@@ -483,8 +506,13 @@ export class TransactionService {
         paymentMethod: data.paymentMethod || 'upi',
         paidBy: data.paidBy || user.uid,
         paidByName: data.paidByName || user.displayName,
-        paymentStatus: data.type === 'income' ? (data.paymentStatus || 'received') : null,
-        expensePaymentStatus: data.type === 'expense' ? (data.expensePaymentStatus || 'paid') : null,
+        paymentStatus: data.type === 'income' ? effectivePayStatus : null,
+        expensePaymentStatus: data.type === 'expense' ? effectiveExpPayStatus : null,
+        amountReceived: keepReceived > 0 ? keepReceived : null,
+        amountPaid: keepPaid > 0 ? keepPaid : null,
+        expectedPaymentDate: (newPendingInc > 0 || newPendingExp > 0) && data.expectedPaymentDate
+          ? Timestamp.fromDate(data.expectedPaymentDate)
+          : null,
         linkedBuyerId: data.type === 'income' ? (data.linkedBuyerId || null) : null,
         linkedBuyerName: data.type === 'income' ? (data.linkedBuyerName || null) : null,
         linkedSupplierId: data.type === 'expense' ? (data.linkedSupplierId || null) : null,
@@ -701,9 +729,11 @@ export class TransactionService {
       if (oldData.isDeleted) throw new Error('Cannot update a deleted transaction');
       if (oldData.type !== 'income') throw new Error('Only income transactions have payment status');
       if (oldData.paymentStatus !== 'pending') throw new Error('Transaction is already received');
+      const remaining = pendingRemaining(oldData);
 
       transaction.update(txnRef, {
         paymentStatus: 'received' as IncomePaymentStatus,
+        amountReceived: oldData.amount,
         timeline: appendTimelineCapped(oldData.timeline, {
           action: 'payment_received',
           by: user.uid,
@@ -712,10 +742,10 @@ export class TransactionService {
         }),
       });
 
-      // Decrement pendingIncome in monthly + yearly summaries
+      // Decrement remaining pendingIncome (net of partials) in monthly + yearly summaries
       const summaryId = `${oldData.month}-${oldData.segment}`;
       const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
-      const pendingUpdate = { pendingIncome: increment(-oldData.amount), updatedAt: serverTimestamp() };
+      const pendingUpdate = { pendingIncome: increment(-remaining), updatedAt: serverTimestamp() };
       transaction.set(summaryRef, {
         ...pendingUpdate,
         month: oldData.month,
@@ -743,9 +773,11 @@ export class TransactionService {
       if (oldData.isDeleted) throw new Error('Cannot update a deleted transaction');
       if (oldData.type !== 'expense') throw new Error('Only expense transactions have expense payment status');
       if (oldData.expensePaymentStatus !== 'pending') throw new Error('Expense is already paid');
+      const remaining = pendingRemaining(oldData);
 
       transaction.update(txnRef, {
         expensePaymentStatus: 'paid' as ExpensePaymentStatus,
+        amountPaid: oldData.amount,
         timeline: appendTimelineCapped(oldData.timeline, {
           action: 'payment_paid',
           by: user.uid,
@@ -756,7 +788,73 @@ export class TransactionService {
 
       const summaryId = `${oldData.month}-${oldData.segment}`;
       const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
-      const pendingUpdate = { pendingExpense: increment(-oldData.amount), updatedAt: serverTimestamp() };
+      const pendingUpdate = { pendingExpense: increment(-remaining), updatedAt: serverTimestamp() };
+      transaction.set(summaryRef, {
+        ...pendingUpdate,
+        month: oldData.month,
+        year: oldData.year,
+        segment: oldData.segment,
+      }, { merge: true });
+      const yearlyRef = doc(this.firestore, 'yearlySummaries', `${oldData.year}-${oldData.segment}`);
+      transaction.set(yearlyRef, {
+        ...pendingUpdate,
+        year: oldData.year,
+        segment: oldData.segment,
+      }, { merge: true });
+    });
+    this.summaryService.clearCache();
+  }
+
+  /**
+   * Record a partial payment against a pending transaction (income or expense).
+   * Decrements the summary pending counters by exactly the paid amount; when the
+   * cumulative payments cover the full amount the transaction auto-settles.
+   */
+  async recordPartialPayment(transactionId: string, amount: number): Promise<void> {
+    const user = this.authService.requireUser();
+    const txnRef = doc(this.firestore, 'transactions', transactionId);
+
+    await runTransaction(this.firestore, async (transaction) => {
+      const oldDoc = await transaction.get(txnRef);
+      if (!oldDoc.exists()) throw new Error('Transaction not found');
+      const oldData = oldDoc.data() as Transaction;
+
+      if (oldData.isDeleted) throw new Error('Cannot update a deleted transaction');
+      const isIncome = oldData.type === 'income';
+      const status = isIncome ? oldData.paymentStatus : oldData.expensePaymentStatus;
+      if (status !== 'pending') throw new Error('Transaction has no pending amount');
+
+      const remaining = pendingRemaining(oldData);
+      if (!(amount > 0)) throw new Error('Enter an amount greater than 0');
+      if (amount > remaining) {
+        throw new Error(`Amount exceeds pending balance of ₹${remaining.toLocaleString('en-IN')}`);
+      }
+
+      const settled = amount >= remaining;
+      const prior = (isIncome ? oldData.amountReceived : oldData.amountPaid) || 0;
+      const verb = isIncome ? 'received' : 'paid';
+
+      const txnUpdates: Record<string, any> = {
+        [isIncome ? 'amountReceived' : 'amountPaid']: settled ? oldData.amount : prior + amount,
+        timeline: appendTimelineCapped(oldData.timeline, {
+          action: settled ? (isIncome ? 'payment_received' : 'payment_paid') : 'partial_payment',
+          by: user.uid,
+          byName: user.displayName,
+          at: Timestamp.now(),
+          changes: settled
+            ? `₹${amount.toLocaleString('en-IN')} ${verb} — settled`
+            : `₹${amount.toLocaleString('en-IN')} ${verb}, ₹${(remaining - amount).toLocaleString('en-IN')} remaining`,
+        }),
+      };
+      if (settled) {
+        if (isIncome) txnUpdates['paymentStatus'] = 'received' as IncomePaymentStatus;
+        else txnUpdates['expensePaymentStatus'] = 'paid' as ExpensePaymentStatus;
+      }
+      transaction.update(txnRef, txnUpdates);
+
+      const pendingField = isIncome ? 'pendingIncome' : 'pendingExpense';
+      const pendingUpdate = { [pendingField]: increment(-amount), updatedAt: serverTimestamp() };
+      const summaryRef = doc(this.firestore, 'monthlySummaries', `${oldData.month}-${oldData.segment}`);
       transaction.set(summaryRef, {
         ...pendingUpdate,
         month: oldData.month,

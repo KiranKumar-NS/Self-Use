@@ -4,6 +4,7 @@ import { TaskService } from './task.service';
 import { SegmentService } from './segment.service';
 import { SummaryService } from './summary.service';
 import { ScheduleService } from './schedule.service';
+import { DuesService, PartyDues } from './dues.service';
 import { AppNotification } from '../models/notification.model';
 import { getMonthString } from '../utils/date.utils';
 
@@ -14,6 +15,7 @@ export class NotificationService {
   private segmentService = inject(SegmentService);
   private summaryService = inject(SummaryService);
   private scheduleService = inject(ScheduleService);
+  private duesService = inject(DuesService);
 
   notifications = signal<AppNotification[]>([]);
   unreadCount = computed(() => this.notifications().length);
@@ -208,7 +210,50 @@ export class NotificationService {
       console.error('Notification: failed to load schedules:', err);
     }
 
+    // 5. Dues aging alerts — old receivables/payables or past their expected date
+    try {
+      const [receivables, payables] = await Promise.all([
+        this.duesService.getReceivables(),
+        this.duesService.getPayables(),
+      ]);
+      this.pushDuesAlerts(items, receivables, 'due_receivable', 'to receive from');
+      this.pushDuesAlerts(items, payables, 'due_payable', 'to pay to');
+    } catch (err) {
+      console.error('Notification: failed to load dues:', err);
+    }
+
     this.notifications.set(items);
+  }
+
+  /** One alert per counterparty whose dues are overdue or older than 30 days. */
+  private pushDuesAlerts(
+    items: AppNotification[],
+    groups: PartyDues[],
+    type: 'due_receivable' | 'due_payable',
+    directionLabel: string
+  ): void {
+    const now = new Date();
+    for (const group of groups) {
+      const isOld = group.oldestDays > 30;
+      if (!isOld && group.overdueCount === 0) continue;
+
+      const id = `${type}_${group.key}`;
+      if (this.dismissedIds.has(id)) continue;
+
+      const parts: string[] = [];
+      if (group.overdueCount > 0) parts.push(`${group.overdueCount} past expected date`);
+      if (isOld) parts.push(`oldest ${group.oldestDays} days`);
+
+      items.push({
+        id,
+        type,
+        title: `₹${group.total.toLocaleString('en-IN')} ${directionLabel} ${group.partyName}`,
+        message: parts.join(' · '),
+        severity: group.overdueCount > 0 || group.oldestDays > 60 ? 'error' : 'warning',
+        link: '/dues',
+        createdAt: now,
+      });
+    }
   }
 
   dismiss(id: string): void {

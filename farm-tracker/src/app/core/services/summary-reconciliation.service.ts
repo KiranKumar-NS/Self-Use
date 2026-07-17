@@ -13,9 +13,12 @@ import {
   limit,
   startAfter,
   orderBy,
+  Timestamp,
 } from '@angular/fire/firestore';
-import { Transaction } from '../models/transaction.model';
+import { Transaction, pendingRemaining } from '../models/transaction.model';
 import { MonthlySummary, YearlySummary } from '../models/monthly-summary.model';
+import { Buyer } from '../models/buyer.model';
+import { Supplier } from '../models/supplier.model';
 
 export interface ReconciliationReport {
   totalTransactions: number;
@@ -23,6 +26,14 @@ export interface ReconciliationReport {
   yearlySummariesWritten: number;
   monthlyCorrected: number;
   yearlyCorrected: number;
+}
+
+export interface CounterpartyReconciliationReport {
+  totalTransactions: number;
+  buyersChecked: number;
+  buyersCorrected: number;
+  suppliersChecked: number;
+  suppliersCorrected: number;
 }
 
 interface SummaryAccumulator {
@@ -81,7 +92,7 @@ export class SummaryReconciliationService {
       acc.expenseByPerson[personKey] = (acc.expenseByPerson[personKey] || 0) + txn.amount;
 
       if ((txn.expensePaymentStatus || 'paid') === 'pending') {
-        acc.pendingExpense += txn.amount;
+        acc.pendingExpense += pendingRemaining(txn);
       }
     } else {
       acc.totalIncome += txn.amount;
@@ -90,7 +101,7 @@ export class SummaryReconciliationService {
       acc.incomeByPerson[personKey] = (acc.incomeByPerson[personKey] || 0) + txn.amount;
 
       if ((txn.paymentStatus || 'received') === 'pending') {
-        acc.pendingIncome += txn.amount;
+        acc.pendingIncome += pendingRemaining(txn);
       }
     }
 
@@ -288,6 +299,143 @@ export class SummaryReconciliationService {
       yearlySummariesWritten: yearlyDocs.length,
       monthlyCorrected,
       yearlyCorrected,
+    };
+  }
+
+  /**
+   * Re-derive buyer/supplier stat counters from raw transactions and rewrite
+   * any that drifted. Unlike summaries, these counters were historically only
+   * updated by the sale dialogs (never by form-linked transactions), so first
+   * runs typically correct many records.
+   */
+  async reconcileCounterparties(): Promise<CounterpartyReconciliationReport> {
+    const transactions = await this.fetchAllTransactions();
+
+    interface PartyAcc {
+      count: number;
+      amount: number;
+      pending: number;
+      lastDate: number; // millis
+      countBySegment: Record<string, number>;
+      amountBySegment: Record<string, number>;
+    }
+    const emptyAcc = (): PartyAcc => ({ count: 0, amount: 0, pending: 0, lastDate: 0, countBySegment: {}, amountBySegment: {} });
+
+    const buyerAcc = new Map<string, PartyAcc>();
+    const supplierAcc = new Map<string, PartyAcc>();
+
+    for (const txn of transactions) {
+      if (txn.type === 'income' && txn.linkedBuyerId) {
+        let acc = buyerAcc.get(txn.linkedBuyerId);
+        if (!acc) { acc = emptyAcc(); buyerAcc.set(txn.linkedBuyerId, acc); }
+        // totalPurchases counts units when a quantity was recorded (matches
+        // BuyerService.updateStats semantics used by the sale dialogs)
+        const units = txn.quantity || 1;
+        acc.count += units;
+        acc.amount += txn.amount;
+        acc.lastDate = Math.max(acc.lastDate, txn.date.toMillis());
+        acc.countBySegment[txn.segment] = (acc.countBySegment[txn.segment] || 0) + units;
+        acc.amountBySegment[txn.segment] = (acc.amountBySegment[txn.segment] || 0) + txn.amount;
+      }
+      if (txn.type === 'expense' && txn.linkedSupplierId && !txn.linkedLoanId) {
+        let acc = supplierAcc.get(txn.linkedSupplierId);
+        if (!acc) { acc = emptyAcc(); supplierAcc.set(txn.linkedSupplierId, acc); }
+        acc.count += 1; // totalOrders is a transaction count
+        acc.amount += txn.amount;
+        acc.pending += pendingRemaining(txn);
+        acc.lastDate = Math.max(acc.lastDate, txn.date.toMillis());
+        acc.countBySegment[txn.segment] = (acc.countBySegment[txn.segment] || 0) + 1;
+        acc.amountBySegment[txn.segment] = (acc.amountBySegment[txn.segment] || 0) + txn.amount;
+      }
+    }
+
+    const [buyerSnap, supplierSnap] = await Promise.all([
+      getDocs(collection(this.firestore, 'buyers')),
+      getDocs(collection(this.firestore, 'suppliers')),
+    ]);
+
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const sameMap = (a: Record<string, number> | undefined, b: Record<string, number>) =>
+      JSON.stringify(Object.entries(a || {}).sort()) === JSON.stringify(Object.entries(b).sort());
+
+    const writes: { ref: any; data: Record<string, any> }[] = [];
+    let buyersChecked = 0;
+    let buyersCorrected = 0;
+    for (const snap of buyerSnap.docs) {
+      const buyer = snap.data() as Buyer;
+      if (buyer.isDeleted) continue;
+      buyersChecked++;
+      const acc = buyerAcc.get(snap.id) || emptyAcc();
+      const averageRate = acc.count > 0 ? round2(acc.amount / acc.count) : 0;
+      const drifted =
+        (buyer.totalPurchases || 0) !== acc.count ||
+        (buyer.totalAmountPaid || 0) !== acc.amount ||
+        (buyer.averageRate || 0) !== averageRate ||
+        (buyer.lastPurchaseDate?.toMillis() || 0) !== acc.lastDate ||
+        !sameMap(buyer.purchasesBySegment, acc.countBySegment) ||
+        !sameMap(buyer.amountBySegment, acc.amountBySegment);
+      if (!drifted) continue;
+      buyersCorrected++;
+      writes.push({
+        ref: doc(this.firestore, 'buyers', snap.id),
+        data: {
+          totalPurchases: acc.count,
+          totalAmountPaid: acc.amount,
+          averageRate,
+          lastPurchaseDate: acc.lastDate ? Timestamp.fromMillis(acc.lastDate) : null,
+          purchasesBySegment: acc.countBySegment,
+          amountBySegment: acc.amountBySegment,
+        },
+      });
+    }
+
+    let suppliersChecked = 0;
+    let suppliersCorrected = 0;
+    for (const snap of supplierSnap.docs) {
+      const supplier = snap.data() as Supplier;
+      if (supplier.isDeleted) continue;
+      suppliersChecked++;
+      const acc = supplierAcc.get(snap.id) || emptyAcc();
+      const averageRate = acc.count > 0 ? round2(acc.amount / acc.count) : 0;
+      const drifted =
+        (supplier.totalOrders || 0) !== acc.count ||
+        (supplier.totalAmountPaid || 0) !== acc.amount ||
+        (supplier.pendingAmount || 0) !== acc.pending ||
+        (supplier.averageRate || 0) !== averageRate ||
+        (supplier.lastOrderDate?.toMillis() || 0) !== acc.lastDate ||
+        !sameMap(supplier.ordersBySegment, acc.countBySegment) ||
+        !sameMap(supplier.amountBySegment, acc.amountBySegment);
+      if (!drifted) continue;
+      suppliersCorrected++;
+      writes.push({
+        ref: doc(this.firestore, 'suppliers', snap.id),
+        data: {
+          totalOrders: acc.count,
+          totalAmountPaid: acc.amount,
+          pendingAmount: acc.pending,
+          averageRate,
+          lastOrderDate: acc.lastDate ? Timestamp.fromMillis(acc.lastDate) : null,
+          ordersBySegment: acc.countBySegment,
+          amountBySegment: acc.amountBySegment,
+        },
+      });
+    }
+
+    const BATCH_LIMIT = 500;
+    for (let i = 0; i < writes.length; i += BATCH_LIMIT) {
+      const batch = writeBatch(this.firestore);
+      for (const w of writes.slice(i, i + BATCH_LIMIT)) {
+        batch.update(w.ref, w.data);
+      }
+      await batch.commit();
+    }
+
+    return {
+      totalTransactions: transactions.length,
+      buyersChecked,
+      buyersCorrected,
+      suppliersChecked,
+      suppliersCorrected,
     };
   }
 }

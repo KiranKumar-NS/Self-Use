@@ -92,6 +92,8 @@ export class NotificationBellComponent {
       case 'task_overdue': return 'assignment_late';
       case 'budget_warning': return 'warning';
       case 'budget_exceeded': return 'error';
+      case 'due_receivable': return 'call_received';
+      case 'due_payable': return 'call_made';
       default: return 'notifications';
     }
   }

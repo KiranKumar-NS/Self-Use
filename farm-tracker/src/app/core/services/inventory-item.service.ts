@@ -60,7 +60,7 @@ export class InventoryItemService {
     return all.filter(item => item.minimumStock != null && item.currentStock <= item.minimumStock);
   }
 
-  async recordPurchase(itemId: string, qty: number, unitCost: number, supplierId?: string, supplierName?: string, note?: string): Promise<void> {
+  async recordPurchase(itemId: string, qty: number, unitCost: number, supplierId?: string, supplierName?: string, note?: string, linkedTransactionId?: string): Promise<void> {
     const user = this.authService.requireUser();
     const item = await this.getById(itemId);
     if (!item) throw new Error('Item not found');
@@ -73,6 +73,7 @@ export class InventoryItemService {
       quantity: qty,
       unitCost,
       totalCost,
+      linkedTransactionId: linkedTransactionId || undefined,
       supplierId: supplierId || undefined,
       supplierName: supplierName || undefined,
       note,

@@ -40,8 +40,8 @@ service cloud.firestore {
       return segment == 'personal' || hasSegmentAccess(segment);
     }
 
-    // Post-write state must keep timeline bounded (client caps at 50; generous
-    // backstop so legacy docs with longer histories stay editable)
+    // Post-write state must keep timeline bounded (client caps at 100, which
+    // this backstop matches; ~100 entries stays well under the 1 MiB doc limit)
     function timelineWithinCap() {
       return !('timeline' in request.resource.data)
         || request.resource.data.timeline.size() <= 100;

@@ -1,6 +1,6 @@
 import { TimelineEntry } from '../models/transaction.model';
 
-export const TIMELINE_MAX_ENTRIES = 50;
+export const TIMELINE_MAX_ENTRIES = 100;
 
 /**
  * Appends a timeline entry while keeping the array bounded (Firestore docs

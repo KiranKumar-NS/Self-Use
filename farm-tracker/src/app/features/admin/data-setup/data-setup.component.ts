@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@ang
 import { FormsModule } from '@angular/forms';
 import { SegmentService } from '../../../core/services/segment.service';
 import { CategoryService } from '../../../core/services/category.service';
-import { SummaryReconciliationService, ReconciliationReport } from '../../../core/services/summary-reconciliation.service';
+import { SummaryReconciliationService, ReconciliationReport, CounterpartyReconciliationReport } from '../../../core/services/summary-reconciliation.service';
+import { TagService } from '../../../core/services/tag.service';
 import { Segment } from '../../../core/models/segment.model';
 import { Category } from '../../../core/models/category.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
@@ -227,6 +228,54 @@ import {
 
           </div>
         </mat-tab>
+
+        <!-- TAGS TAB -->
+        <mat-tab label="Tags">
+          <div class="tab-content">
+            <div class="section-header">
+              <h3>Tags ({{ tags().length }})</h3>
+            </div>
+            <p class="budget-hint">Deleting or renaming a tag also updates every transaction that carries it.</p>
+
+            @if (tags().length === 0) {
+              <p class="no-data">No tags yet — tags are collected as you use them on transactions.</p>
+            } @else {
+              <div class="tag-chips">
+                @for (tag of tags(); track tag) {
+                  <span class="tag-chip">
+                    {{ tag }}
+                    <button class="tag-delete" (click)="deleteTag(tag)" [disabled]="tagBusy()" aria-label="Delete tag" title="Delete tag">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  </span>
+                }
+              </div>
+            }
+
+            <mat-card class="add-form-card">
+              <h4>Rename Tag</h4>
+              <div class="add-form">
+                <mat-form-field appearance="outline">
+                  <mat-label>Existing tag</mat-label>
+                  <mat-select [(ngModel)]="renameFrom">
+                    @for (tag of tags(); track tag) {
+                      <mat-option [value]="tag">{{ tag }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>New name</mat-label>
+                  <input matInput [(ngModel)]="renameTo" />
+                </mat-form-field>
+                <button mat-flat-button color="primary" (click)="renameTag()"
+                        [disabled]="tagBusy() || !renameFrom || !renameTo.trim()">
+                  {{ tagBusy() ? 'Working…' : 'Rename' }}
+                </button>
+              </div>
+            </mat-card>
+          </div>
+        </mat-tab>
+
         <!-- BUDGETS TAB -->
         <mat-tab label="Budgets">
           <div class="tab-content">
@@ -297,6 +346,49 @@ import {
                 {{ reconciling() ? 'Reconciling...' : 'Reconcile All Summaries' }}
               </button>
             </mat-card>
+
+            <!-- Reconcile Buyer/Supplier Stats Section -->
+            <mat-card class="reconcile-section">
+              <div class="reconcile-header">
+                <mat-icon class="reconcile-icon">groups</mat-icon>
+                <div>
+                  <h3>Reconcile Buyer &amp; Supplier Stats</h3>
+                  <p class="reconcile-desc">Recompute purchase/order totals, segment breakdowns and supplier pending amounts from raw transactions. Use this if counterparty totals look wrong — form-linked sales historically never updated these counters.</p>
+                </div>
+              </div>
+              @if (reconcilingParties()) {
+                <mat-progress-bar mode="indeterminate" />
+                <p class="reconcile-status">Reconciling... This may take a moment.</p>
+              }
+              @if (partyReport()) {
+                <div class="reconcile-results">
+                  <div class="reconcile-stat">
+                    <span class="stat-label">Transactions processed</span>
+                    <span class="stat-value">{{ partyReport()!.totalTransactions }}</span>
+                  </div>
+                  <div class="reconcile-stat">
+                    <span class="stat-label">Buyers checked</span>
+                    <span class="stat-value">{{ partyReport()!.buyersChecked }}</span>
+                  </div>
+                  <div class="reconcile-stat corrected">
+                    <span class="stat-label">Buyers corrected</span>
+                    <span class="stat-value">{{ partyReport()!.buyersCorrected }}</span>
+                  </div>
+                  <div class="reconcile-stat">
+                    <span class="stat-label">Suppliers checked</span>
+                    <span class="stat-value">{{ partyReport()!.suppliersChecked }}</span>
+                  </div>
+                  <div class="reconcile-stat corrected">
+                    <span class="stat-label">Suppliers corrected</span>
+                    <span class="stat-value">{{ partyReport()!.suppliersCorrected }}</span>
+                  </div>
+                </div>
+              }
+              <button mat-flat-button color="warn" (click)="reconcileParties()" [disabled]="reconcilingParties()">
+                <mat-icon>groups</mat-icon>
+                {{ reconcilingParties() ? 'Reconciling...' : 'Reconcile Buyer/Supplier Stats' }}
+              </button>
+            </mat-card>
           </div>
         </mat-tab>
 
@@ -356,6 +448,22 @@ import {
     .stat-label { font-size: 0.75rem; color: var(--color-text-secondary); }
     .stat-value { font-size: 1.1rem; font-weight: 600; color: var(--color-text); }
     .reconcile-stat.corrected .stat-value { color: var(--color-warning, #f59e0b); }
+    .reconcile-section + .reconcile-section { margin-top: 1rem; }
+    .tag-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem; }
+    .tag-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 6px 4px 12px; border-radius: 16px;
+      background: var(--color-bg, #f0f0f0); border: 1px solid var(--color-border, #e0e0e0);
+      font-size: 0.85rem; font-family: monospace;
+    }
+    .tag-delete {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 20px; height: 20px; padding: 0; border: none; border-radius: 50%;
+      background: transparent; cursor: pointer; color: var(--color-text-secondary);
+    }
+    .tag-delete:hover:not(:disabled) { background: var(--color-expense-bg, rgba(198,40,40,0.1)); color: var(--color-expense, #c62828); }
+    .tag-delete:disabled { opacity: 0.4; cursor: default; }
+    .tag-delete mat-icon { font-size: 16px; width: 16px; height: 16px; }
     @media (max-width: 768px) {
       .seed-banner { flex-direction: column; text-align: center; }
       .seed-banner button { margin-left: 0; }
@@ -369,6 +477,7 @@ export class DataSetupComponent implements OnInit {
   private segmentService = inject(SegmentService);
   private categoryService = inject(CategoryService);
   private reconciliationService = inject(SummaryReconciliationService);
+  private tagService = inject(TagService);
   private firestore = inject(Firestore);
   private toast = inject(ToastService);
 
@@ -376,6 +485,12 @@ export class DataSetupComponent implements OnInit {
   seeding = signal(false);
   reconciling = signal(false);
   reconcileReport = signal<ReconciliationReport | null>(null);
+  reconcilingParties = signal(false);
+  partyReport = signal<CounterpartyReconciliationReport | null>(null);
+  tags = signal<string[]>([]);
+  tagBusy = signal(false);
+  renameFrom = '';
+  renameTo = '';
   successMsg = signal('');
   errorMsg = signal('');
 
@@ -394,14 +509,16 @@ export class DataSetupComponent implements OnInit {
 
   async loadData(): Promise<void> {
     await safeLoad(this.loading, async () => {
-      const [segments, categories] = await Promise.all([
+      const [segments, categories, tags] = await Promise.all([
         this.segmentService.getAll(),
         this.categoryService.getAll(),
+        this.tagService.getTags(),
       ]);
       this.segments.set(segments);
       this.categories.set(categories);
       this.expenseCategories.set(categories.filter((c) => c.type === 'expense'));
       this.incomeCategories.set(categories.filter((c) => c.type === 'income'));
+      this.tags.set([...tags].sort());
     }, this.toast);
   }
 
@@ -556,6 +673,64 @@ export class DataSetupComponent implements OnInit {
     } finally {
       this.reconciling.set(false);
     }
+  }
+
+  async reconcileParties(): Promise<void> {
+    this.clearMessages();
+    this.partyReport.set(null);
+    this.reconcilingParties.set(true);
+    try {
+      const report = await this.reconciliationService.reconcileCounterparties();
+      this.partyReport.set(report);
+      const corrected = report.buyersCorrected + report.suppliersCorrected;
+      this.successMsg.set(
+        corrected > 0
+          ? `Counterparty reconciliation complete. ${report.buyersCorrected} buyer(s) and ${report.suppliersCorrected} supplier(s) corrected from ${report.totalTransactions} transactions.`
+          : `Counterparty reconciliation complete. All ${report.buyersChecked + report.suppliersChecked} records were already accurate (${report.totalTransactions} transactions).`
+      );
+    } catch (err: any) {
+      this.errorMsg.set(err.message || 'Counterparty reconciliation failed');
+    } finally {
+      this.reconcilingParties.set(false);
+    }
+  }
+
+  async deleteTag(tag: string): Promise<void> {
+    if (!confirm(`Delete tag "${tag}"? It will also be removed from every transaction that uses it.`)) return;
+    this.clearMessages();
+    this.tagBusy.set(true);
+    try {
+      const count = await this.tagService.deleteTag(tag);
+      this.successMsg.set(`Tag "${tag}" deleted (removed from ${count} transaction${count === 1 ? '' : 's'}).`);
+      await this.refreshTags();
+    } catch (err: any) {
+      this.errorMsg.set(err.message || 'Failed to delete tag');
+    } finally {
+      this.tagBusy.set(false);
+    }
+  }
+
+  async renameTag(): Promise<void> {
+    const from = this.renameFrom;
+    const to = this.renameTo.trim().toLowerCase();
+    if (!from || !to) return;
+    this.clearMessages();
+    this.tagBusy.set(true);
+    try {
+      const count = await this.tagService.renameTag(from, to);
+      this.successMsg.set(`Tag "${from}" renamed to "${to}" (updated ${count} transaction${count === 1 ? '' : 's'}).`);
+      this.renameFrom = '';
+      this.renameTo = '';
+      await this.refreshTags();
+    } catch (err: any) {
+      this.errorMsg.set(err.message || 'Failed to rename tag');
+    } finally {
+      this.tagBusy.set(false);
+    }
+  }
+
+  private async refreshTags(): Promise<void> {
+    this.tags.set([...(await this.tagService.getTags())].sort());
   }
 
   private clearMessages(): void {

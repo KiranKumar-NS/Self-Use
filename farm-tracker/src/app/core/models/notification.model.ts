@@ -1,5 +1,6 @@
 export type NotificationType = 'loan_overdue' | 'task_overdue' | 'budget_warning' | 'budget_exceeded'
-  | 'recurring_due' | 'reminder_due' | 'reminder_upcoming' | 'low_stock' | 'delivery_expected';
+  | 'recurring_due' | 'reminder_due' | 'reminder_upcoming' | 'low_stock' | 'delivery_expected'
+  | 'due_receivable' | 'due_payable';
 
 export interface AppNotification {
   id: string;
