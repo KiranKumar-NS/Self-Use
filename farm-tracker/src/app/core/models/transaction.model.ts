@@ -66,6 +66,10 @@ export interface Transaction {
   linkedSupplierId?: string;
   linkedSupplierName?: string;
 
+  // Harvest linkage (optional; expense costs and harvest-sale income)
+  linkedHarvestId?: string;
+  linkedHarvestName?: string;
+
   // Freeform tags for ad-hoc grouping (e.g. "vaccination-drive", "eid-season")
   tags?: string[];
 
@@ -104,6 +108,8 @@ export interface TransactionFormData {
   linkedBuyerName?: string;
   linkedSupplierId?: string;
   linkedSupplierName?: string;
+  linkedHarvestId?: string;
+  linkedHarvestName?: string;
   tags?: string[];
   month: string;
   year: number;

@@ -178,6 +178,10 @@ export class TransactionService {
     if (data.linkedBuyerName) txnDoc['linkedBuyerName'] = data.linkedBuyerName;
     if (data.linkedSupplierId) txnDoc['linkedSupplierId'] = data.linkedSupplierId;
     if (data.linkedSupplierName) txnDoc['linkedSupplierName'] = data.linkedSupplierName;
+    if (data.linkedHarvestId) {
+      txnDoc['linkedHarvestId'] = data.linkedHarvestId;
+      txnDoc['linkedHarvestName'] = data.linkedHarvestName || null;
+    }
     if (data.tags?.length) txnDoc['tags'] = data.tags;
 
     if (data.type === 'income') {
@@ -252,6 +256,17 @@ export class TransactionService {
       }
       if ((oldData.linkedSupplierId || null) !== newSupplierId) {
         changesList.push(`supplier: ${oldData.linkedSupplierName || 'none'}→${data.linkedSupplierName || 'none'}`);
+      }
+      // Harvest link: form-managed for expenses; income keeps its recordSale-stamped link
+      const keepIncomeHarvestLink = oldData.type === 'income' && data.type === 'income';
+      const newHarvestId = data.type === 'expense'
+        ? (data.linkedHarvestId || null)
+        : (keepIncomeHarvestLink ? (oldData.linkedHarvestId || null) : null);
+      const newHarvestName = data.type === 'expense'
+        ? (data.linkedHarvestName || null)
+        : (keepIncomeHarvestLink ? (oldData.linkedHarvestName || null) : null);
+      if ((oldData.linkedHarvestId || null) !== newHarvestId) {
+        changesList.push(`harvest: ${oldData.linkedHarvestName || 'none'}→${newHarvestName || 'none'}`);
       }
       const changesStr = changesList.length > 0 ? changesList.join(', ') : 'details updated';
 
@@ -474,6 +489,8 @@ export class TransactionService {
         linkedBuyerName: data.type === 'income' ? (data.linkedBuyerName || null) : null,
         linkedSupplierId: data.type === 'expense' ? (data.linkedSupplierId || null) : null,
         linkedSupplierName: data.type === 'expense' ? (data.linkedSupplierName || null) : null,
+        linkedHarvestId: newHarvestId,
+        linkedHarvestName: newHarvestName,
         quantity: data.quantity || null,
         unit: data.unit || null,
         ratePerUnit: data.ratePerUnit || null,

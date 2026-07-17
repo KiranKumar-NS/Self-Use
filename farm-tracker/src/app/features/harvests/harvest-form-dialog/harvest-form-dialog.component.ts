@@ -82,6 +82,7 @@ export interface HarvestFormDialogData {
         <mat-form-field appearance="outline">
           <mat-label>Harvest Cost</mat-label>
           <input matInput type="number" [(ngModel)]="harvestCost" min="0" />
+          <mat-hint>Optional one-time cost. Prefer linking expense transactions to this harvest.</mat-hint>
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">

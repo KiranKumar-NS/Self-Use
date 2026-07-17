@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { HarvestService } from '../../../core/services/harvest.service';
 import { Harvest } from '../../../core/models/harvest.model';
+import { Transaction } from '../../../core/models/transaction.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
@@ -39,6 +40,9 @@ import { ToastService } from '../../../core/services/toast.service';
           </button>
           <button mat-stroked-button (click)="recordWastage()" [disabled]="harvest()!.remainingQuantity <= 0">
             <mat-icon>delete_sweep</mat-icon> Record Wastage
+          </button>
+          <button mat-stroked-button (click)="addExpense()">
+            <mat-icon>payments</mat-icon> Add Expense
           </button>
           <button mat-button (click)="back()">Back</button>
         </div>
@@ -129,6 +133,14 @@ import { ToastService } from '../../../core/services/toast.service';
           <div class="summary-label">Average Rate</div>
           <div class="summary-value">{{ harvest()!.averageRate ? (harvest()!.averageRate! | currencyInr) + '/' + harvest()!.unit : '-' }}</div>
         </mat-card>
+        <mat-card class="summary-card">
+          <div class="summary-label">Expenses</div>
+          <div class="summary-value wastage">{{ totalCost() | currencyInr }}</div>
+        </mat-card>
+        <mat-card class="summary-card">
+          <div class="summary-label">Net Profit</div>
+          <div class="summary-value" [class.profit]="netProfit() >= 0" [class.loss]="netProfit() < 0">{{ netProfit() | currencyInr }}</div>
+        </mat-card>
       </div>
 
       <!-- Sales Table -->
@@ -167,6 +179,64 @@ import { ToastService } from '../../../core/services/toast.service';
                   </tr>
                 }
               </tbody>
+            </table>
+          </div>
+        </mat-card>
+      }
+
+      <!-- Linked Expenses -->
+      @if (linkedExpenses().length > 0 || harvest()!.harvestCost) {
+        <mat-card class="table-card">
+          <h3 style="padding: 16px 16px 0;">Expenses</h3>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Transaction</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (txn of linkedExpenses(); track txn.id) {
+                  <tr>
+                    <td class="date-cell">{{ txn.date.toDate() | date:'dd MMM yyyy' }}</td>
+                    <td>{{ txn.categoryName }}</td>
+                    <td>{{ txn.description || '-' }}</td>
+                    <td class="expense-cell">{{ txn.amount | currencyInr }}</td>
+                    <td>
+                      <span class="pay-badge" [attr.data-paid]="txn.expensePaymentStatus !== 'pending'">
+                        {{ txn.expensePaymentStatus === 'pending' ? 'Pending' : 'Paid' }}
+                      </span>
+                    </td>
+                    <td>
+                      <a [routerLink]="['/transactions', txn.id]" class="txn-link">
+                        <mat-icon class="small-icon">receipt_long</mat-icon> View
+                      </a>
+                    </td>
+                  </tr>
+                }
+                @if (harvest()!.harvestCost) {
+                  <tr>
+                    <td class="date-cell">{{ harvest()!.harvestDate.toDate() | date:'dd MMM yyyy' }}</td>
+                    <td>Initial cost</td>
+                    <td>Entered on harvest (manual)</td>
+                    <td class="expense-cell">{{ harvest()!.harvestCost! | currencyInr }}</td>
+                    <td>-</td>
+                    <td>-</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="total-row">
+                  <td colspan="3">Total Expenses</td>
+                  <td class="expense-cell">{{ totalCost() | currencyInr }}</td>
+                  <td colspan="2"></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </mat-card>
@@ -219,7 +289,18 @@ import { ToastService } from '../../../core/services/toast.service';
     .summary-value.remaining { color: var(--color-warning, #e65100); }
     .summary-value.revenue { color: var(--color-income); }
 
+    .summary-value.profit { color: var(--color-income); }
+    .summary-value.loss { color: var(--color-danger, #c62828); }
+
     .amount-cell { font-weight: 600; color: var(--color-income); }
+    .expense-cell { font-weight: 600; color: var(--color-danger, #c62828); }
+    .pay-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 12px;
+      font-size: 0.78rem; font-weight: 600;
+    }
+    .pay-badge[data-paid="true"] { background: #e8f5e9; color: #2e7d32; }
+    .pay-badge[data-paid="false"] { background: #fff3e0; color: #e65100; }
+    .total-row td { font-weight: 700; border-top: 2px solid var(--color-border, #ddd); }
     .txn-link { display: inline-flex; align-items: center; gap: 4px; color: var(--color-primary); text-decoration: none; }
     .txn-link:hover { text-decoration: underline; }
     .small-icon { font-size: 16px; width: 16px; height: 16px; }
@@ -235,6 +316,7 @@ export class HarvestDetailComponent implements OnInit {
   private toast = inject(ToastService);
 
   harvest = signal<Harvest | null>(null);
+  linkedExpenses = signal<Transaction[]>([]);
   loading = signal(true);
 
   wastageQuantity: number | null = null;
@@ -251,8 +333,31 @@ export class HarvestDetailComponent implements OnInit {
 
   async loadData(id: string): Promise<void> {
     await safeLoad(this.loading, async () => {
-      this.harvest.set(await this.harvestService.getById(id));
+      const [harvest, expenses] = await Promise.all([
+        this.harvestService.getById(id),
+        this.harvestService.getLinkedExpenses(id),
+      ]);
+      this.harvest.set(harvest);
+      this.linkedExpenses.set(expenses);
     }, this.toast);
+  }
+
+  linkedExpenseTotal(): number {
+    return this.linkedExpenses().reduce((sum, t) => sum + t.amount, 0);
+  }
+
+  totalCost(): number {
+    return this.linkedExpenseTotal() + (this.harvest()?.harvestCost || 0);
+  }
+
+  netProfit(): number {
+    return (this.harvest()?.totalRevenue || 0) - this.totalCost();
+  }
+
+  addExpense(): void {
+    const h = this.harvest();
+    if (!h) return;
+    this.router.navigate(['/transactions/new'], { queryParams: { harvestId: h.id } });
   }
 
   soldPercentage(): number {

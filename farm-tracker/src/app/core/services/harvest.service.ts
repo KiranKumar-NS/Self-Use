@@ -4,7 +4,7 @@ import {
   query, orderBy, where, limit, serverTimestamp, Timestamp,
 } from '@angular/fire/firestore';
 import { Harvest, HarvestSaleEntry } from '../models/harvest.model';
-import { TransactionFormData, IncomePaymentStatus } from '../models/transaction.model';
+import { Transaction, TransactionFormData, IncomePaymentStatus } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 import { TransactionService } from './transaction.service';
 import { BuyerService } from './buyer.service';
@@ -76,6 +76,25 @@ export class HarvestService {
     return docSnap.exists() ? (docSnap.data() as Harvest) : null;
   }
 
+  /** Display label used as linkedHarvestName on transactions, e.g. "Mango — 12 Jul 2026" */
+  displayName(harvest: Pick<Harvest, 'cropName' | 'harvestDate'>): string {
+    const d = harvest.harvestDate.toDate();
+    const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    return `${harvest.cropName} — ${dateStr}`;
+  }
+
+  /** Expense transactions linked to this harvest (live query, no denormalized counters). */
+  async getLinkedExpenses(harvestId: string): Promise<Transaction[]> {
+    const q = query(
+      collection(this.firestore, 'transactions'),
+      where('linkedHarvestId', '==', harvestId),
+      where('isDeleted', '==', false),
+      orderBy('date', 'desc'),
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => d.data() as Transaction).filter(t => t.type === 'expense');
+  }
+
   async recordSale(harvestId: string, saleData: {
     quantity: number; unit: string; ratePerUnit: number;
     buyerId?: string; buyerName?: string; note?: string;
@@ -103,6 +122,8 @@ export class HarvestService {
       description: `${harvest.cropName} sale from harvest`,
       paymentMethod: 'upi',
       paymentStatus: saleData.paymentStatus || 'received',
+      linkedHarvestId: harvestId,
+      linkedHarvestName: this.displayName(harvest),
       tags: ['harvest-sale'],
       month: getMonthString(saleDate),
       year: getYear(saleDate),

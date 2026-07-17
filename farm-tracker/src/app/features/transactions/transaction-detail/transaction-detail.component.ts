@@ -146,6 +146,19 @@ import { DatePipe } from '@angular/common';
         </mat-card>
       }
 
+      @if (transaction()!.linkedHarvestName) {
+        <h3 class="section-title">Harvest</h3>
+        <mat-card class="linked-card">
+          @if (transaction()!.linkedHarvestId) {
+            <a [routerLink]="['/harvests', transaction()!.linkedHarvestId]" class="buyer-link">
+              <mat-icon>agriculture</mat-icon> {{ transaction()!.linkedHarvestName }}
+            </a>
+          } @else {
+            <span><mat-icon>agriculture</mat-icon> {{ transaction()!.linkedHarvestName }}</span>
+          }
+        </mat-card>
+      }
+
       <!-- Link to Animals button (expense, no linked animals yet) -->
       @if (transaction()!.type === 'expense' && !transaction()!.linkedAnimalIds?.length && !auth.isViewer()) {
         <div class="link-action">

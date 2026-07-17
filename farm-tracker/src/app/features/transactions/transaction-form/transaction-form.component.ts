@@ -16,6 +16,8 @@ import { BuyerService } from '../../../core/services/buyer.service';
 import { Buyer } from '../../../core/models/buyer.model';
 import { SupplierService } from '../../../core/services/supplier.service';
 import { Supplier } from '../../../core/models/supplier.model';
+import { HarvestService } from '../../../core/services/harvest.service';
+import { Harvest } from '../../../core/models/harvest.model';
 
 import { MatIconModule } from '@angular/material/icon';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -237,6 +239,22 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
           </div>
         }
 
+        <!-- Harvest link (expense only) -->
+        @if (type === 'expense' && harvestOptions().length > 0) {
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Link to Harvest (optional)</mat-label>
+              <mat-select [(ngModel)]="linkedHarvestId" name="linkedHarvestId">
+                <mat-option value="">No harvest</mat-option>
+                @for (h of harvestOptions(); track h.id) {
+                  <mat-option [value]="h.id">{{ h.label }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Links this cost (labor, transport...) to a harvest for net profit</mat-hint>
+            </mat-form-field>
+          </div>
+        }
+
         <!-- Link to Animals (expense + animal segment) -->
         @if (type === 'expense' && isAnimalSegment()) {
           <div class="animal-link-section">
@@ -359,6 +377,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   private userService = inject(UserService);
   private buyerService = inject(BuyerService);
   private supplierService = inject(SupplierService);
+  private harvestService = inject(HarvestService);
   animalService = inject(AnimalService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
@@ -397,6 +416,9 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   newBuyerName = '';
   linkedSupplierId = '';
   newSupplierName = '';
+  linkedHarvestId = '';
+  // label = display shown in dropdown (with quantity); name = stored as linkedHarvestName
+  harvestOptions = signal<{ id: string; label: string; name: string }[]>([]);
   filteredCategories = signal<Category[]>([]);
   filteredSegments = signal<Segment[]>([]);
 
@@ -425,12 +447,13 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   }
 
   private async loadFormData(): Promise<void> {
-    const [categories, segments, users, buyers, suppliers] = await Promise.all([
+    const [categories, segments, users, buyers, suppliers, harvests] = await Promise.all([
       this.categoryService.getAll(),
       this.segmentService.getAll(),
       this.userService.getAll(),
       this.buyerService.getAll(),
       this.supplierService.getAll(),
+      this.harvestService.getAll({}, 30),
     ]);
 
     this.allCategories.set(categories);
@@ -438,6 +461,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
     this.users.set(users.filter((u) => u.isActive));
     this.buyers.set(buyers);
     this.suppliers.set(suppliers);
+    this.harvestOptions.set(harvests.map(h => this.toHarvestOption(h)));
     this.paidBy = this.authService.currentUser()?.uid || '';
 
     // Load known custom names for duplicate detection
@@ -499,6 +523,13 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
             this.suppliers.update(list => [...list, { id: txn.linkedSupplierId!, name: txn.linkedSupplierName || 'Unknown' } as Supplier]);
           }
         }
+        if (txn.type === 'expense' && txn.linkedHarvestId) {
+          this.linkedHarvestId = txn.linkedHarvestId;
+          if (!this.harvestOptions().some(h => h.id === txn.linkedHarvestId)) {
+            const name = txn.linkedHarvestName || 'Unknown harvest';
+            this.harvestOptions.update(list => [...list, { id: txn.linkedHarvestId!, label: name, name }]);
+          }
+        }
         this.onTypeChange();
 
         // Load existing animal links
@@ -508,7 +539,30 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
           await this.loadActiveAnimals();
         }
       }
+    } else {
+      // "Add Expense" from harvest detail: prefill type, harvest link and segment
+      const harvestId = this.route.snapshot.queryParamMap.get('harvestId');
+      if (harvestId) {
+        const harvest = await this.harvestService.getById(harvestId);
+        if (harvest) {
+          this.type = 'expense';
+          this.linkedHarvestId = harvestId;
+          if (!this.harvestOptions().some(h => h.id === harvestId)) {
+            this.harvestOptions.update(list => [this.toHarvestOption(harvest), ...list]);
+          }
+          if (this.filteredSegments().some(s => s.id === harvest.segment)) {
+            this.segment = harvest.segment;
+          }
+          this.onTypeChange();
+          await this.loadActiveAnimals();
+        }
+      }
     }
+  }
+
+  private toHarvestOption(h: Harvest): { id: string; label: string; name: string } {
+    const name = this.harvestService.displayName(h);
+    return { id: h.id, label: `${name} (${h.totalQuantity} ${h.unit})`, name };
   }
 
   onPaidByChange(): void {
@@ -619,6 +673,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
     if (this.type === 'income') {
       this.linkedSupplierId = '';
       this.newSupplierName = '';
+      this.linkedHarvestId = '';
     } else {
       this.linkedBuyerId = '';
       this.newBuyerName = '';
@@ -690,6 +745,10 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         linkedBuyerName: buyerName || undefined,
         linkedSupplierId: supplierId || undefined,
         linkedSupplierName: supplierName || undefined,
+        linkedHarvestId: (this.type === 'expense' && this.linkedHarvestId) || undefined,
+        linkedHarvestName: this.type === 'expense' && this.linkedHarvestId
+          ? this.harvestOptions().find(h => h.id === this.linkedHarvestId)?.name
+          : undefined,
         tags: this.tags.length ? this.tags : undefined,
         month: getMonthString(this.date),
         year: getYear(this.date),
