@@ -222,16 +222,21 @@ Dismissals stored in localStorage.
 - `exportLoansCsv()` — Comprehensive loan data with formal loan fields
 
 **Excel Backup:**
-- `exportBackupExcel()` — Multi-sheet backup (Expenses, Income, Loans, Inventory Events, Animals, Buyers) with all fields for re-import
+- `exportBackupExcel()` — Full all-time backup (v2) from the dashboard download button: every persisted collection across 28 sheets (transactions, loans + repayments/deductions/collateral/rate changes/documents, animals + cost/health detail, buyers, suppliers, harvests + sales, breeding, crop activities, consumables + stock movements, tasks, schedules, categories, segments, users, tags) plus a `Meta` sheet with format version and per-sheet counts. Data fetched uncapped via `BackupService.collectFullBackup()`; excludes soft-deleted docs and timeline audit arrays.
 - `exportLoanDetailExcel()` — Single loan detail with 9 sheets: Overview, Deductions, Repayments, Utilization, Personal Withdrawals, Collateral, Rate Changes, Documents
 
 **WhatsApp:** Formatted summary sharing via WhatsApp share dialog.
 
 All exports use Indian Rupees (₹) formatting.
 
+### Automatic Daily Drive Backup
+
+**`backup-script/`** — Google Apps Script (runs in the owner's Google account, free tier) that backs up the entire Firestore database to a "FarmTracker Backups" Google Drive folder every evening at 6 PM IST: `farm-backup-YYYY-MM-DD.json` (lossless, includes soft-deleted docs, Firestore types preserved via `_ts`/`_ref` sentinels) + `.xlsx` (one tab per collection). 30-day retention, email alerts on failure/count drops/staleness. Setup: `backup-script/SETUP.md`.
+
 ### Import
 
-**`scripts/import-backup.js`** — Restores data from Excel backups. Auto-detects file type (transaction backup vs loan detail). Supports `--dry-run` flag. Handles all fields for round-trip re-import.
+**`scripts/import-backup.js`** — Restores data from Excel backups. Auto-detects file type (full backup v2 via `Meta` sheet, transaction backup v1, or loan detail). Supports `--dry-run` and `--skip-summaries` flags; rebuilds monthly/yearly summaries after import.
+**`scripts/verify-backup.js`** — Read-only round-trip check of a full backup file against live Firestore (or the emulator).
 
 ## Firestore Schema
 
