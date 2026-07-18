@@ -359,6 +359,11 @@ tr:hover .actions-cell button { opacity: 1; }
   gap: var(--space-2) var(--space-3);
   overflow: hidden;
   max-height: 500px;
+  // The outlined fields' floated label straddles the field's top border, so
+  // its upper half sits ~7px above the field box (more with OS font scaling)
+  // — without this padding the overflow:hidden (needed for the collapse
+  // animation) clips the label's top half.
+  padding-top: 10px;
   transition: max-height var(--transition-normal), opacity var(--transition-normal), padding var(--transition-normal);
   opacity: 1;
 }
@@ -389,7 +394,8 @@ tr:hover .actions-cell button { opacity: 1; }
 
 // ── Shared form layout ─────────────────────────────────────
 // Dialogs use .form-grid (2-col grid); page forms use .form-row (flex pair).
-// Both collapse to a single column at 640px.
+// Both collapse to a single column on mobile (same 768px cutoff as the
+// rest of the mobile chrome — see note on the table block below).
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -420,7 +426,7 @@ tr:hover .actions-cell button { opacity: 1; }
   margin: var(--space-2) 0;
   font-size: var(--font-sm);
 }
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .form-grid { grid-template-columns: 1fr; }
   .form-row { flex-direction: column; gap: 0; }
 }
@@ -449,7 +455,10 @@ tr:hover .actions-cell button { opacity: 1; }
 }
 
 // ── Mobile table improvements ──────────────────────────────
-@media (max-width: 640px) {
+// Single mobile cutoff: 768px, same as the bottom-nav/mobile-chrome
+// breakpoint — no narrower sub-breakpoints, so every device that gets
+// mobile chrome also gets the tidy tables and single-column forms.
+@media (max-width: 768px) {
   .data-table {
     th { padding: 8px; font-size: 0.65rem; letter-spacing: 0; }
     // Keep every row a single tidy line; long cells ellipsize and the

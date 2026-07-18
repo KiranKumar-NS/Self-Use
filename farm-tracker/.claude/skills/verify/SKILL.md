@@ -27,6 +27,17 @@ page in Puppeteer — re-navigate and re-inject per viewport. A working script
 lives in past session scratchpads as `page-mock.js`.
 
 ## Gotchas
+- The firebase.json CSP (`script-src` without `unsafe-inline`) blocks Angular's
+  critical-CSS trick (`<link media="print" onload="this.media='all'">`), which
+  silently drops ALL global styles.css rules in production while localhost looks
+  fine. `inlineCritical: false` is set in angular.json production optimization —
+  never re-enable it while the CSP stands. After deploys, curl the live index
+  and confirm the stylesheet `<link>` has NO `media="print"` attribute.
+- Local serving of dist does NOT send the firebase.json headers (CSP etc.) —
+  production-only breakage like the above is invisible in local verification;
+  spot-check the live site after deploying header or index-structure changes.
+- Mobile styling uses a single 768px cutoff (matches bottom nav) — don't
+  introduce narrower sub-breakpoints (640px/600px) for mobile treatments.
 - Angular Material 21 M3 theme tokens are named `--mat-card-*` (NOT `--mdc-*`);
   the theme tints card surfaces lavender (#f8f2f6) — styles.scss forces white.
 - All components use inline templates/styles; global CSS is the single `src/styles.scss` → compiled to `styles-*.css` in dist.

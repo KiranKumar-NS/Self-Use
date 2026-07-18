@@ -93,7 +93,25 @@
       "Bash(node \"C:\\\\Users\\\\Admin\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--kk-self-use-repo-farm-tracker\\\\98f462a5-c9cc-4570-a778-f5b000497398\\\\scratchpad\\\\spa-server.js\")",
       "Edit(/.claude/skills/verify/**)",
       "Bash(node table-repro-check.js)",
-      "Bash(node page-mock.js before)"
+      "Bash(node page-mock.js before)",
+      "PowerShell(node scripts\\\\clean-db.js all --yes)",
+      "Bash(curl -sI \"https://farm-tracker-tn70.web.app/index.html\")",
+      "Bash(curl -s https://farm-tracker-tn70.web.app/index.html)",
+      "Bash(curl -s https://farm-tracker-tn70.web.app/ngsw.json)",
+      "Bash(grep -o \"max-width:768px[^{]*{[^@]\\\\{0,400\\\\}\" dist/farm-tracker/browser/styles-OUM5TQTP.css)",
+      "Bash(curl -s https://farm-tracker-tn70.web.app/styles-OUM5TQTP.css)",
+      "Bash(grep -o \"@media\\(max-width:768px\\){[^@]\\\\{0,80\\\\}\")",
+      "Bash(curl -sI https://farm-tracker-tn70.web.app/styles-OUM5TQTP.css)",
+      "Bash(curl -s https://farm-tracker-tn70.web.app/)",
+      "Bash(curl -sI https://farm-tracker-tn70.web.app/ngsw.json)",
+      "Read(//c/Users/Admin/AppData/Local/Temp/claude/d--kk-self-use-repo-farm-tracker/**)",
+      "Bash(node spa-server.js)",
+      "Bash(node label-check.js)",
+      "Bash(node real-float.js)",
+      "Bash(node -e ' *)",
+      "PowerShell($c = Get-NetTCPConnection -LocalPort 8124 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { Stop-Process -Id $c.OwningProcess -Force -Confirm:$false; \"killed spa-server pid $\\($c.OwningProcess\\)\" } else { \"no listener on 8124\" })",
+      "Bash(git check-ignore *)",
+      "Bash(awk '{print $5, $9}')"
     ]
   }
 }
