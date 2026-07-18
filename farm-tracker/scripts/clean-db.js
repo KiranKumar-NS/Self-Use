@@ -24,18 +24,27 @@
  * USAGE
  * ────────────────────────────────────────────────────────────
  *
- *   node scripts/clean-db.js <command>
+ *   node scripts/clean-db.js <command> [--yes]
  *
  * Commands:
  *
- *   all           - Delete transactions, loans, tasks, inventory & summaries
- *                   (keeps users, segments, categories safe)
+ *   all           - Delete ALL data collections: transactions, loans, tasks,
+ *                   inventory events, animals, harvests, breeding records,
+ *                   crop activities, schedules, monthly & yearly summaries.
+ *                   Keeps users, segments, categories, buyers, suppliers and
+ *                   inventoryItems (consumable masters) but resets their
+ *                   denormalized counters/stock/movements and clears meta/tags.
  *
- *   transactions  - Delete all transactions + monthly summaries
+ *   transactions  - Delete all transactions + monthly/yearly summaries
  *   loans         - Delete all loans and their repayment subcollections
  *   tasks         - Delete all tasks
  *   inventory     - Delete all inventory events (resets stock via segments)
- *   summaries     - Delete all monthly summary documents
+ *   summaries     - Delete all monthly & yearly summary documents
+ *   status        - Read-only: print document counts per collection
+ *
+ * Flags:
+ *
+ *   --yes         - Skip the interactive confirmation prompt
  *
  * ────────────────────────────────────────────────────────────
  * EXAMPLES
@@ -54,15 +63,25 @@
  * COLLECTIONS IN THE DATABASE
  * ────────────────────────────────────────────────────────────
  *
- *   users             - User profiles (uid, email, role, segments)
- *   segments          - Business segments (goats, chickens, dragon) + currentStock + budgets
- *   categories        - Transaction categories (Feed, Medicine, Milk, etc.)
+ *   users             - User profiles (uid, email, role, segments)        [kept]
+ *   segments          - Business segments + currentStock + budgets       [kept, stock reset]
+ *   categories        - Transaction categories (Feed, Medicine, Milk...)  [kept]
+ *   buyers            - Buyer master + denormalized stats                 [kept, stats reset]
+ *   suppliers         - Supplier master + denormalized stats              [kept, stats reset]
+ *   inventoryItems    - Consumable item masters + embedded movements      [kept, movements/stock reset]
+ *   meta/tags         - Single doc {all: string[]} of transaction tags    [kept, reset to []]
  *   transactions      - All expense and income records (with inline timeline)
  *   tasks             - Task records
  *   loans             - Owe & Lent records (with inline timeline)
  *     └─ repayments   - Subcollection: repayment history + disbursements per loan
  *   inventoryEvents   - Inventory events (birth, death, purchase, sale, adjustment)
+ *   animals           - Individual animal records
+ *   harvests          - Harvest records (with embedded sales)
+ *   breedingRecords   - Breeding records
+ *   cropActivities    - Crop activity records
+ *   schedules         - Recurring schedules/reminders
  *   monthlySummaries  - Precomputed monthly totals per segment
+ *   yearlySummaries   - Precomputed yearly totals per segment
  *
  * ────────────────────────────────────────────────────────────
  * SAFETY NOTES
@@ -99,21 +118,27 @@ try {
 const db = admin.firestore();
 
 // ── Parse Arguments ────────────────────────────────────────
-const command = process.argv[2];
+const args = process.argv.slice(2);
+const skipConfirm = args.includes('--yes');
+const command = args.filter((a) => a !== '--yes')[0];
 
-const VALID_COMMANDS = ['all', 'transactions', 'loans', 'tasks', 'inventory', 'summaries'];
+const VALID_COMMANDS = ['all', 'transactions', 'loans', 'tasks', 'inventory', 'summaries', 'status'];
 
 if (!command || !VALID_COMMANDS.includes(command)) {
   console.error('');
-  console.error('Usage: node scripts/clean-db.js <command>');
+  console.error('Usage: node scripts/clean-db.js <command> [--yes]');
   console.error('');
   console.error('Commands:');
-  console.error('  all           - Delete transactions, loans, tasks, inventory & summaries (keeps users/segments/categories)');
+  console.error('  all           - Delete all data collections (keeps users/segments/categories/buyers/suppliers/inventoryItems, resets their counters)');
   console.error('  transactions  - Delete all transactions and summaries');
   console.error('  loans         - Delete all loans and repayments');
   console.error('  tasks         - Delete all tasks');
   console.error('  inventory     - Delete all inventory events and reset stock counts');
-  console.error('  summaries     - Delete all monthly summaries');
+  console.error('  summaries     - Delete all monthly & yearly summaries');
+  console.error('  status        - Read-only: print document counts per collection');
+  console.error('');
+  console.error('Flags:');
+  console.error('  --yes         - Skip the confirmation prompt');
   console.error('');
   process.exit(1);
 }
@@ -121,6 +146,10 @@ if (!command || !VALID_COMMANDS.includes(command)) {
 // ── Helper Functions ───────────────────────────────────────
 
 async function confirm(message) {
+  if (skipConfirm) {
+    console.log(`${message} (yes/no): yes [--yes flag]`);
+    return true;
+  }
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
     rl.question(`${message} (yes/no): `, (answer) => {
@@ -199,6 +228,92 @@ async function resetSegmentStock() {
   }
 }
 
+async function resetBuyerStats() {
+  const snapshot = await db.collection('buyers').get();
+  if (snapshot.empty) {
+    console.log('  buyers: none to reset');
+    return;
+  }
+  const batch = db.batch();
+  snapshot.docs.forEach((doc) => {
+    batch.update(doc.ref, {
+      totalPurchases: 0,
+      totalAmountPaid: 0,
+      purchasesBySegment: {},
+      amountBySegment: {},
+      averageRate: admin.firestore.FieldValue.delete(),
+      lastPurchaseDate: admin.firestore.FieldValue.delete(),
+    });
+  });
+  await batch.commit();
+  console.log(`  buyers: ${snapshot.size} stat counters reset`);
+}
+
+async function resetSupplierStats() {
+  const snapshot = await db.collection('suppliers').get();
+  if (snapshot.empty) {
+    console.log('  suppliers: none to reset');
+    return;
+  }
+  const batch = db.batch();
+  snapshot.docs.forEach((doc) => {
+    batch.update(doc.ref, {
+      totalOrders: 0,
+      totalAmountPaid: 0,
+      pendingAmount: 0,
+      ordersBySegment: {},
+      amountBySegment: {},
+      averageRate: admin.firestore.FieldValue.delete(),
+      lastOrderDate: admin.firestore.FieldValue.delete(),
+    });
+  });
+  await batch.commit();
+  console.log(`  suppliers: ${snapshot.size} stat counters reset`);
+}
+
+async function resetInventoryItems() {
+  const snapshot = await db.collection('inventoryItems').get();
+  if (snapshot.empty) {
+    console.log('  inventoryItems: none to reset');
+    return;
+  }
+  const batch = db.batch();
+  snapshot.docs.forEach((doc) => {
+    batch.update(doc.ref, {
+      movements: [],
+      currentStock: 0,
+      totalPurchased: 0,
+      totalUsed: 0,
+      totalWastage: 0,
+      totalSpent: 0,
+      lastPurchaseRate: admin.firestore.FieldValue.delete(),
+      averagePurchaseRate: admin.firestore.FieldValue.delete(),
+    });
+  });
+  await batch.commit();
+  console.log(`  inventoryItems: ${snapshot.size} items reset (movements cleared, stock 0)`);
+}
+
+async function resetTags() {
+  await db.doc('meta/tags').set({ all: [] });
+  console.log('  meta/tags: reset to []');
+}
+
+async function printStatus() {
+  const collections = [
+    'users', 'segments', 'categories', 'buyers', 'suppliers', 'inventoryItems',
+    'transactions', 'loans', 'tasks', 'inventoryEvents', 'animals', 'harvests',
+    'breedingRecords', 'cropActivities', 'schedules', 'monthlySummaries', 'yearlySummaries',
+  ];
+  for (const name of collections) {
+    const count = (await db.collection(name).count().get()).data().count;
+    console.log(`  ${name.padEnd(18)} ${count}`);
+  }
+  const tagsDoc = await db.doc('meta/tags').get();
+  const tagCount = tagsDoc.exists ? (tagsDoc.data().all || []).length : 0;
+  console.log(`  ${'meta/tags'.padEnd(18)} ${tagCount} tags`);
+}
+
 // ── Main Execution ─────────────────────────────────────────
 
 async function run() {
@@ -208,9 +323,11 @@ async function run() {
 
   switch (command) {
     case 'all': {
-      console.log('This will delete all transactions, loans, tasks, inventory & summaries.');
-      console.log('Users, segments, and categories will NOT be deleted.');
-      console.log('(Segment stock counts will be reset to 0)');
+      console.log('This will delete: transactions, loans+repayments, tasks, inventory events,');
+      console.log('animals, harvests, breeding records, crop activities, schedules,');
+      console.log('monthly & yearly summaries.');
+      console.log('Kept (with counters reset): users, segments, categories, buyers, suppliers,');
+      console.log('inventoryItems, meta/tags.');
       const ok = await confirm('Proceed?');
       if (!ok) {
         console.log('Cancelled.');
@@ -222,20 +339,33 @@ async function run() {
       await deleteCollectionWithSubcollections('loans', 'repayments');
       await deleteCollection('tasks');
       await deleteCollection('inventoryEvents');
+      await deleteCollection('animals');
+      await deleteCollection('harvests');
+      await deleteCollection('breedingRecords');
+      await deleteCollection('cropActivities');
+      await deleteCollection('schedules');
       await deleteCollection('monthlySummaries');
-      await resetSegmentStock();
+      await deleteCollection('yearlySummaries');
       console.log('');
-      console.log('Done. Users, segments, and categories are preserved.');
+      console.log('Resetting reference-data counters...');
+      await resetSegmentStock();
+      await resetBuyerStats();
+      await resetSupplierStats();
+      await resetInventoryItems();
+      await resetTags();
+      console.log('');
+      console.log('Done. Users, segments, categories, buyers, suppliers and inventoryItems are preserved.');
       break;
     }
 
     case 'transactions': {
-      const ok = await confirm('Delete all transactions and monthly summaries?');
+      const ok = await confirm('Delete all transactions and monthly/yearly summaries?');
       if (!ok) { console.log('Cancelled.'); process.exit(0); }
       console.log('');
       console.log('Deleting transactions and summaries...');
       await deleteCollection('transactions');
       await deleteCollection('monthlySummaries');
+      await deleteCollection('yearlySummaries');
       console.log('Done.');
       break;
     }
@@ -272,12 +402,19 @@ async function run() {
     }
 
     case 'summaries': {
-      const ok = await confirm('Delete all monthly summaries?');
+      const ok = await confirm('Delete all monthly & yearly summaries?');
       if (!ok) { console.log('Cancelled.'); process.exit(0); }
       console.log('');
-      console.log('Deleting monthly summaries...');
+      console.log('Deleting summaries...');
       await deleteCollection('monthlySummaries');
+      await deleteCollection('yearlySummaries');
       console.log('Done.');
+      break;
+    }
+
+    case 'status': {
+      console.log('Document counts:');
+      await printStatus();
       break;
     }
 
