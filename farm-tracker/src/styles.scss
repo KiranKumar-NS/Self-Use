@@ -33,6 +33,24 @@ html {
   @include mat.all-component-themes($theme);
 }
 
+// M3 gives cards a lavender-tinted surface that clashes with the app's
+// slate/white tokens — force clean white surfaces everywhere.
+html {
+  --mat-card-elevated-container-color: var(--color-surface);
+  --mat-card-filled-container-color: var(--color-surface);
+  --mat-card-outlined-container-color: var(--color-surface);
+}
+mat-card, .mat-mdc-card {
+  --mdc-elevated-card-container-color: var(--color-surface);
+  --mdc-outlined-card-container-color: var(--color-surface);
+  background: var(--color-surface) !important;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border-light);
+}
+mat-dialog-container .mdc-dialog__surface {
+  background: var(--color-surface) !important;
+}
+
 // ── Breakpoint convention ──────────────────────────────────
 // Media queries cannot read CSS custom properties, so breakpoints are a
 // documented convention. Use ONLY these four:
@@ -128,6 +146,8 @@ html {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
   margin-bottom: 1.5rem;
 
   h1 {
@@ -539,16 +559,15 @@ button:active:not(:disabled) {
 }
 
 // ── Touch-friendly targets on mobile / touch devices ─────
+// Scoped to primary actions only — a blanket min-height on every Material
+// button inflates compact card/pagination/dialog buttons and eats the
+// spacing between them.
 @media (max-width: 768px), (pointer: coarse) {
-  .mat-mdc-button,
-  .mat-mdc-raised-button,
-  .mat-mdc-outlined-button,
-  .mat-mdc-unelevated-button {
+  .page-header .mat-mdc-unelevated-button,
+  .page-header .mat-mdc-raised-button,
+  form .form-actions .mat-mdc-unelevated-button,
+  mat-dialog-actions .mat-mdc-unelevated-button {
     min-height: 44px;
-  }
-  .mat-mdc-icon-button {
-    --mdc-icon-button-state-layer-size: 44px;
-    padding: 10px;
   }
 }
 
