@@ -225,10 +225,7 @@ export class SaleDialogComponent implements OnInit {
         countSold: this.countSold(),
       });
 
-      // 4. Update buyer stats
-      if (resolvedBuyerId && resolvedBuyerId !== '__new__') {
-        await this.buyerService.updateStats(resolvedBuyerId, this.salePrice, this.countSold(), this.saleDate, this.data.animal.segment);
-      }
+      // Buyer stats are updated by TransactionService.create (linkedBuyerId)
 
       this.segmentService.clearCache();
       this.dialogRef.close(true);

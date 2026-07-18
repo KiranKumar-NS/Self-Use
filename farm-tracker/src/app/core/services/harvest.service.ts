@@ -7,7 +7,6 @@ import { Harvest, HarvestSaleEntry } from '../models/harvest.model';
 import { Transaction, TransactionFormData, IncomePaymentStatus } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 import { TransactionService } from './transaction.service';
-import { BuyerService } from './buyer.service';
 import { getMonthString, getYear } from '../utils/date.utils';
 
 @Injectable({ providedIn: 'root' })
@@ -15,7 +14,6 @@ export class HarvestService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
   private transactionService = inject(TransactionService);
-  private buyerService = inject(BuyerService);
 
   private get ref() { return collection(this.firestore, 'harvests'); }
 
@@ -132,12 +130,8 @@ export class HarvestService {
       txnData.linkedBuyerId = saleData.buyerId;
       txnData.linkedBuyerName = saleData.buyerName;
     }
+    // Buyer stats are updated by TransactionService.create (linkedBuyerId)
     const txnId = await this.transactionService.create(txnData);
-
-    // Update buyer stats
-    if (saleData.buyerId) {
-      await this.buyerService.updateStats(saleData.buyerId, totalAmount, saleData.quantity, saleDate, harvest.segment);
-    }
 
     // Update harvest
     const saleEntry: HarvestSaleEntry = {

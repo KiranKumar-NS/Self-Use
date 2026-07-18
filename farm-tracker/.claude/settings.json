@@ -57,6 +57,8 @@
       "Bash(firebase use *)",
       "Skill(code-review)",
       "Skill(code-review:*)",
+      "Skill(schema)",
+      "Skill(schema:*)",
       "Bash(ls -la \"C:/Users/Admin/.claude/CLAUDE.md\" \"d:/kk/self-use-repo/CLAUDE.md\" \"d:/kk/self-use-repo/farm-tracker/CLAUDE.md\" \"d:/kk/CLAUDE.md\" \"d:/CLAUDE.md\" 2>&1; echo \"---glob---\"; find \"d:/kk/self-use-repo/farm-tracker\" -maxdepth 3 -iname \"CLAUDE*.md\" 2>/dev/null)",
       "Read(//c/Users/Admin/.claude/**)",
       "PowerShell(git add firestore.indexes.json scripts/import-backup.js src/app/core/models/buyer.model.ts src/app/core/models/transaction.model.ts src/app/core/services/export.service.ts src/app/core/services/harvest.service.ts src/app/core/services/summary.service.ts src/app/core/services/supplier.service.ts src/app/core/services/transaction.service.ts src/app/core/services/dues.service.ts src/app/features/dues src/app/features/animals/sale-dialog/sale-dialog.component.ts src/app/features/buyers/buyer-detail/buyer-detail.component.ts src/app/features/buyers/buyer-list/buyer-list.component.ts src/app/features/harvests/harvest-sale-dialog/harvest-sale-dialog.component.ts src/app/features/suppliers/supplier-list/supplier-list.component.ts src/app/features/transactions/transaction-form/transaction-form.component.ts \".firebase/hosting.ZGlzdFxmYXJtLXRyYWNrZXJcYnJvd3Nlcg.cache\")",
@@ -80,7 +82,18 @@
       "Bash(node reconcile-summaries.js)",
       "Bash(curl -sI https://farm-tracker-tn70.web.app/)",
       "Bash(curl -sI https://farm-tracker-tn70.web.app/dues)",
-      "Bash(curl -sI \"https://farm-tracker-tn70.web.app/ngsw.json\")"
+      "Bash(curl -sI \"https://farm-tracker-tn70.web.app/ngsw.json\")",
+      "Read(//c/Program Files \\\\\\(x86\\\\\\)/Microsoft/Edge/Application/**)",
+      "Read(//c/Program Files/Google/Chrome/Application/**)",
+      "Read(//c/Program Files \\\\\\(x86\\\\\\)/Google/Chrome/Application/**)",
+      "Bash(npm i *)",
+      "Bash(npm init *)",
+      "Bash(npx http-server *)",
+      "Bash(node responsive-check.js)",
+      "Bash(node \"C:\\\\Users\\\\Admin\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--kk-self-use-repo-farm-tracker\\\\98f462a5-c9cc-4570-a778-f5b000497398\\\\scratchpad\\\\spa-server.js\")",
+      "Edit(/.claude/skills/verify/**)",
+      "Bash(node table-repro-check.js)",
+      "Bash(node page-mock.js before)"
     ]
   }
 }

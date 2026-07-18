@@ -176,6 +176,9 @@ import { normalizeName } from '../../../core/utils/name.utils';
                     @if (txn.type === 'expense' && txn.expensePaymentStatus === 'pending') {
                       <span class="pay-status-chip credit">Credit</span>
                     }
+                    @if (txn.type === 'expense' && txn.linkedSaleTransactionId) {
+                      <span class="pay-status-chip sale-link" [title]="txn.linkedSaleLabel || 'Linked to sale'">Sale</span>
+                    }
                   </td>
                   <td>{{ txn.segmentName }}</td>
                   <td>{{ txn.categoryName }}</td>
@@ -307,6 +310,7 @@ import { normalizeName } from '../../../core/utils/name.utils';
     }
     .pay-status-chip.pending { background: var(--color-expense-bg); color: var(--color-expense); }
     .pay-status-chip.credit { background: var(--color-warning-light); color: var(--color-warning); }
+    .pay-status-chip.sale-link { background: var(--color-info-light); color: var(--color-info); }
 
     .load-more { text-align: center; padding: 1.5rem; }
     .load-more button { padding: 8px 24px; }

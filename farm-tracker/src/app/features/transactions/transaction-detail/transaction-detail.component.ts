@@ -159,6 +159,63 @@ import { DatePipe } from '@angular/common';
         </mat-card>
       }
 
+      <!-- Linked Sale (expense only) -->
+      @if (transaction()!.type === 'expense' && transaction()!.linkedSaleTransactionId) {
+        <h3 class="section-title">Linked Sale</h3>
+        <mat-card class="linked-card">
+          <a [routerLink]="['/transactions', transaction()!.linkedSaleTransactionId]" class="buyer-link">
+            <mat-icon>point_of_sale</mat-icon> {{ transaction()!.linkedSaleLabel || 'View sale' }}
+          </a>
+        </mat-card>
+      }
+
+      <!-- Selling Expenses (income only) -->
+      @if (transaction()!.type === 'income') {
+        <div class="dist-header">
+          <h3 class="section-title">Selling Expenses</h3>
+          @if (!auth.isViewer()) {
+            <button mat-stroked-button (click)="addSellingExpense()">
+              <mat-icon>add</mat-icon> Add Selling Expense
+            </button>
+          }
+        </div>
+        <mat-card class="dist-card">
+          @if (sellingExpenses().length > 0) {
+            <div class="selling-table">
+              @for (e of sellingExpenses(); track e.id) {
+                <div class="selling-row">
+                  <span class="selling-date">{{ e.date.toDate() | date:'dd MMM' }}</span>
+                  <span class="selling-desc">{{ e.categoryName }}@if (e.description) {<span class="selling-note"> — {{ e.description }}</span>}</span>
+                  @if (e.expensePaymentStatus === 'pending') {
+                    <span class="pay-status-badge pending">PENDING</span>
+                  }
+                  <span class="selling-amount">{{ e.amount | currencyInr }}</span>
+                  <a [routerLink]="['/transactions', e.id]" class="selling-view">View</a>
+                </div>
+              }
+            </div>
+            <div class="net-summary">
+              <div class="net-row"><span>Gross Sale</span><span>{{ transaction()!.amount | currencyInr }}</span></div>
+              <div class="net-row expense-line"><span>Selling Expenses</span><span>&minus; {{ sellingCosts() | currencyInr }}</span></div>
+              <div class="net-row total" [class.loss]="netRealization() < 0">
+                <span>Net Realization</span><span>{{ netRealization() | currencyInr }}</span>
+              </div>
+              @if (overDistributed()) {
+                <div class="over-warning">
+                  <mat-icon>warning</mat-icon>
+                  Distributed {{ totalDistributed() | currencyInr }} exceeds net realization of {{ netRealization() | currencyInr }}
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="dist-empty">
+              <mat-icon>info_outline</mat-icon>
+              <span>No selling expenses linked. Add petrol, transport, commission, market fees... to see net realization.</span>
+            </div>
+          }
+        </mat-card>
+      }
+
       <!-- Link to Animals button (expense, no linked animals yet) -->
       @if (transaction()!.type === 'expense' && !transaction()!.linkedAnimalIds?.length && !auth.isViewer()) {
         <div class="link-action">
@@ -284,6 +341,21 @@ import { DatePipe } from '@angular/common';
     .animal-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; background: var(--color-income-bg); color: var(--color-income); border-radius: 20px; font-size: 0.85rem; font-weight: 600; text-decoration: none; }
     .animal-chip mat-icon { font-size: 16px; width: 16px; height: 16px; }
     .buyer-link { display: inline-flex; align-items: center; gap: 6px; color: var(--color-primary); font-weight: 600; text-decoration: none; }
+    .selling-table { display: flex; flex-direction: column; }
+    .selling-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--color-bg-alt); font-size: 0.9rem; }
+    .selling-row:last-child { border-bottom: none; }
+    .selling-date { color: var(--color-text-secondary); min-width: 56px; }
+    .selling-desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .selling-note { color: var(--color-text-secondary); }
+    .selling-amount { font-weight: 600; color: var(--color-expense); white-space: nowrap; }
+    .selling-view { color: var(--color-primary); font-weight: 600; text-decoration: none; font-size: 0.85rem; }
+    .net-summary { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 2px solid var(--color-bg-alt); }
+    .net-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.95rem; }
+    .net-row.expense-line { color: var(--color-expense); }
+    .net-row.total { font-weight: 700; font-size: 1.05rem; color: var(--color-income); border-top: 1px solid var(--color-bg-alt); margin-top: 4px; padding-top: 8px; }
+    .net-row.total.loss { color: var(--color-expense); }
+    .over-warning { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 8px 12px; border-radius: 6px; background: var(--color-warning-light); color: var(--color-warning); font-size: 0.85rem; font-weight: 600; }
+    .over-warning mat-icon { font-size: 18px; width: 18px; height: 18px; }
     .link-action { margin-top: 1rem; }
     .audit-entry { padding: 12px 16px; border-bottom: 1px solid var(--color-bg-alt); font-size: 0.875rem; }
     .audit-time { color: var(--color-text-muted); margin-left: 8px; }
@@ -310,20 +382,49 @@ export class TransactionDetailComponent implements OnInit {
   auth = inject(AuthService);
 
   transaction = signal<Transaction | null>(null);
+  sellingExpenses = signal<Transaction[]>([]);
   loading = signal(true);
   marking = signal(false);
 
   private txnId = '';
 
-  async ngOnInit(): Promise<void> {
-    this.txnId = this.route.snapshot.params['id'];
-    await this.loadTransaction();
+  ngOnInit(): void {
+    // Subscribe (not snapshot): the expense's "Linked Sale" card navigates to
+    // another transaction id on this same route, which reuses the component.
+    this.route.params.subscribe(params => {
+      this.txnId = params['id'];
+      this.loadTransaction();
+    });
   }
 
   async loadTransaction(): Promise<void> {
     await safeLoad(this.loading, async () => {
-      this.transaction.set(await this.transactionService.getById(this.txnId));
+      const txn = await this.transactionService.getById(this.txnId);
+      this.transaction.set(txn);
+      this.sellingExpenses.set(
+        txn?.type === 'income' ? await this.transactionService.getLinkedSellingExpenses(this.txnId) : []
+      );
     }, this.toast);
+  }
+
+  sellingCosts(): number {
+    return this.sellingExpenses().reduce((s, t) => s + t.amount, 0);
+  }
+
+  netRealization(): number {
+    return (this.transaction()?.amount || 0) - this.sellingCosts();
+  }
+
+  totalDistributed(): number {
+    return (this.transaction()?.distributions || []).reduce((s, d) => s + d.amount, 0);
+  }
+
+  overDistributed(): boolean {
+    return this.totalDistributed() > this.netRealization();
+  }
+
+  addSellingExpense(): void {
+    this.router.navigate(['/transactions/new'], { queryParams: { saleTxnId: this.txnId } });
   }
 
   hasDistributions(): boolean {

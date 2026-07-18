@@ -319,6 +319,8 @@ async function importBackup(wb, dryRun) {
         linkedSupplierName: str(r['Linked Supplier Name']) || null,
         linkedHarvestId: str(r['Linked Harvest ID']) || null,
         linkedHarvestName: str(r['Linked Harvest Name']) || null,
+        linkedSaleTransactionId: str(r['Linked Sale Txn ID']) || null,
+        linkedSaleLabel: str(r['Linked Sale Label']) || null,
         month, year: txnDate.getFullYear(),
       }});
       count('expenses');

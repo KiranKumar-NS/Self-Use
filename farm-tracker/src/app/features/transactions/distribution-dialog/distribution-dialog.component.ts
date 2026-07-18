@@ -37,9 +37,17 @@ interface DistributionRow {
     </h2>
 
     <mat-dialog-content>
-      <div class="total-amount">
-        Total Income: <strong>{{ data.transaction.amount | currencyInr }}</strong>
-      </div>
+      @if (sellingCosts() > 0) {
+        <div class="total-amount">
+          <div class="amount-line">Gross Income: <strong>{{ data.transaction.amount | currencyInr }}</strong></div>
+          <div class="amount-line costs">Selling Expenses: <strong>&minus; {{ sellingCosts() | currencyInr }}</strong></div>
+          <div class="amount-line net">Distributable: <strong>{{ distributable() | currencyInr }}</strong></div>
+        </div>
+      } @else {
+        <div class="total-amount">
+          Total Income: <strong>{{ data.transaction.amount | currencyInr }}</strong>
+        </div>
+      }
 
       @if (loading()) {
         <p class="loading-text">Loading users...</p>
@@ -58,7 +66,7 @@ interface DistributionRow {
               <mat-form-field appearance="outline" class="amount-field">
                 <mat-label>Amount</mat-label>
                 <input matInput type="number" [(ngModel)]="row.amount"
-                  min="0" [max]="data.transaction.amount"
+                  min="0" [max]="distributable()"
                   (ngModelChange)="onAmountChange()" />
               </mat-form-field>
             </div>
@@ -99,6 +107,9 @@ interface DistributionRow {
       background: var(--color-info-light); padding: 12px 16px; border-radius: 8px;
       font-size: 1.1rem; margin-bottom: 16px; color: var(--color-info);
     }
+    .amount-line { font-size: 0.95rem; padding: 2px 0; }
+    .amount-line.costs { color: var(--color-expense); }
+    .amount-line.net { font-size: 1.1rem; border-top: 1px solid rgba(0,0,0,0.1); margin-top: 4px; padding-top: 6px; }
     .loading-text { text-align: center; color: var(--color-text-secondary); padding: 2rem; }
     .dist-rows { display: flex; flex-direction: column; gap: 8px; }
     .dist-row {
@@ -145,10 +156,20 @@ export class DistributionDialogComponent implements OnInit {
   error = signal('');
   totalDistributed = signal(0);
   remaining = signal(0);
+  sellingCosts = signal(0);
+
+  /** Distributable amount = gross income minus linked selling expenses (net realization). */
+  distributable(): number {
+    return this.data.transaction.amount - this.sellingCosts();
+  }
 
   async ngOnInit(): Promise<void> {
     await safeLoad(this.loading, async () => {
-      const users = await this.userService.getAll();
+      const [users, linkedExpenses] = await Promise.all([
+        this.userService.getAll(),
+        this.transactionService.getLinkedSellingExpenses(this.data.transaction.id),
+      ]);
+      this.sellingCosts.set(linkedExpenses.reduce((s, t) => s + t.amount, 0));
       const activeUsers = users.filter(u => u.isActive);
       const existing = this.data.transaction.distributions || [];
 
@@ -173,7 +194,7 @@ export class DistributionDialogComponent implements OnInit {
   onAmountChange(): void {
     const total = this.rows().reduce((s, r) => s + (r.amount || 0), 0);
     this.totalDistributed.set(total);
-    this.remaining.set(this.data.transaction.amount - total);
+    this.remaining.set(this.distributable() - total);
   }
 
   async save(): Promise<void> {

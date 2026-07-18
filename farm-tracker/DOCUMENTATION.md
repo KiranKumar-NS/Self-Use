@@ -178,6 +178,10 @@ Birth/death/purchase/sale/adjustment events. Count: positive (add) or negative (
 
 Name, phone, location, note. Denormalized stats auto-updated on sales: totalPurchases, totalAmountPaid, averageRate, lastPurchaseDate, purchasesBySegment (count), amountBySegment (amount). Buyer detail page with purchase history.
 
+### Dues `/dues`
+
+Per-counterparty pending payments (receivables from buyers/customers, payables to suppliers). **Computed live — no `dues` collection, no counters** (deliberate, to avoid counter drift across write paths). `DuesService.getReceivables()` queries pending income (`type=income, paymentStatus=pending`); `getPayables()` queries pending credit expenses (`type=expense, expensePaymentStatus=pending`, excludes loan-linked). Groups by counterparty (`linkedBuyerId`/`linkedSupplierId`, else name, else `paidBy`), nets out partial payments via `pendingRemaining()` (exported from `transaction.model.ts` — the single source of truth for outstanding amounts), computes aging (`oldestDays`, `overdueCount`). Dashboard alerts via `due_receivable`/`due_payable` notification types.
+
 ### Tasks `/tasks`
 
 Kanban board: backlog → todo → in_progress → done. Priority: low/medium/high/urgent. Assignee, due dates, subtasks (with individual completion and optional due dates). Tags. Visibility: shared (all users) or personal (creator only). Drag-drop via Angular CDK. Desktop: Kanban columns. Mobile: tab view. Filter: All Tasks vs My Tasks. kanbanOrder for column sorting.
@@ -352,6 +356,7 @@ Same fields as monthlySummaries, aggregated annually.
 | `/harvests`, `/harvests/:id` | Admin, Manager |
 | `/consumables` | Admin, Manager |
 | `/suppliers` | Admin, Manager |
+| `/dues` | Admin, Manager |
 | `/tasks` | All authenticated |
 | `/admin`, `/admin/register`, `/admin/data-setup` | Admin only |
 | `/auth/login`, `/auth/forgot-password` | Public |
@@ -395,7 +400,15 @@ Guards: `authGuard` (login + active check), `roleGuard(roles)`, `unsavedChangesG
 
 **NotificationService** — In-memory alerts. Loan overdue/due-soon, task overdue, budget warning/exceeded, recurring due, reminder due/upcoming, low stock, delivery expected. localStorage dismissals.
 
-**SummaryService** — Query monthly/yearly summaries. Aggregation helpers. Batched multi-month queries.
+**SummaryService** — Query monthly/yearly summaries. Aggregation helpers. Batched multi-month queries. 5-min cache, cleared by every summary-touching write.
+
+**SummaryReconciliationService** — Admin repair tool (not part of the normal write path). `reconcileAll()` recomputes all monthly/yearly summaries from raw transactions and heals drift (deletes orphaned summary docs). `reconcileCounterparties()` recomputes buyer/supplier denormalized stats. Mirrored by `scripts/reconcile-summaries.js`. If a new field feeds summary math, reconciliation must be updated too.
+
+**DuesService** — Read-only computed receivables/payables (see Dues feature). No Firestore writes.
+
+**BackupService** — `collectFullBackup()` fetches every persisted collection uncapped for the v2 Excel backup (28 sheets + Meta). Excludes soft-deleted docs and timeline arrays.
+
+**TagService** — Maintains the `meta/tags` single doc (`{all: string[]}`) for transaction tag autocomplete.
 
 **ExportService** — PDF (transactions report, loan summary, loan detail). CSV (transactions, loans). Excel (multi-sheet backup, loan detail with 9 sheets). WhatsApp formatting. All INR.
 
@@ -438,6 +451,8 @@ Guards: `authGuard` (login + active check), `roleGuard(roles)`, `unsavedChangesG
 **`scripts/clean-db.js`** — Database cleanup/reset. Commands: `all` (full reset), `transactions`, `loans`, `audit`, `summaries`, `seed`. Includes confirmation prompts.
 
 **`scripts/import-backup.js`** — Restore from Excel exports. Auto-detects transaction backup vs loan detail. `--dry-run` flag supported.
+
+**`scripts/reconcile-summaries.js`** — Rebuilds monthly/yearly summaries from raw transactions (mirrors SummaryReconciliationService). `--apply` to write corrections.
 
 ## Testing
 

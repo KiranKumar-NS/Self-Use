@@ -20,6 +20,7 @@ import {
 import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatus, ExpensePaymentStatus, pendingRemaining } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 import { SummaryService } from './summary.service';
+import { BuyerService } from './buyer.service';
 import { appendTimelineCapped } from '../utils/timeline.utils';
 
 @Injectable({ providedIn: 'root' })
@@ -27,6 +28,28 @@ export class TransactionService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
   private summaryService = inject(SummaryService);
+  private buyerService = inject(BuyerService);
+
+  /**
+   * Keep buyer purchase counters in sync with income transactions
+   * (units = quantity || 1, matching counterparty reconciliation).
+   * Failures are swallowed: the transaction write already succeeded and
+   * reconciliation self-heals counter drift.
+   */
+  private async adjustBuyerStats(
+    buyerId: string | null | undefined,
+    amountDelta: number,
+    countDelta: number,
+    date: Date | null,
+    segment: string,
+  ): Promise<void> {
+    if (!buyerId) return;
+    try {
+      await this.buyerService.updateStats(buyerId, amountDelta, countDelta, date, segment);
+    } catch (err) {
+      console.error('Failed to update buyer stats', err);
+    }
+  }
 
   /** Build a unique summary key per person. Custom "other" names get normalized and sanitized. */
   private personSummaryKey(paidBy: string | null | undefined, paidByName: string | null | undefined, fallbackUid: string): string {
@@ -190,6 +213,10 @@ export class TransactionService {
       txnDoc['linkedHarvestId'] = data.linkedHarvestId;
       txnDoc['linkedHarvestName'] = data.linkedHarvestName || null;
     }
+    if (data.linkedSaleTransactionId) {
+      txnDoc['linkedSaleTransactionId'] = data.linkedSaleTransactionId;
+      txnDoc['linkedSaleLabel'] = data.linkedSaleLabel || null;
+    }
     if (data.tags?.length) txnDoc['tags'] = data.tags;
 
     if (data.type === 'income') {
@@ -231,16 +258,22 @@ export class TransactionService {
 
     await batch.commit();
     this.summaryService.clearCache();
+
+    if (data.type === 'income' && data.linkedBuyerId) {
+      await this.adjustBuyerStats(data.linkedBuyerId, data.amount, data.quantity || 1, data.date, data.segment);
+    }
     return txnRef.id;
   }
 
   async update(id: string, data: TransactionFormData): Promise<void> {
     const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', id);
+    let capturedOld: Transaction | undefined;
 
     await runTransaction(this.firestore, async (transaction) => {
       const oldDoc = await transaction.get(txnRef);
       const oldData = oldDoc.data() as Transaction;
+      capturedOld = oldData;
 
       // Block edit of linked loan transactions
       if (oldData.linkedLoanId) {
@@ -301,6 +334,12 @@ export class TransactionService {
         : (keepIncomeHarvestLink ? (oldData.linkedHarvestName || null) : null);
       if ((oldData.linkedHarvestId || null) !== newHarvestId) {
         changesList.push(`harvest: ${oldData.linkedHarvestName || 'none'}→${newHarvestName || 'none'}`);
+      }
+      // Sale link: expense-only, form-managed
+      const newSaleId = data.type === 'expense' ? (data.linkedSaleTransactionId || null) : null;
+      const newSaleLabel = data.type === 'expense' ? (data.linkedSaleLabel || null) : null;
+      if ((oldData.linkedSaleTransactionId || null) !== newSaleId) {
+        changesList.push(`linked sale: ${oldData.linkedSaleLabel || 'none'}→${newSaleLabel || 'none'}`);
       }
       const changesStr = changesList.length > 0 ? changesList.join(', ') : 'details updated';
 
@@ -519,6 +558,8 @@ export class TransactionService {
         linkedSupplierName: data.type === 'expense' ? (data.linkedSupplierName || null) : null,
         linkedHarvestId: newHarvestId,
         linkedHarvestName: newHarvestName,
+        linkedSaleTransactionId: newSaleId,
+        linkedSaleLabel: newSaleLabel,
         quantity: data.quantity || null,
         unit: data.unit || null,
         ratePerUnit: data.ratePerUnit || null,
@@ -542,15 +583,37 @@ export class TransactionService {
       transaction.update(txnRef, txnUpdates);
     });
     this.summaryService.clearCache();
+
+    // Re-sync buyer counters when the buyer-facing contribution changed
+    if (capturedOld) {
+      const oldBuyerId = capturedOld.type === 'income' ? (capturedOld.linkedBuyerId || null) : null;
+      const newBuyerId = data.type === 'income' ? (data.linkedBuyerId || null) : null;
+      const oldUnits = capturedOld.quantity || 1;
+      const newUnits = data.quantity || 1;
+      const unchanged = oldBuyerId === newBuyerId
+        && capturedOld.amount === data.amount
+        && oldUnits === newUnits
+        && capturedOld.segment === data.segment;
+      if (!unchanged) {
+        if (oldBuyerId) {
+          await this.adjustBuyerStats(oldBuyerId, -capturedOld.amount, -oldUnits, null, capturedOld.segment);
+        }
+        if (newBuyerId) {
+          await this.adjustBuyerStats(newBuyerId, data.amount, newUnits, data.date, data.segment);
+        }
+      }
+    }
   }
 
   async softDelete(id: string): Promise<void> {
     const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', id);
+    let capturedOld: Transaction | undefined;
 
     await runTransaction(this.firestore, async (transaction) => {
       const oldDoc = await transaction.get(txnRef);
       const oldData = oldDoc.data() as Transaction;
+      capturedOld = oldData;
 
       // Block delete of linked loan transactions
       if (oldData.linkedLoanId) {
@@ -589,14 +652,20 @@ export class TransactionService {
       });
     });
     this.summaryService.clearCache();
+
+    if (capturedOld?.type === 'income' && capturedOld.linkedBuyerId) {
+      await this.adjustBuyerStats(capturedOld.linkedBuyerId, -capturedOld.amount, -(capturedOld.quantity || 1), null, capturedOld.segment);
+    }
   }
 
   async hardDelete(id: string): Promise<void> {
     const txnRef = doc(this.firestore, 'transactions', id);
+    let capturedOld: Transaction | undefined;
 
     await runTransaction(this.firestore, async (transaction) => {
       const oldDoc = await transaction.get(txnRef);
       const oldData = oldDoc.data() as Transaction;
+      capturedOld = oldData;
 
       // Block delete of linked loan transactions
       if (oldData.linkedLoanId) {
@@ -627,11 +696,20 @@ export class TransactionService {
       transaction.delete(txnRef);
     });
     this.summaryService.clearCache();
+
+    if (capturedOld?.type === 'income' && capturedOld.linkedBuyerId) {
+      await this.adjustBuyerStats(capturedOld.linkedBuyerId, -capturedOld.amount, -(capturedOld.quantity || 1), null, capturedOld.segment);
+    }
   }
 
   async updateDistribution(transactionId: string, distributions: DistributionEntry[]): Promise<void> {
     const user = this.authService.requireUser();
     const txnRef = doc(this.firestore, 'transactions', transactionId);
+
+    // Linked selling costs cap the distributable amount at net realization.
+    // Queried outside runTransaction (queries aren't allowed inside Firestore transactions).
+    const sellingCosts = (await this.getLinkedSellingExpenses(transactionId))
+      .reduce((s, t) => s + t.amount, 0);
 
     await runTransaction(this.firestore, async (transaction) => {
       const oldDoc = await transaction.get(txnRef);
@@ -642,6 +720,10 @@ export class TransactionService {
 
       const totalDist = distributions.reduce((s, d) => s + d.amount, 0);
       if (totalDist > oldData.amount) throw new Error('Distribution exceeds income amount');
+      const distributable = oldData.amount - sellingCosts;
+      if (totalDist > distributable) {
+        throw new Error(`Distribution exceeds net realization of ₹${distributable.toLocaleString('en-IN')} (after selling expenses)`);
+      }
 
       // Filter out zero-amount entries
       const nonZero = distributions.filter(d => d.amount > 0);
@@ -921,5 +1003,38 @@ export class TransactionService {
     );
     const snapshot = await getDocs(q);
     return snapshot.docs.map((d) => d.data() as Transaction);
+  }
+
+  /** Recent income transactions, for the expense form's "Link to Sale" picker. */
+  async getRecentIncome(count = 25): Promise<Transaction[]> {
+    const q = query(
+      collection(this.firestore, 'transactions'),
+      where('isDeleted', '==', false),
+      where('type', '==', 'income'),
+      orderBy('date', 'desc'),
+      limit(count)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => d.data() as Transaction);
+  }
+
+  /** Expense transactions linked to a sale income txn (live query, no denormalized counters). */
+  async getLinkedSellingExpenses(saleTxnId: string): Promise<Transaction[]> {
+    const q = query(
+      collection(this.firestore, 'transactions'),
+      where('linkedSaleTransactionId', '==', saleTxnId),
+      where('isDeleted', '==', false),
+      orderBy('date', 'desc'),
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => d.data() as Transaction).filter(t => t.type === 'expense');
+  }
+
+  /** Display label stored as linkedSaleLabel on expenses, e.g. "19 Jul 2026 — Goat Sales ₹45,000 (Rahim Traders)" */
+  saleLabel(t: Pick<Transaction, 'date' | 'categoryName' | 'amount' | 'linkedBuyerName'>): string {
+    const d = t.date.toDate();
+    const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const base = `${dateStr} — ${t.categoryName} ₹${t.amount.toLocaleString('en-IN')}`;
+    return t.linkedBuyerName ? `${base} (${t.linkedBuyerName})` : base;
   }
 }

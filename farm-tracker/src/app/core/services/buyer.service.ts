@@ -92,7 +92,12 @@ export class BuyerService {
     return data.isDeleted ? null : data;
   }
 
-  async updateStats(buyerId: string, saleAmount: number, count: number, date: Date, segmentId?: string): Promise<void> {
+  /**
+   * Adjust buyer purchase counters. Deltas may be negative (reversal on
+   * transaction edit/delete). lastPurchaseDate only moves forward; backdated
+   * corrections are healed by counterparty reconciliation.
+   */
+  async updateStats(buyerId: string, saleAmount: number, count: number, date: Date | null, segmentId?: string): Promise<void> {
     const buyerRef = doc(this.firestore, 'buyers', buyerId);
 
     await runTransaction(this.firestore, async (transaction) => {
@@ -106,9 +111,11 @@ export class BuyerService {
       const updates: Record<string, any> = {
         totalPurchases: increment(count),
         totalAmountPaid: increment(saleAmount),
-        lastPurchaseDate: Timestamp.fromDate(date),
         averageRate: newTotalCount > 0 ? Math.round((newTotalAmount / newTotalCount) * 100) / 100 : 0,
       };
+      if (date && (!buyer.lastPurchaseDate || buyer.lastPurchaseDate.toMillis() < date.getTime())) {
+        updates['lastPurchaseDate'] = Timestamp.fromDate(date);
+      }
 
       // Track per-segment breakdown
       if (segmentId) {

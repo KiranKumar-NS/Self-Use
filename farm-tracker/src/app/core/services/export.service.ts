@@ -578,6 +578,8 @@ export class ExportService {
       'Linked Supplier Name': t.linkedSupplierName || '',
       'Linked Harvest ID': t.linkedHarvestId || '',
       'Linked Harvest Name': t.linkedHarvestName || '',
+      'Linked Sale Txn ID': t.linkedSaleTransactionId || '',
+      'Linked Sale Label': t.linkedSaleLabel || '',
       'Created By': t.createdBy,
       'Created By Name': t.createdByName,
       'Created At': tsIso(t.createdAt),

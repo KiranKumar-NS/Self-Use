@@ -77,6 +77,11 @@ export interface Transaction {
   linkedHarvestId?: string;
   linkedHarvestName?: string;
 
+  // Sale linkage (expense-only): points at the sale income transaction this
+  // selling cost (transport, commission, market fee...) belongs to
+  linkedSaleTransactionId?: string;
+  linkedSaleLabel?: string;
+
   // Freeform tags for ad-hoc grouping (e.g. "vaccination-drive", "eid-season")
   tags?: string[];
 
@@ -132,6 +137,8 @@ export interface TransactionFormData {
   linkedSupplierName?: string;
   linkedHarvestId?: string;
   linkedHarvestName?: string;
+  linkedSaleTransactionId?: string;
+  linkedSaleLabel?: string;
   tags?: string[];
   month: string;
   year: number;

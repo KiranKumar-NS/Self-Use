@@ -268,6 +268,22 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
           </div>
         }
 
+        <!-- Sale link (expense only) -->
+        @if (type === 'expense' && saleOptions().length > 0) {
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Link to Sale (optional)</mat-label>
+              <mat-select [(ngModel)]="linkedSaleTransactionId" name="linkedSaleTransactionId">
+                <mat-option value="">No sale</mat-option>
+                @for (s of saleOptions(); track s.id) {
+                  <mat-option [value]="s.id">{{ s.label }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Links this selling cost (petrol, commission, market fee...) to a sale for net realization</mat-hint>
+            </mat-form-field>
+          </div>
+        }
+
         <!-- Link to Animals (expense + animal segment) -->
         @if (type === 'expense' && isAnimalSegment()) {
           <div class="animal-link-section">
@@ -428,6 +444,8 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   linkedHarvestId = '';
   // label = display shown in dropdown (with quantity); name = stored as linkedHarvestName
   harvestOptions = signal<{ id: string; label: string; name: string }[]>([]);
+  linkedSaleTransactionId = '';
+  saleOptions = signal<{ id: string; label: string }[]>([]);
   filteredCategories = signal<Category[]>([]);
   filteredSegments = signal<Segment[]>([]);
 
@@ -456,13 +474,14 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   }
 
   private async loadFormData(): Promise<void> {
-    const [categories, segments, users, buyers, suppliers, harvests] = await Promise.all([
+    const [categories, segments, users, buyers, suppliers, harvests, recentIncome] = await Promise.all([
       this.categoryService.getAll(),
       this.segmentService.getAll(),
       this.userService.getAll(),
       this.buyerService.getAll(),
       this.supplierService.getAll(),
       this.harvestService.getAll({}, 30),
+      this.transactionService.getRecentIncome(25),
     ]);
 
     this.allCategories.set(categories);
@@ -471,6 +490,10 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
     this.buyers.set(buyers);
     this.suppliers.set(suppliers);
     this.harvestOptions.set(harvests.map(h => this.toHarvestOption(h)));
+    const editIdParam = this.route.snapshot.params['id'] || '';
+    this.saleOptions.set(recentIncome
+      .filter(t => !t.linkedLoanId && t.id !== editIdParam)
+      .map(t => ({ id: t.id, label: this.transactionService.saleLabel(t) })));
     this.paidBy = this.authService.currentUser()?.uid || '';
 
     // Load known custom names for duplicate detection
@@ -540,6 +563,12 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
             this.harvestOptions.update(list => [...list, { id: txn.linkedHarvestId!, label: name, name }]);
           }
         }
+        if (txn.type === 'expense' && txn.linkedSaleTransactionId) {
+          this.linkedSaleTransactionId = txn.linkedSaleTransactionId;
+          if (!this.saleOptions().some(o => o.id === txn.linkedSaleTransactionId)) {
+            this.saleOptions.update(list => [...list, { id: txn.linkedSaleTransactionId!, label: txn.linkedSaleLabel || 'Linked sale' }]);
+          }
+        }
         this.onTypeChange();
 
         // Load existing animal links
@@ -565,6 +594,23 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
           }
           this.onTypeChange();
           await this.loadActiveAnimals();
+        }
+      }
+
+      // "Add Selling Expense" from income detail: prefill type, sale link and segment
+      const saleTxnId = this.route.snapshot.queryParamMap.get('saleTxnId');
+      if (saleTxnId) {
+        const sale = await this.transactionService.getById(saleTxnId);
+        if (sale && sale.type === 'income') {
+          this.type = 'expense';
+          this.linkedSaleTransactionId = saleTxnId;
+          if (!this.saleOptions().some(o => o.id === saleTxnId)) {
+            this.saleOptions.update(list => [{ id: saleTxnId, label: this.transactionService.saleLabel(sale) }, ...list]);
+          }
+          if (this.filteredSegments().some(s => s.id === sale.segment)) {
+            this.segment = sale.segment;
+          }
+          this.onTypeChange();
         }
       }
     }
@@ -684,6 +730,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
       this.linkedSupplierId = '';
       this.newSupplierName = '';
       this.linkedHarvestId = '';
+      this.linkedSaleTransactionId = '';
     } else {
       this.linkedBuyerId = '';
       this.newBuyerName = '';
@@ -759,6 +806,10 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         linkedHarvestId: (this.type === 'expense' && this.linkedHarvestId) || undefined,
         linkedHarvestName: this.type === 'expense' && this.linkedHarvestId
           ? this.harvestOptions().find(h => h.id === this.linkedHarvestId)?.name
+          : undefined,
+        linkedSaleTransactionId: (this.type === 'expense' && this.linkedSaleTransactionId) || undefined,
+        linkedSaleLabel: this.type === 'expense' && this.linkedSaleTransactionId
+          ? this.saleOptions().find(o => o.id === this.linkedSaleTransactionId)?.label
           : undefined,
         tags: this.tags.length ? this.tags : undefined,
         month: getMonthString(this.date),
