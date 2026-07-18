@@ -223,7 +223,7 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
 
             <!-- Margin Check -->
             @if (loan()!.repaymentStatus !== 'completed') {
-              <div class="inline-form" style="border-top: 1px solid var(--color-bg-alt); margin-top: 1rem; padding-top: 1rem;">
+              <div class="inline-form inline-form--spaced">
                 <div class="repayment-form">
                   <mat-form-field appearance="outline">
                     <mat-label>Current Gold Rate (₹/g)</mat-label>
@@ -243,7 +243,7 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
               </div>
 
               <!-- Gold Loan Actions -->
-              <div class="interest-actions" style="margin-top: 1rem;">
+              <div class="interest-actions u-mt-4">
                 <button mat-flat-button color="primary" (click)="showRenewalForm = !showRenewalForm">Renew / Repledge</button>
                 @if (marginStatus && marginStatus.headroom > 0) {
                   <button mat-flat-button color="accent" (click)="showTopUpForm = !showTopUpForm">Top-Up ({{ marginStatus.headroom | currencyInr }})</button>
@@ -335,7 +335,7 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
 
         <!-- Renewal chain -->
         @if (loan()!.renewedFromLoanId || loan()!.renewedByLoanId) {
-          <div class="detail-grid" style="margin-top: 1rem;">
+          <div class="detail-grid u-mt-4">
             @if (loan()!.renewedFromLoanId) {
               <div class="detail-item"><label>Renewed From</label><span><a [routerLink]="['/loans', loan()!.renewedFromLoanId]">Previous Loan</a></span></div>
             }
@@ -387,8 +387,8 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                 <button mat-stroked-button (click)="balanceTransfer()">Balance Transfer</button>
               }
             </div>
-            <div class="emi-table-wrap">
-              <table class="emi-table">
+            <div class="table-container table-container--fixed">
+              <table class="data-table emi-table">
                 <thead>
                   <tr><th>#</th><th>Due Date</th><th>EMI</th><th>Principal</th><th>Interest</th><th>Status</th><th></th></tr>
                 </thead>
@@ -828,14 +828,14 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
     .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: var(--color-text); }
     .repayment-form-card { padding: 1rem; }
     .repayment-form { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
-    .repayment-form mat-form-field { flex: 1; min-width: 140px; }
+    .repayment-form mat-form-field { flex: 1; min-width: min(140px, 100%); }
     .inline-form { padding: 1rem 0; border-top: 1px solid var(--color-bg-alt); margin-top: 0.5rem; }
+    .inline-form--spaced { margin-top: 1rem; }
     .repayment-entry { padding: 12px 16px; border-bottom: 1px solid var(--color-bg-alt); }
     .repayment-info { display: flex; justify-content: space-between; align-items: center; }
     .repayment-date { color: var(--color-text-muted); }
     .repayment-meta { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 4px; }
     .emi-split { font-size: 0.75rem; color: var(--color-text-secondary); margin-left: 8px; }
-    .error-message { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
     .disbursement { background: var(--color-warning-light); }
     .disbursement-amount { color: var(--color-warning); }
     .repayment-amount { color: var(--color-income); }
@@ -850,13 +850,11 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
     .interest-summary { display: flex; flex-wrap: wrap; gap: 1.5rem; padding: 1rem 0; font-size: 0.9rem; }
     .interest-actions, .emi-actions { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
     .emi-card { padding: 1rem; }
-    .emi-table-wrap { overflow-x: auto; }
-    .emi-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-    .emi-table th { background: var(--color-bg); padding: 8px; text-align: left; border-bottom: 2px solid var(--color-border); }
-    .emi-table td { padding: 6px 8px; border-bottom: 1px solid var(--color-bg-alt); }
-    .emi-table tr.paid { background: var(--color-income-bg); }
-    .emi-table tr.overdue { background: var(--color-expense-bg); }
-    .emi-table tr.moratorium { background: var(--color-purple-light); }
+    // Row-state backgrounds on td (not tr) so they beat the global
+    // .data-table tr:hover td rule — component styles load after globals.
+    .emi-table tr.paid td { background: var(--color-income-bg); }
+    .emi-table tr.overdue td { background: var(--color-expense-bg); }
+    .emi-table tr.moratorium td { background: var(--color-purple-light); }
     .emi-status { padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
     .emi-status.paid { background: var(--color-income-bg); color: var(--color-income); }
     .emi-status.upcoming { background: var(--color-info-light); color: var(--color-info); }
@@ -871,8 +869,6 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
       .inline-form { padding: 0.75rem 0; }
       .emi-actions, .interest-actions { flex-direction: column; gap: 0.5rem; }
       .emi-actions button, .interest-actions button { width: 100%; }
-      .emi-table { font-size: 0.7rem; }
-      .emi-table th, .emi-table td { padding: 4px 4px; }
       .emi-table th:nth-child(4), .emi-table td:nth-child(4),
       .emi-table th:nth-child(5), .emi-table td:nth-child(5) { display: none; }
       .interest-summary { flex-direction: column; gap: 0.75rem; font-size: 0.85rem; }

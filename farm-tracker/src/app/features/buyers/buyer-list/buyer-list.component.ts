@@ -50,7 +50,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
           <mat-label>Search</mat-label>
           <input matInput [(ngModel)]="searchTerm" placeholder="Name, phone, location..." />
           @if (searchTerm()) {
-            <button matSuffix mat-icon-button (click)="searchTerm.set('')"><mat-icon>close</mat-icon></button>
+            <button matSuffix mat-icon-button (click)="searchTerm.set('')" aria-label="Clear search"><mat-icon>close</mat-icon></button>
           }
         </mat-form-field>
       </mat-card>
@@ -81,8 +81,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
                   <td>{{ buyer.averageRate ? (buyer.averageRate | currencyInr) : '-' }}</td>
                   <td class="date-cell">{{ buyer.lastPurchaseDate ? (buyer.lastPurchaseDate.toDate() | date:'dd MMM yyyy') : '-' }}</td>
                   <td class="actions-cell" (click)="$event.stopPropagation()">
-                    <button mat-icon-button (click)="editBuyer(buyer)" title="Edit"><mat-icon>edit</mat-icon></button>
-                    <button mat-icon-button color="warn" (click)="confirmDelete(buyer)" title="Delete"><mat-icon>delete</mat-icon></button>
+                    <button mat-icon-button (click)="editBuyer(buyer)" title="Edit" aria-label="Edit buyer"><mat-icon>edit</mat-icon></button>
+                    <button mat-icon-button color="warn" (click)="confirmDelete(buyer)" title="Delete" aria-label="Delete buyer"><mat-icon>delete</mat-icon></button>
                   </td>
                 </tr>
               }

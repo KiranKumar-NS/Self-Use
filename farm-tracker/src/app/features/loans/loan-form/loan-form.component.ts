@@ -334,18 +334,20 @@ interface DocRow {
             @if (showEMIPreview()) {
               <div class="emi-preview">
                 <h4>EMI Preview (first 6 months)</h4>
-                <table class="preview-table">
-                  <tr><th>#</th><th>Due Date</th><th>EMI</th><th>Principal</th><th>Interest</th></tr>
-                  @for (entry of emiPreview(); track entry.emiNumber) {
-                    <tr>
-                      <td>{{ entry.emiNumber }}</td>
-                      <td>{{ entry.dueDate | date:'MMM yyyy' }}</td>
-                      <td>{{ entry.emiAmount | currencyInr }}</td>
-                      <td>{{ entry.principal | currencyInr }}</td>
-                      <td>{{ entry.interest | currencyInr }}</td>
-                    </tr>
-                  }
-                </table>
+                <div class="table-container">
+                  <table class="data-table">
+                    <tr><th>#</th><th>Due Date</th><th>EMI</th><th>Principal</th><th>Interest</th></tr>
+                    @for (entry of emiPreview(); track entry.emiNumber) {
+                      <tr>
+                        <td>{{ entry.emiNumber }}</td>
+                        <td>{{ entry.dueDate | date:'MMM yyyy' }}</td>
+                        <td>{{ entry.emiAmount | currencyInr }}</td>
+                        <td>{{ entry.principal | currencyInr }}</td>
+                        <td>{{ entry.interest | currencyInr }}</td>
+                      </tr>
+                    }
+                  </table>
+                </div>
               </div>
             }
           }
@@ -472,7 +474,7 @@ interface DocRow {
                   </mat-form-field>
                   <mat-form-field appearance="outline">
                     <mat-label>Qty</mat-label>
-                    <input matInput type="number" [(ngModel)]="col.quantity" [name]="'colQty' + $index" min="1" style="max-width:80px" />
+                    <input matInput type="number" [(ngModel)]="col.quantity" [name]="'colQty' + $index" min="1" class="qty-input" />
                   </mat-form-field>
                   <mat-form-field appearance="outline">
                     <mat-label>Purity</mat-label>
@@ -566,7 +568,7 @@ interface DocRow {
               &nbsp;|&nbsp; LTV: {{ (effectiveLtv() * 100) | number:'1.0-0' }}%
               &nbsp;|&nbsp; Eligible: {{ eligibleAmount() | currencyInr }}
               @if (sanctionedAmount > eligibleAmount()) {
-                <span style="color:var(--color-danger)"> (Sanctioned exceeds eligible!)</span>
+                <span class="u-text-danger"> (Sanctioned exceeds eligible!)</span>
               }
             </div>
           }
@@ -618,11 +620,9 @@ interface DocRow {
     .page-header { margin-bottom: 1rem; }
     .page-header h1 { margin: 0; font-size: 1.5rem; color: var(--color-text); }
     .form-card { max-width: 800px; padding: 1.5rem; margin: 0 auto; }
-    .form-row { display: flex; gap: 1rem; margin-bottom: 0.5rem; align-items: center; }
-    .form-row mat-form-field { flex: 1; }
-    .full-width { width: 100%; }
-    .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem; }
-    .error-message { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .form-row { margin-bottom: 0.5rem; align-items: center; }
+    .form-actions { margin-top: 1.5rem; }
+    .qty-input { max-width: 80px; }
     .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: var(--color-text); display: flex; align-items: center; gap: 4px; }
     .computed-info { font-size: 0.875rem; color: var(--color-primary); margin-bottom: 1rem; padding: 8px 12px; background: var(--color-primary-light); border-radius: 6px; }
     .computed-info.highlight { color: var(--color-income); background: var(--color-income-bg); font-weight: 600; }
@@ -633,13 +633,7 @@ interface DocRow {
     mat-slide-toggle { margin-bottom: 0.5rem; }
     .emi-preview { margin-bottom: 1rem; }
     .emi-preview h4 { margin: 0 0 0.5rem; font-size: 0.875rem; color: var(--color-text-secondary); }
-    .preview-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-    .preview-table th { background: var(--color-bg); padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--color-border); }
-    .preview-table td { padding: 4px 8px; border-bottom: 1px solid var(--color-bg-alt); }
-    .preview-table-wrap { overflow-x: auto; }
     @media (max-width: 640px) {
-      .form-row { flex-direction: column; gap: 0; }
-      .form-row mat-form-field { width: 100%; }
       .form-card { padding: 1rem; max-width: 100%; }
       mat-radio-group { flex-direction: column; gap: 0.5rem; }
       .deduction-row, .collateral-row { padding-left: 8px; }
@@ -647,8 +641,6 @@ interface DocRow {
       mat-slide-toggle { font-size: 0.85rem; }
       .section-title { font-size: 0.9rem; flex-wrap: wrap; }
       .computed-info { font-size: 0.8rem; padding: 6px 10px; }
-      .preview-table { font-size: 0.7rem; }
-      .preview-table th, .preview-table td { padding: 3px 4px; }
     }
   `],
 })

@@ -91,11 +91,8 @@ export interface HarvestSaleDialogData {
     </mat-dialog-actions>
   `,
   styles: [`
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
     .sale-info { margin-bottom: 16px; color: var(--color-text-secondary); }
     .total-amount { background: var(--color-income-bg, #e8f5e9); color: var(--color-income, #2e7d32); padding: 12px 16px; border-radius: 8px; font-size: 1.1rem; text-align: center; margin-top: 8px; }
-    .error-msg { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
-    @media (max-width: 480px) { .form-grid { grid-template-columns: 1fr; } }
   `],
 })
 export class HarvestSaleDialogComponent implements OnInit {

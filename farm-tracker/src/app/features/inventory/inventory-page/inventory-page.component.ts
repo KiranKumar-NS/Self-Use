@@ -166,7 +166,7 @@ import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/compo
       .filter-field { min-width: 0; width: 100%; }
       .stock-grid { grid-template-columns: 1fr 1fr; }
     }
-    @media (max-width: 360px) {
+    @media (max-width: 480px) {
       .stock-card { padding: 0.5rem 0.75rem; }
       .stock-count { font-size: 1.2rem; }
       .stock-icon { font-size: 1.25rem; }

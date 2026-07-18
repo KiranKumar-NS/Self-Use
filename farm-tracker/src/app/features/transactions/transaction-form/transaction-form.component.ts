@@ -317,7 +317,7 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
 
         <div class="tag-row">
           <app-tag-input [tags]="tags" (tagsChange)="tags = $event" placeholder="e.g. q3-harvest-2026, plot-alpha" />
-          <button mat-icon-button type="button" (click)="fillAutoTags()" title="Auto-generate tags" class="auto-tag-btn">
+          <button mat-icon-button type="button" (click)="fillAutoTags()" title="Auto-generate tags" aria-label="Auto-generate tags" class="auto-tag-btn">
             <mat-icon>auto_awesome</mat-icon>
           </button>
         </div>
@@ -335,11 +335,7 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
     .page-header { margin-bottom: 1rem; }
     .page-header h1 { margin: 0; font-size: 1.5rem; color: var(--color-text); }
     .form-card { max-width: 700px; padding: 1.5rem; margin: 0 auto; }
-    .form-row { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
-    .form-row mat-form-field { flex: 1; }
-    .full-width { width: 100%; }
-    .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
-    .error-message { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .form-row { margin-bottom: 0.5rem; }
     mat-radio-group { display: flex; gap: 1rem; }
     .payment-method-group {
       display: flex; flex-direction: column; gap: 6px; margin-bottom: 0.5rem;
@@ -363,7 +359,7 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
     .section-header .toggle-icon.expanded { transform: rotate(180deg); }
     .link-count { font-size: 0.7rem; background: var(--color-primary); color: white; padding: 1px 8px; border-radius: 10px; }
     .split-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
-    .split-select { width: 140px; }
+    .split-select { width: min(140px, 100%); }
     .split-hint { font-size: 0.7rem; color: var(--color-text-secondary); font-style: italic; }
     .animal-list { margin-top: 8px; max-height: 200px; overflow-y: auto; }
     .animal-row { padding: 4px 0; border-bottom: 1px solid var(--color-bg-alt); }
@@ -373,8 +369,7 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
     .tag-row app-tag-input { flex: 1; }
     .auto-tag-btn { margin-top: 8px; }
     @media (max-width: 640px) {
-      .form-row { flex-direction: column; gap: 0.5rem; }
-      .qty-row { flex-direction: row; flex-wrap: wrap; }
+      .qty-row { flex-direction: row; flex-wrap: wrap; gap: var(--space-2); }
       .qty-row mat-form-field:nth-child(1) { flex: 2; min-width: 0; }
       .qty-row mat-form-field:nth-child(2) { flex: 1; min-width: 80px; }
       .qty-row mat-form-field:nth-child(3) { flex: 2; min-width: 0; }

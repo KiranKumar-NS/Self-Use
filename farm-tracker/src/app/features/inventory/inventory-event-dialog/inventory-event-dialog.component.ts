@@ -174,14 +174,8 @@ export interface InventoryEventDialogData {
     </mat-dialog-actions>
   `,
   styles: [`
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-    .full-width { grid-column: 1 / -1; }
-    .error-msg { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
     .animal-record-section { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
     .animal-record-section .hint { font-size: 0.75rem; color: var(--color-text-muted); }
-    @media (max-width: 480px) {
-      .form-grid { grid-template-columns: 1fr; }
-    }
   `],
 })
 export class InventoryEventDialogComponent implements OnInit {

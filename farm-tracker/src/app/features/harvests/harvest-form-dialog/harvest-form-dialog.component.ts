@@ -103,12 +103,7 @@ export interface HarvestFormDialogData {
       </button>
     </mat-dialog-actions>
   `,
-  styles: [`
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-    .full-width { grid-column: 1 / -1; }
-    .error-msg { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
-    @media (max-width: 480px) { .form-grid { grid-template-columns: 1fr; } }
-  `],
+  styles: [],
 })
 export class HarvestFormDialogComponent implements OnInit {
   data = inject<HarvestFormDialogData>(MAT_DIALOG_DATA);

@@ -119,7 +119,7 @@ import { normalizeName } from '../../../core/utils/name.utils';
           <mat-label>Search</mat-label>
           <input matInput [(ngModel)]="searchTerm" placeholder="Description, person, tag..." />
           @if (searchTerm()) {
-            <button matSuffix mat-icon-button (click)="searchTerm.set('')"><mat-icon>close</mat-icon></button>
+            <button matSuffix mat-icon-button (click)="searchTerm.set('')" aria-label="Clear search"><mat-icon>close</mat-icon></button>
           }
         </mat-form-field>
       </div>
@@ -143,7 +143,7 @@ import { normalizeName } from '../../../core/utils/name.utils';
 
       <!-- Table -->
       <mat-card class="table-card">
-        <div class="table-container">
+        <div class="table-container table-container--fixed">
           <table class="data-table data-table--wide">
             <thead>
               <tr>
@@ -252,7 +252,7 @@ import { normalizeName } from '../../../core/utils/name.utils';
     }
   `,
   styles: [`
-    .search-field { min-width: 250px; }
+    .search-field { flex: 1 1 250px; min-width: 0; }
     .filter-header { cursor: pointer; }
     .filter-count {
       font-size: 0.7rem; background: var(--color-primary); color: white;
@@ -311,9 +311,6 @@ import { normalizeName } from '../../../core/utils/name.utils';
 
     .load-more { text-align: center; padding: 1.5rem; }
     .load-more button { padding: 8px 24px; }
-    @media (max-width: 768px) {
-      .search-field { min-width: 0; }
-    }
   `],
 })
 export class TransactionListComponent implements OnInit {

@@ -107,12 +107,12 @@ interface DistributionRow {
     }
     .person-name {
       display: flex; align-items: center; gap: 8px;
-      font-size: 0.95rem; color: var(--color-text); min-width: 140px;
+      font-size: 0.95rem; color: var(--color-text); min-width: 0; flex: 1;
     }
     .person-name.reinvestment { color: var(--color-purple); font-weight: 600; }
     .row-icon { font-size: 20px; width: 20px; height: 20px; color: var(--color-text-secondary); }
     .person-name.reinvestment .row-icon { color: var(--color-purple); }
-    .amount-field { width: 160px; }
+    .amount-field { flex: 0 1 160px; min-width: 100px; }
     .summary-bar {
       display: flex; justify-content: space-between; padding: 12px 16px;
       border-radius: 8px; margin-top: 16px; font-weight: 500;

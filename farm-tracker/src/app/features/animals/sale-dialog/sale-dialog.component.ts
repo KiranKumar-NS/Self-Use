@@ -82,7 +82,7 @@ export interface SaleDialogData {
           </mat-form-field>
         }
 
-        <div class="payment-row">
+        <div class="form-row">
           <mat-form-field appearance="outline">
             <mat-label>Payment</mat-label>
             <mat-select [(ngModel)]="paymentMethod">
@@ -116,15 +116,6 @@ export interface SaleDialogData {
   styles: [`
     .animal-info { margin-bottom: 16px; font-size: 0.95rem; }
     .batch-note { color: var(--color-text-secondary); margin-left: 4px; }
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-    .full-width { grid-column: 1 / -1; }
-    .payment-row { grid-column: 1 / -1; display: flex; gap: 16px; }
-    .payment-row mat-form-field { flex: 1; }
-    .error-msg { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
-    @media (max-width: 480px) {
-      .form-grid { grid-template-columns: 1fr; }
-      .payment-row { flex-direction: column; gap: 0; }
-    }
   `],
 })
 export class SaleDialogComponent implements OnInit {

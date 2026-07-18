@@ -65,7 +65,7 @@ import { MatDialog } from '@angular/material/dialog';
                   <td><span class="status-badge" [attr.data-status]="harvest.status">{{ formatStatus(harvest.status) }}</span></td>
                   <td class="amount-cell">{{ harvest.totalRevenue | currencyInr }}</td>
                   <td class="actions-cell" (click)="$event.stopPropagation()">
-                    <button mat-icon-button (click)="editHarvest(harvest)" title="Edit"><mat-icon>edit</mat-icon></button>
+                    <button mat-icon-button (click)="editHarvest(harvest)" title="Edit" aria-label="Edit harvest"><mat-icon>edit</mat-icon></button>
                   </td>
                 </tr>
               }

@@ -106,7 +106,7 @@ import { MatDialog } from '@angular/material/dialog';
           <mat-label>Search</mat-label>
           <input matInput [(ngModel)]="searchTerm" placeholder="Tag, name, breed..." />
           @if (searchTerm()) {
-            <button matSuffix mat-icon-button (click)="searchTerm.set('')"><mat-icon>close</mat-icon></button>
+            <button matSuffix mat-icon-button (click)="searchTerm.set('')" aria-label="Clear search"><mat-icon>close</mat-icon></button>
           }
         </mat-form-field>
       </div>
@@ -126,7 +126,7 @@ import { MatDialog } from '@angular/material/dialog';
       </div>
 
       <mat-card class="table-card">
-        <div class="table-container">
+        <div class="table-container table-container--fixed">
           <table class="data-table">
             <thead>
               <tr>
@@ -202,7 +202,7 @@ import { MatDialog } from '@angular/material/dialog';
   `,
   styles: [`
     .header-actions { display: flex; gap: 8px; }
-    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
     .stat-card { padding: 1rem; text-align: center; }
     .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--color-text); }
     .stat-label { font-size: var(--font-xs); color: var(--color-text-muted); text-transform: uppercase; font-weight: 600; }
@@ -243,11 +243,7 @@ import { MatDialog } from '@angular/material/dialog';
     .margin-info { display: block; font-size: var(--font-xs); font-weight: 500; color: var(--color-text-muted); }
 
     @media (max-width: 768px) {
-      .stats-grid { grid-template-columns: 1fr 1fr 1fr; }
       .stat-value { font-size: 1.2rem; }
-    }
-    @media (max-width: 480px) {
-      .stats-grid { grid-template-columns: 1fr; }
     }
   `],
 })

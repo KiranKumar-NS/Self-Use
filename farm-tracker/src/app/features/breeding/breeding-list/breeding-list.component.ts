@@ -74,8 +74,8 @@ import { safeLoad } from '../../../core/utils/async.utils';
                     }
                   </td>
                   <td class="actions-cell" (click)="$event.stopPropagation()">
-                    <button mat-icon-button (click)="editRecord(r)" title="Edit"><mat-icon>edit</mat-icon></button>
-                    <button mat-icon-button color="warn" (click)="confirmDelete(r)" title="Delete"><mat-icon>delete</mat-icon></button>
+                    <button mat-icon-button (click)="editRecord(r)" title="Edit" aria-label="Edit breeding record"><mat-icon>edit</mat-icon></button>
+                    <button mat-icon-button color="warn" (click)="confirmDelete(r)" title="Delete" aria-label="Delete breeding record"><mat-icon>delete</mat-icon></button>
                   </td>
                 </tr>
               }

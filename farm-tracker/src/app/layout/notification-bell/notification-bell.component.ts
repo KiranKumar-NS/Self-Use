@@ -63,7 +63,7 @@ import { MatMenuModule } from '@angular/material/menu';
     .notif-item {
       display: flex; align-items: center; justify-content: space-between;
       padding: 10px 16px; border-bottom: 1px solid var(--color-border-light); cursor: pointer;
-      min-width: 300px;
+      min-width: min(300px, calc(100vw - 32px));
     }
     .notif-item:hover { background: var(--color-bg); }
     .notif-item:active { background: var(--color-bg-alt); }

@@ -99,7 +99,7 @@ import {
                         color="primary" />
                     </div>
                     <p class="item-desc">{{ seg.description }}</p>
-                    <button mat-icon-button color="warn" class="delete-btn" (click)="deleteSegment(seg.id)">
+                    <button mat-icon-button color="warn" class="delete-btn" (click)="deleteSegment(seg.id)" aria-label="Delete segment">
                       <mat-icon>delete</mat-icon>
                     </button>
                   </mat-card>
@@ -431,12 +431,12 @@ import {
     .add-form-card { padding: 1.25rem; margin-bottom: 1.5rem; background: var(--color-bg); }
     .add-form-card h4 { margin: 0 0 1rem; font-size: 0.9rem; color: var(--color-text); }
     .add-form { display: flex; gap: 0.75rem; align-items: flex-start; flex-wrap: wrap; }
-    .add-form mat-form-field { flex: 1; min-width: 150px; }
+    .add-form mat-form-field { flex: 1; min-width: min(150px, 100%); }
     .budget-hint { font-size: 0.8rem; color: var(--color-text-secondary); margin: 0 0 1rem; }
     .budget-item { padding: 1rem; margin-bottom: 0.75rem; }
     .budget-seg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 0.75rem; }
     .budget-fields { display: flex; gap: 1rem; flex-wrap: wrap; }
-    .budget-fields mat-form-field { flex: 1; min-width: 200px; }
+    .budget-fields mat-form-field { flex: 1; min-width: min(200px, 100%); }
     .reconcile-section { padding: 1.5rem; margin-top: 2rem; border: 1px solid var(--color-border, #e0e0e0); }
     .reconcile-header { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
     .reconcile-icon { font-size: 2rem; width: 2rem; height: 2rem; color: var(--color-warning, #f59e0b); }

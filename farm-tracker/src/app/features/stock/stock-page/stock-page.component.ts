@@ -131,7 +131,7 @@ import { MatDialog } from '@angular/material/dialog';
                 <mat-label>Search</mat-label>
                 <input matInput [(ngModel)]="searchTerm" placeholder="Tag, name, breed..." />
                 @if (searchTerm()) {
-                  <button matSuffix mat-icon-button (click)="searchTerm.set('')"><mat-icon>close</mat-icon></button>
+                  <button matSuffix mat-icon-button (click)="searchTerm.set('')" aria-label="Clear search"><mat-icon>close</mat-icon></button>
                 }
               </mat-form-field>
             </div>
@@ -182,9 +182,9 @@ import { MatDialog } from '@angular/material/dialog';
                           } @else { - }
                         </td>
                         <td class="actions-cell" (click)="$event.stopPropagation()">
-                          <button mat-icon-button (click)="edit(animal.id)" title="Edit"><mat-icon>edit</mat-icon></button>
+                          <button mat-icon-button (click)="edit(animal.id)" title="Edit" aria-label="Edit animal"><mat-icon>edit</mat-icon></button>
                           @if (auth.isAdmin()) {
-                            <button mat-icon-button color="warn" (click)="confirmDeleteAnimal(animal)" title="Delete"><mat-icon>delete</mat-icon></button>
+                            <button mat-icon-button color="warn" (click)="confirmDeleteAnimal(animal)" title="Delete" aria-label="Delete animal"><mat-icon>delete</mat-icon></button>
                           }
                         </td>
                       </tr>
@@ -207,10 +207,10 @@ import { MatDialog } from '@angular/material/dialog';
                   </div>
                   <span class="page-info">{{ animalPageStart() }}-{{ animalPageEnd() }} of {{ displayedAnimals().length }}</span>
                   <div class="page-buttons">
-                    <button mat-icon-button [disabled]="animalPage() === 1" (click)="animalPage.set(1)"><mat-icon>first_page</mat-icon></button>
-                    <button mat-icon-button [disabled]="animalPage() === 1" (click)="animalPage.set(animalPage() - 1)"><mat-icon>chevron_left</mat-icon></button>
-                    <button mat-icon-button [disabled]="animalPage() >= animalTotalPages()" (click)="animalPage.set(animalPage() + 1)"><mat-icon>chevron_right</mat-icon></button>
-                    <button mat-icon-button [disabled]="animalPage() >= animalTotalPages()" (click)="animalPage.set(animalTotalPages())"><mat-icon>last_page</mat-icon></button>
+                    <button mat-icon-button [disabled]="animalPage() === 1" (click)="animalPage.set(1)" aria-label="First page"><mat-icon>first_page</mat-icon></button>
+                    <button mat-icon-button [disabled]="animalPage() === 1" (click)="animalPage.set(animalPage() - 1)" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
+                    <button mat-icon-button [disabled]="animalPage() >= animalTotalPages()" (click)="animalPage.set(animalPage() + 1)" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
+                    <button mat-icon-button [disabled]="animalPage() >= animalTotalPages()" (click)="animalPage.set(animalTotalPages())" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
                   </div>
                 </div>
               }
@@ -261,8 +261,8 @@ import { MatDialog } from '@angular/material/dialog';
                       <td class="note-cell hide-sm">{{ ev.note || '-' }}</td>
                       @if (!auth.isViewer()) {
                         <td class="actions-cell">
-                          <button mat-icon-button (click)="editEvent(ev)" title="Edit"><mat-icon>edit</mat-icon></button>
-                          <button mat-icon-button color="warn" (click)="confirmDeleteEvent(ev)" title="Delete"><mat-icon>delete</mat-icon></button>
+                          <button mat-icon-button (click)="editEvent(ev)" title="Edit" aria-label="Edit event"><mat-icon>edit</mat-icon></button>
+                          <button mat-icon-button color="warn" (click)="confirmDeleteEvent(ev)" title="Delete" aria-label="Delete event"><mat-icon>delete</mat-icon></button>
                         </td>
                       }
                     </tr>
@@ -285,10 +285,10 @@ import { MatDialog } from '@angular/material/dialog';
                 </div>
                 <span class="page-info">{{ eventPageStart() }}-{{ eventPageEnd() }} of {{ sortedEvents().length }}</span>
                 <div class="page-buttons">
-                  <button mat-icon-button [disabled]="eventPage() === 1" (click)="eventPage.set(1)"><mat-icon>first_page</mat-icon></button>
-                  <button mat-icon-button [disabled]="eventPage() === 1" (click)="eventPage.set(eventPage() - 1)"><mat-icon>chevron_left</mat-icon></button>
-                  <button mat-icon-button [disabled]="eventPage() >= eventTotalPages()" (click)="eventPage.set(eventPage() + 1)"><mat-icon>chevron_right</mat-icon></button>
-                  <button mat-icon-button [disabled]="eventPage() >= eventTotalPages()" (click)="eventPage.set(eventTotalPages())"><mat-icon>last_page</mat-icon></button>
+                  <button mat-icon-button [disabled]="eventPage() === 1" (click)="eventPage.set(1)" aria-label="First page"><mat-icon>first_page</mat-icon></button>
+                  <button mat-icon-button [disabled]="eventPage() === 1" (click)="eventPage.set(eventPage() - 1)" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
+                  <button mat-icon-button [disabled]="eventPage() >= eventTotalPages()" (click)="eventPage.set(eventPage() + 1)" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
+                  <button mat-icon-button [disabled]="eventPage() >= eventTotalPages()" (click)="eventPage.set(eventTotalPages())" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
                 </div>
               </div>
             }

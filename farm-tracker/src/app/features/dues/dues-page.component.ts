@@ -292,7 +292,7 @@ import { MatInputModule } from '@angular/material/input';
     }
     .partial-field { width: 190px; }
     .partial-hint { font-size: 0.8rem; color: var(--color-text-secondary); }
-    @media (max-width: 600px) {
+    @media (max-width: 640px) {
       .txn-row { flex-wrap: wrap; }
       .txn-info { flex-basis: 100%; }
     }

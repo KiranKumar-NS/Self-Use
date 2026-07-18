@@ -179,7 +179,6 @@ import { DatePipe } from '@angular/common';
     .toggle-icon.expanded { transform: rotate(180deg); }
     .filters.collapsed { display: none; }
     .filters mat-form-field { flex: 1; min-width: 150px; }
-    .table-container { background: white; border-radius: var(--radius-md); overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 100%; }
     .type-badge { padding: 2px 8px; border-radius: var(--radius-sm); font-size: var(--font-sm); font-weight: 600; }
     .type-badge.given { background: var(--color-warning-light); color: var(--color-warning); }
     .type-badge.received { background: var(--color-info-light); color: var(--color-info); }

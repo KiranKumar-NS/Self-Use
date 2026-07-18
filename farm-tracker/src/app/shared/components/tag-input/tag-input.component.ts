@@ -27,7 +27,7 @@ import { TagService } from '../../../core/services/tag.service';
               [attr.aria-label]="'Edit tag ' + tag">
               <mat-icon>edit</mat-icon>
             </button>
-            <button matChipRemove><mat-icon>cancel</mat-icon></button>
+            <button matChipRemove [attr.aria-label]="'Remove tag ' + tag"><mat-icon>cancel</mat-icon></button>
           </mat-chip-row>
         }
       </mat-chip-grid>

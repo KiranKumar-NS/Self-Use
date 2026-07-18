@@ -141,12 +141,8 @@ export interface RecurringSetupDialogData {
     </mat-dialog-actions>
   `,
   styles: [`
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-    .full-width { grid-column: 1 / -1; }
     .section-label { font-weight: 600; font-size: var(--font-sm); color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin: 8px 0 4px; }
-    .form-row { display: flex; gap: 16px; align-items: center; margin-bottom: 12px; }
-    .error-msg { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
-    @media (max-width: 480px) { .form-grid { grid-template-columns: 1fr; } }
+    .form-row { align-items: center; margin-bottom: 12px; }
   `],
 })
 export class RecurringSetupDialogComponent implements OnInit {

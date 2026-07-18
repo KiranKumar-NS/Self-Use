@@ -119,7 +119,7 @@ import { Router } from '@angular/router';
     }
   `,
   styles: [`
-    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 1.5rem; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 16px; margin-bottom: 1.5rem; }
     .stat-card { display: flex; align-items: center; gap: 16px; padding: 1.25rem; }
     .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
     .stat-icon.danger { background: var(--color-expense-bg); color: var(--color-danger); }

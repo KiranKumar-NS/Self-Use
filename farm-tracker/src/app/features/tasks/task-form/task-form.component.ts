@@ -110,7 +110,7 @@ import { ToastService } from '../../../core/services/toast.service';
               <mat-checkbox [(ngModel)]="sub.done" [name]="'sub_' + i" />
               <input class="subtask-input" [(ngModel)]="sub.title" [name]="'subtitle_' + i" />
               <input type="date" class="subtask-date" [(ngModel)]="sub.dueDate" [name]="'subdate_' + i" title="Due date" />
-              <button mat-icon-button type="button" (click)="removeSubtask(i)">
+              <button mat-icon-button type="button" (click)="removeSubtask(i)" aria-label="Remove subtask">
                 <mat-icon>close</mat-icon>
               </button>
             </div>
@@ -136,11 +136,6 @@ import { ToastService } from '../../../core/services/toast.service';
     .page-header { margin-bottom: 1rem; }
     .page-header h1 { margin: 0; font-size: 1.5rem; color: var(--color-text); }
     .form-card { max-width: 700px; padding: 1.5rem; margin: 0 auto; }
-    .form-row { display: flex; gap: 1rem; }
-    .form-row mat-form-field { flex: 1; }
-    .full-width { width: 100%; }
-    .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
-    .error-msg { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
     .subtasks-section { margin: 1rem 0; }
     .subtasks-section h3 { font-size: 0.9rem; color: var(--color-text-subtle); margin-bottom: 8px; }
     .subtask-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
@@ -150,7 +145,6 @@ import { ToastService } from '../../../core/services/toast.service';
     .subtask-date:focus { outline: none; border-color: var(--color-primary); }
     .add-btn { color: var(--color-primary); font-size: 0.85rem; }
     @media (max-width: 640px) {
-      .form-row { flex-direction: column; gap: 0; }
       .form-card { padding: 1rem; }
       .subtask-row { flex-wrap: wrap; }
       .subtask-date { width: 100%; }

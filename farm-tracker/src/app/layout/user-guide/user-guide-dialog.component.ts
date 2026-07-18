@@ -32,7 +32,7 @@ interface GuideSection {
             <p class="subtitle">Learn how each feature works with real examples</p>
           </div>
         </div>
-        <button mat-icon-button (click)="dialogRef.close()" class="close-btn">
+        <button mat-icon-button (click)="dialogRef.close()" class="close-btn" aria-label="Close guide">
           <mat-icon>close</mat-icon>
         </button>
       </div>
@@ -469,7 +469,7 @@ interface GuideSection {
     .role-desc { font-size: 0.83rem; color: var(--color-text-secondary); line-height: 1.4; }
     .role-note { margin: 12px 0 0; }
 
-    @media (max-width: 600px) {
+    @media (max-width: 640px) {
       .guide-container { height: 95vh; width: 100vw; }
       .guide-header { padding: 16px; }
       .guide-nav { padding: 10px 16px; }

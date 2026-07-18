@@ -268,7 +268,7 @@ import { safeLoad } from '../../../core/utils/async.utils';
           <div class="empty-costs"><mat-icon>info_outline</mat-icon><span>No weight logs yet.</span></div>
         } @else {
           <app-weight-chart [weightLogs]="animal()!.weightLogs!" />
-          <div class="table-container" style="margin-top: 16px;">
+          <div class="table-container u-mt-4">
             <table class="data-table">
               <thead><tr><th>Date</th><th>Weight (kg)</th><th>Remarks</th></tr></thead>
               <tbody>

@@ -84,8 +84,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
                   <td class="amount-cell">{{ activity.cost ? (activity.cost | currencyInr) : '-' }}</td>
                   <td class="note-cell">{{ activity.note || '-' }}</td>
                   <td class="actions-cell" (click)="$event.stopPropagation()">
-                    <button mat-icon-button (click)="editActivity(activity)" title="Edit"><mat-icon>edit</mat-icon></button>
-                    <button mat-icon-button color="warn" (click)="confirmDelete(activity)" title="Delete"><mat-icon>delete</mat-icon></button>
+                    <button mat-icon-button (click)="editActivity(activity)" title="Edit" aria-label="Edit activity"><mat-icon>edit</mat-icon></button>
+                    <button mat-icon-button color="warn" (click)="confirmDelete(activity)" title="Delete" aria-label="Delete activity"><mat-icon>delete</mat-icon></button>
                   </td>
                 </tr>
               }

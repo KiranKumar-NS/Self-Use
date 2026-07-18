@@ -175,11 +175,7 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
     .page-header { margin-bottom: 1rem; }
     .page-header h1 { margin: 0; font-size: 1.5rem; color: var(--color-text); }
     .form-card { max-width: 700px; padding: 1.5rem; margin: 0 auto; }
-    .form-row { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
-    .form-row mat-form-field { flex: 1; }
-    .full-width { width: 100%; }
-    .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
-    .error-message { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-bottom: 1rem; }
+    .form-row { margin-bottom: 0.5rem; }
     .radio-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 0.5rem; }
     .field-label { font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600; }
     mat-radio-group { display: flex; gap: 1rem; }

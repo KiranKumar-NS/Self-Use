@@ -202,7 +202,7 @@ interface CategorySales {
               </div>
             }
 
-            <h3 class="tab-title" style="margin-top: 2rem">Expense by Category</h3>
+            <h3 class="tab-title u-mt-8">Expense by Category</h3>
             @if (expenseByCat().length === 0) {
               <div class="empty">No expense data yet.</div>
             } @else {
@@ -267,7 +267,7 @@ interface CategorySales {
               </div>
 
               <!-- Unit Economics -->
-              <h3 class="tab-title" style="margin-top: 2rem">Unit Economics (Animals)</h3>
+              <h3 class="tab-title u-mt-8">Unit Economics (Animals)</h3>
               <div class="economics-grid">
                 <div class="econ-card">
                   <div class="econ-label">Avg Purchase Price</div>
@@ -420,7 +420,7 @@ interface CategorySales {
     .trend-amount { font-size: 0.8rem; font-weight: 600; color: var(--color-income); text-align: right; }
 
     /* Segment cards */
-    .segment-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+    .segment-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; }
     .segment-card { padding: 1.25rem; border-left: 4px solid var(--color-primary); }
     .segment-name { font-size: 1.1rem; font-weight: 700; margin-bottom: 12px; color: var(--color-text); }
     .segment-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -447,7 +447,7 @@ interface CategorySales {
     .econ-sub { font-size: 0.7rem; color: var(--color-text-muted); margin-top: 4px; }
 
     /* Seasonal */
-    .seasonal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; }
+    .seasonal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 0.75rem; }
     .seasonal-card { padding: 1rem; border: 1px solid var(--color-border); border-radius: 10px; position: relative; }
     .seasonal-card.best-month { border-color: var(--color-income); background: var(--color-income-bg); }
     .seasonal-card.worst-month { border-color: var(--color-expense); background: var(--color-expense-bg); }

@@ -150,8 +150,6 @@ const SALE_UNITS: string[] = ['kg', 'head', 'dozen', 'litre', 'pieces', 'bag', '
     }
     .item-name { font-weight: 600; font-size: 1rem; }
     .current-stock { font-size: 0.85rem; color: var(--color-text-secondary, #666); }
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-    .full-width { grid-column: 1 / -1; }
     .expense-section {
       border-top: 1px solid var(--color-border, #e0e0e0);
       padding-top: 12px;
@@ -164,8 +162,7 @@ const SALE_UNITS: string[] = ['kg', 'head', 'dozen', 'litre', 'pieces', 'bag', '
       margin-top: 12px;
     }
     .pay-status { grid-column: 1 / -1; display: flex; gap: 16px; margin-bottom: 8px; }
-    .error-msg { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
-    @media (max-width: 480px) { .form-grid, .expense-fields { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) { .expense-fields { grid-template-columns: 1fr; } }
   `],
 })
 export class StockMovementDialogComponent implements OnInit {

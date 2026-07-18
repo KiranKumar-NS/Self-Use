@@ -146,7 +146,7 @@ import { ToastService } from '../../../core/services/toast.service';
       <!-- Sales Table -->
       @if (harvest()!.sales.length > 0) {
         <mat-card class="table-card">
-          <h3 style="padding: 16px 16px 0;">Sales History</h3>
+          <h3 class="u-card-title-pad">Sales History</h3>
           <div class="table-container">
             <table class="data-table">
               <thead>
@@ -187,7 +187,7 @@ import { ToastService } from '../../../core/services/toast.service';
       <!-- Linked Expenses -->
       @if (linkedExpenses().length > 0 || harvest()!.harvestCost) {
         <mat-card class="table-card">
-          <h3 style="padding: 16px 16px 0;">Expenses</h3>
+          <h3 class="u-card-title-pad">Expenses</h3>
           <div class="table-container">
             <table class="data-table">
               <thead>
@@ -243,8 +243,8 @@ import { ToastService } from '../../../core/services/toast.service';
       }
     } @else {
       <mat-card>
-        <p style="padding: 24px; text-align: center;">Harvest not found.</p>
-        <div style="text-align: center; padding-bottom: 24px;">
+        <p class="u-p-6 u-text-center">Harvest not found.</p>
+        <div class="u-text-center u-pb-6">
           <button mat-flat-button (click)="back()">Back to Harvests</button>
         </div>
       </mat-card>
@@ -252,7 +252,7 @@ import { ToastService } from '../../../core/services/toast.service';
   `,
   styles: [`
     .info-card { margin-bottom: 16px; padding: 20px; }
-    .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr)); gap: 16px; }
     .info-item { display: flex; flex-direction: column; gap: 4px; }
     .info-label { font-size: 0.82rem; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
     .info-value { font-size: 1rem; font-weight: 600; }
@@ -280,7 +280,7 @@ import { ToastService } from '../../../core/services/toast.service';
     .stage-value { font-weight: 700; font-size: 1.1rem; }
     .pipeline-arrow { font-size: 1.5rem; color: var(--color-text-secondary); }
 
-    .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr)); gap: 12px; margin-bottom: 16px; }
     .summary-card { padding: 16px; text-align: center; }
     .summary-label { font-size: 0.82rem; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; }
     .summary-value { font-size: 1.2rem; font-weight: 700; }

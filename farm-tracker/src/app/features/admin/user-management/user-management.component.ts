@@ -30,7 +30,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
       <app-loading-spinner />
     } @else {
       <mat-card class="table-card">
-      <div class="table-container">
+      <div class="table-container table-container--fixed">
         <table class="data-table">
           <thead>
             <tr>
@@ -62,7 +62,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
                     color="primary" />
                 </td>
                 <td>
-                  <button mat-icon-button (click)="editUser(user.uid)">
+                  <button mat-icon-button (click)="editUser(user.uid)" aria-label="Edit user">
                     <mat-icon>edit</mat-icon>
                   </button>
                 </td>
@@ -82,10 +82,10 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
             </div>
             <span class="page-info">{{ pageStart() }}–{{ pageEnd() }} of {{ sortedUsers().length }}</span>
             <div class="page-buttons">
-              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1"><mat-icon>first_page</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1"><mat-icon>chevron_left</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1"><mat-icon>chevron_right</mat-icon></button>
-              <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()"><mat-icon>last_page</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = 1" aria-label="First page"><mat-icon>first_page</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1" aria-label="Previous page"><mat-icon>chevron_left</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = currentPage + 1" aria-label="Next page"><mat-icon>chevron_right</mat-icon></button>
+              <button mat-icon-button [disabled]="currentPage >= totalPages()" (click)="currentPage = totalPages()" aria-label="Last page"><mat-icon>last_page</mat-icon></button>
             </div>
           </div>
         }
@@ -94,7 +94,6 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
     }
   `,
   styles: [`
-    .table-container { background: white; border-radius: var(--radius-md); overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .role-badge { padding: 2px 8px; border-radius: var(--radius-sm); font-size: var(--font-sm); font-weight: 600; text-transform: capitalize; }
     .role-badge.admin { background: var(--color-warning-light); color: var(--color-warning); }
     .role-badge.manager { background: var(--color-info-light); color: var(--color-info); }

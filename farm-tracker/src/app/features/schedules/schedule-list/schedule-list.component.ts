@@ -137,8 +137,8 @@ import { ToastService } from '../../../core/services/toast.service';
                 </div>
 
                 <div class="card-actions">
-                  <button mat-icon-button (click)="editSchedule(schedule)" title="Edit"><mat-icon>edit</mat-icon></button>
-                  <button mat-icon-button color="warn" (click)="confirmDelete(schedule)" title="Delete"><mat-icon>delete</mat-icon></button>
+                  <button mat-icon-button (click)="editSchedule(schedule)" title="Edit" aria-label="Edit schedule"><mat-icon>edit</mat-icon></button>
+                  <button mat-icon-button color="warn" (click)="confirmDelete(schedule)" title="Delete" aria-label="Delete schedule"><mat-icon>delete</mat-icon></button>
                 </div>
               </mat-card-content>
             </mat-card>
@@ -149,7 +149,7 @@ import { ToastService } from '../../../core/services/toast.service';
   `,
   styles: [`
     .header-actions { display: flex; gap: 8px; }
-    .schedule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; padding: 16px 0; }
+    .schedule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 16px; padding: 16px 0; }
     .schedule-card { border-radius: 12px; }
     .schedule-card.inactive { opacity: 0.6; }
     .card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }

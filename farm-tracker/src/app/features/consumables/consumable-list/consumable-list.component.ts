@@ -61,7 +61,7 @@ const CATEGORY_LABELS: Record<ConsumableCategory, string> = {
           <mat-label>Search</mat-label>
           <input matInput [(ngModel)]="searchTerm" placeholder="Item name, category..." />
           @if (searchTerm) {
-            <button matSuffix mat-icon-button (click)="searchTerm = ''"><mat-icon>close</mat-icon></button>
+            <button matSuffix mat-icon-button (click)="searchTerm = ''" aria-label="Clear search"><mat-icon>close</mat-icon></button>
           }
         </mat-form-field>
       </mat-card>
@@ -106,8 +106,8 @@ const CATEGORY_LABELS: Record<ConsumableCategory, string> = {
             </div>
 
             <div class="card-footer">
-              <button mat-icon-button (click)="editItem(item)" title="Edit"><mat-icon>edit</mat-icon></button>
-              <button mat-icon-button color="warn" (click)="confirmDelete(item)" title="Delete"><mat-icon>delete</mat-icon></button>
+              <button mat-icon-button (click)="editItem(item)" title="Edit" aria-label="Edit consumable"><mat-icon>edit</mat-icon></button>
+              <button mat-icon-button color="warn" (click)="confirmDelete(item)" title="Delete" aria-label="Delete consumable"><mat-icon>delete</mat-icon></button>
             </div>
           </mat-card>
         }
@@ -117,7 +117,7 @@ const CATEGORY_LABELS: Record<ConsumableCategory, string> = {
   styles: [`
     .card-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
       gap: 16px;
       margin-top: 16px;
     }
