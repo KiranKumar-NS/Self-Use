@@ -94,7 +94,7 @@ interface YearOption { value: number; }
     </div>
   `,
   styles: [`
-    .date-range-filter { display: flex; flex-direction: column; gap: 0.75rem; }
+    .date-range-filter { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: var(--space-4); }
     .view-toggle { height: 36px; text-align: center; }
     .view-toggle mat-button-toggle { text-align: center; }
     .month-nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

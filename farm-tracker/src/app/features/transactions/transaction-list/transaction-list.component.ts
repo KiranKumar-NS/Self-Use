@@ -252,7 +252,6 @@ import { normalizeName } from '../../../core/utils/name.utils';
     }
   `,
   styles: [`
-    .search-field { flex: 1 1 250px; min-width: 0; }
     .filter-header { cursor: pointer; }
     .filter-count {
       font-size: 0.7rem; background: var(--color-primary); color: white;

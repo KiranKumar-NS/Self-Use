@@ -334,9 +334,9 @@ tr:hover .actions-cell button { opacity: 1; }
   color: var(--color-primary);
 }
 .filters {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
+  gap: var(--space-2) var(--space-3);
   overflow: hidden;
   max-height: 500px;
   transition: max-height var(--transition-normal), opacity var(--transition-normal), padding var(--transition-normal);
@@ -349,14 +349,21 @@ tr:hover .actions-cell button { opacity: 1; }
   padding: 0;
 }
 .filter-field {
-  flex: 1;
-  min-width: 150px;
+  width: 100%;
+  min-width: 0;
+}
+.filters mat-form-field,
+.filter-field .mat-mdc-form-field {
+  width: 100%;
+}
+// Filters never show validation errors — drop the empty reserved strip
+// under each field so the card stays compact.
+.filters .mat-mdc-form-field-subscript-wrapper {
+  display: none;
 }
 @media (max-width: 768px) {
-  .filter-field {
-    min-width: 0;
-    flex-basis: 100%;
-  }
+  .filters { grid-template-columns: 1fr 1fr; }
+  .filters .search-field { grid-column: 1 / -1; }
   .filter-card { padding: 0.75rem; }
 }
 
@@ -403,9 +410,6 @@ tr:hover .actions-cell button { opacity: 1; }
   .cdk-overlay-pane {
     max-width: calc(100vw - 32px) !important;
   }
-  .filter-field .mat-mdc-form-field {
-    width: 100%;
-  }
   .mat-mdc-select-panel {
     max-width: calc(100vw - 32px) !important;
   }
@@ -427,8 +431,17 @@ tr:hover .actions-cell button { opacity: 1; }
 // ── Mobile table improvements ──────────────────────────────
 @media (max-width: 640px) {
   .data-table {
-    th { padding: 6px 4px; font-size: 0.6rem; letter-spacing: 0; }
-    td { padding: 6px 4px; font-size: 0.75rem; }
+    th { padding: 8px; font-size: 0.65rem; letter-spacing: 0; }
+    // Keep every row a single tidy line; long cells ellipsize and the
+    // table scrolls sideways instead of wrapping into ragged rows.
+    td {
+      padding: 8px;
+      font-size: 0.8rem;
+      white-space: nowrap;
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   }
   .date-cell { font-size: 0.7rem; }
   .desc-cell { max-width: 120px; }
