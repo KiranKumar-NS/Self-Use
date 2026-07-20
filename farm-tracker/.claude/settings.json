@@ -128,7 +128,9 @@
       "PowerShell(git add src/app/features/transactions/transaction-list/transaction-list.component.ts)",
       "PowerShell(git add src/app/core/services/buyer.service.ts src/app/features/buyers/buyer-list/buyer-list.component.ts src/app/shared/components/confirm-dialog/confirm-dialog.component.ts)",
       "PowerShell(git commit -F \"C:\\\\Users\\\\Admin\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--kk-self-use-repo-farm-tracker\\\\ffe644c0-2ae1-4565-8350-ca2ef8f51892\\\\scratchpad\\\\commit-msg.txt\")",
-      "PowerShell(git add .claude/settings.json .claude/skills/schema/SKILL.md .claude/skills/verify/SKILL.md docs/manual-test-checklist.html)"
+      "PowerShell(git add .claude/settings.json .claude/skills/schema/SKILL.md .claude/skills/verify/SKILL.md docs/manual-test-checklist.html)",
+      "PowerShell(npm run test:run)",
+      "Edit(/.claude/skills/ship/**)"
     ]
   }
 }

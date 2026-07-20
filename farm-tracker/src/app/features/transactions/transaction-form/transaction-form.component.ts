@@ -196,10 +196,12 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
           @if (paidBy === 'other') {
             <mat-form-field appearance="outline">
               <mat-label>Enter Name</mat-label>
-              <input matInput [(ngModel)]="customPaidByName" name="customPaidByName" required placeholder="e.g. Raju" (ngModelChange)="checkSimilarName()" />
-              @if (suggestedName) {
-                <mat-hint class="name-hint">Did you mean <button type="button" class="hint-btn" (click)="useSuggestedName()">{{ suggestedName }}</button>?</mat-hint>
-              }
+              <input matInput [(ngModel)]="customPaidByName" name="customPaidByName" required placeholder="e.g. Raju" (ngModelChange)="filterNameSuggestions()" (focus)="filterNameSuggestions()" [matAutocomplete]="nameAuto" />
+              <mat-autocomplete #nameAuto="matAutocomplete">
+                @for (n of nameSuggestions(); track n) {
+                  <mat-option [value]="n">{{ n }}</mat-option>
+                }
+              </mat-autocomplete>
             </mat-form-field>
           }
         </div>
@@ -359,11 +361,6 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
     .field-label {
       font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600;
     }
-    .name-hint { color: var(--color-primary); font-size: 0.8rem; }
-    .hint-btn {
-      background: none; border: none; color: var(--color-primary); font-weight: 700;
-      cursor: pointer; text-decoration: underline; padding: 0; font-size: 0.8rem;
-    }
     .animal-link-section {
       border: 1px solid var(--color-border); border-radius: 8px; padding: 12px; margin-bottom: 16px;
     }
@@ -449,7 +446,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   filteredCategories = signal<Category[]>([]);
   filteredSegments = signal<Segment[]>([]);
 
-  suggestedName = '';
+  nameSuggestions = signal<string[]>([]);
   private knownNames: string[] = [];
   private editId = '';
 
@@ -624,21 +621,25 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   onPaidByChange(): void {
     if (this.paidBy !== 'other') {
       this.customPaidByName = '';
-      this.suggestedName = '';
+      this.nameSuggestions.set([]);
+    } else {
+      this.filterNameSuggestions();
     }
   }
 
-  checkSimilarName(): void {
-    this.suggestedName = '';
-    if (!this.customPaidByName || this.customPaidByName.trim().length < 2) return;
-    const inputKey = nameKey(this.customPaidByName);
-    const match = this.knownNames.find(n => nameKey(n) === inputKey && n !== this.customPaidByName);
-    if (match) this.suggestedName = match;
-  }
-
-  useSuggestedName(): void {
-    this.customPaidByName = this.suggestedName;
-    this.suggestedName = '';
+  filterNameSuggestions(): void {
+    const inputKey = nameKey(this.customPaidByName || '');
+    if (!inputKey) {
+      this.nameSuggestions.set([...this.knownNames].sort((a, b) => a.localeCompare(b)));
+      return;
+    }
+    const matches = this.knownNames.filter(n => nameKey(n).includes(inputKey));
+    matches.sort((a, b) => {
+      const aStarts = nameKey(a).startsWith(inputKey) ? 0 : 1;
+      const bStarts = nameKey(b).startsWith(inputKey) ? 0 : 1;
+      return aStarts - bStarts || a.localeCompare(b);
+    });
+    this.nameSuggestions.set(matches);
   }
 
   isAnimalSegment(): boolean {
