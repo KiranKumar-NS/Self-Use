@@ -53,7 +53,7 @@ import { MatButtonModule } from '@angular/material/button';
             </mat-select>
           </mat-form-field>
 
-          @if (role() === 'manager') {
+          @if (role() !== 'admin') {
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>Assigned Segments</mat-label>
               <mat-select [(ngModel)]="assignedSegments" name="segments" multiple>
@@ -61,6 +61,11 @@ import { MatButtonModule } from '@angular/material/button';
                   <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
                 }
               </mat-select>
+              @if (role() === 'viewer') {
+                <mat-hint>Viewer sees data only for these segments. No segments = no data.</mat-hint>
+              } @else {
+                <mat-hint>Manager can view and record data only for these segments. No segments = no data.</mat-hint>
+              }
             </mat-form-field>
           }
 

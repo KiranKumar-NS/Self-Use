@@ -11,18 +11,26 @@ import {
   serverTimestamp,
 } from '@angular/fire/firestore';
 import { Segment, SegmentBudget, DEFAULT_SEGMENTS } from '../models/segment.model';
+import { AuthService } from './auth.service';
 
 @Injectable({ providedIn: 'root' })
 export class SegmentService {
   private firestore = inject(Firestore);
+  private auth = inject(AuthService);
   private cache: Segment[] | null = null;
 
   async getAll(): Promise<Segment[]> {
-    if (this.cache) return this.cache;
+    if (this.cache) return this.scope(this.cache);
     const q = query(collection(this.firestore, 'segments'), orderBy('name'));
     const snapshot = await getDocs(q);
+    // Cache stays unfiltered; the viewer scope is applied on the return path
     this.cache = snapshot.docs.map((d) => d.data() as Segment);
-    return this.cache;
+    return this.scope(this.cache);
+  }
+
+  private scope(segments: Segment[]): Segment[] {
+    if (!this.auth.isSegmentRestricted()) return segments;
+    return segments.filter((s) => this.auth.canViewSegment(s.id));
   }
 
   clearCache(): void {

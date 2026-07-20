@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal, OnInit, ViewChild } from '@angular/core';
+import { AuthService } from '../../../core/services/auth.service';
 import { SummaryService } from '../../../core/services/summary.service';
 import { UserService } from '../../../core/services/user.service';
 import { LoanService } from '../../../core/services/loan.service';
@@ -41,18 +42,27 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
     } @else {
       <div class="page-header">
         <h1 class="page-title">Dashboard</h1>
-        <div class="header-actions">
-          <button mat-icon-button (click)="exportExcel()" [disabled]="exporting()" aria-label="Export Excel backup">
-            <mat-icon>download</mat-icon>
-          </button>
-          <button mat-icon-button (click)="exportPdf()" aria-label="Export PDF report">
-            <mat-icon>picture_as_pdf</mat-icon>
-          </button>
-          <button mat-icon-button class="wa-share-btn" (click)="shareWhatsApp()" aria-label="Share on WhatsApp">
-            <mat-icon>share</mat-icon>
-          </button>
-        </div>
+        @if (!auth.isViewer() && !noSegmentAccess()) {
+          <div class="header-actions">
+            <button mat-icon-button (click)="exportExcel()" [disabled]="exporting()" aria-label="Export Excel backup">
+              <mat-icon>download</mat-icon>
+            </button>
+            <button mat-icon-button (click)="exportPdf()" aria-label="Export PDF report">
+              <mat-icon>picture_as_pdf</mat-icon>
+            </button>
+            <button mat-icon-button class="wa-share-btn" (click)="shareWhatsApp()" aria-label="Share on WhatsApp">
+              <mat-icon>share</mat-icon>
+            </button>
+          </div>
+        }
       </div>
+
+      @if (noSegmentAccess()) {
+        <div class="no-access-notice">
+          <mat-icon>lock</mat-icon>
+          <p>No segments assigned to your account. Contact an admin to get access.</p>
+        </div>
+      } @else {
 
       <app-date-range-filter (rangeChange)="onRangeChange($event)" />
 
@@ -90,6 +100,8 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
 
         <app-analytics-tab [dateSelection]="currentSelection()!" />
       }
+
+      }
     }
   `,
   styles: [`
@@ -102,6 +114,13 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
     .widgets-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 1rem; margin-bottom: 1rem; }
     .section-divider { border: none; border-top: 1px solid var(--color-border); margin: 1.5rem 0; }
+    .no-access-notice {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 1.25rem; border: 1px solid var(--color-border); border-radius: 12px;
+      background: var(--color-surface); color: var(--color-text-secondary);
+    }
+    .no-access-notice mat-icon { flex-shrink: 0; }
+    .no-access-notice p { margin: 0; }
     @media (max-width: 768px) {
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .charts-grid { grid-template-columns: 1fr; }
@@ -113,6 +132,7 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
 export class DashboardPageComponent implements OnInit {
   @ViewChild(AnalyticsTabComponent) analyticsTab!: AnalyticsTabComponent;
 
+  auth = inject(AuthService);
   private summaryService = inject(SummaryService);
   private segmentService = inject(SegmentService);
   private userService = inject(UserService);
@@ -130,6 +150,7 @@ export class DashboardPageComponent implements OnInit {
   personBreakdown = signal<Record<string, Record<string, { income: number; expense: number }>>>({});
   loanSummary = signal({ totalGiven: 0, totalReceived: 0, pendingGiven: 0, pendingReceived: 0, totalSanctioned: 0, totalOutstanding: 0, upcomingEMICount: 0, upcomingEMIAmount: 0, totalInterestPaid: 0 });
   hasLoanData = computed(() => Object.values(this.loanSummary()).some(v => v > 0));
+  noSegmentAccess = computed(() => this.auth.isSegmentRestricted() && this.auth.assignedSegments().length === 0);
   segments = signal<Segment[]>([]);
   trendData = signal<{ month: string; income: number; expense: number }[]>([]);
 

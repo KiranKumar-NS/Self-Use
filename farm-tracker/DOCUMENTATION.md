@@ -14,6 +14,8 @@ Segments: Goats (🐐), Chickens (🐔), Dragon Fruit (🌵). Users assigned to 
 | Manager | Full (assigned segments) | Full | No |
 | Viewer | No | Full | Dashboard read-only |
 
+**Segment scoping (all non-admins):** The segment picker in user create/edit is shown for both manager and viewer roles. Every non-admin user (manager and viewer) is read-scoped to their `assignedSegments` — the dashboard/analytics (segments, summaries, transactions, loans) are filtered client-side to those segments via `AuthService.isSegmentRestricted`/`canViewSegment`. An empty `assignedSegments` means **no data visible** (strict; the old "empty = sees all" back-compat was removed 2026-07). The dashboard shows a "No segments assigned" notice in that case. Admins are never restricted (and are auto-assigned all segment IDs on save). This is soft enforcement only — Firestore rules still allow any active user to read all data. Service caches always store unfiltered data; scoping is applied on the return path. Viewer mobile bottom nav shows Home/Tasks/More (no Txns/Loans/Stock); Reminders and dashboard export/backup buttons are hidden from viewers. Tasks have no segment field and are not scoped. Segments created after assignment require re-editing the user.
+
 ## Features
 
 ### Dashboard `/dashboard`
@@ -374,7 +376,7 @@ Guards: `authGuard` (login + active check), `roleGuard(roles)`, `unsavedChangesG
 
 **AnimalService** — Individual + batch animal CRUD. Cost attribution from transactions. Profit calculation. Status transitions with inventory events. Batch count management. Vaccination/medical record CRUD (addVaccination, addMedicalRecord, removeVaccination, removeMedicalRecord). Weight log CRUD (addWeightLog, removeWeightLog). Death recording with cause and age-at-death computation.
 
-**BuyerService** — CRUD with auto-updated denormalized stats on sales. Per-segment purchase tracking. Average rate calculation.
+**BuyerService** — CRUD with auto-updated denormalized stats on sales. Per-segment purchase tracking. Average rate calculation. Hard delete guarded: refused while any transaction, animal, or inventory event still references the buyer.
 
 **SupplierService** — CRUD mirroring BuyerService. Denormalized stats (totalOrders, totalAmountPaid, pendingAmount). Per-segment tracking. Pending amount management.
 

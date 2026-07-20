@@ -9,6 +9,8 @@ const mockTxnCaptures: any[] = [];
 const mockInjected = {
   userProfile: () => ({ uid: 'test-uid', displayName: 'Test User' }),
   requireUser: () => ({ uid: 'test-uid', displayName: 'Test User' }),
+  isSegmentRestricted: () => false,
+  canViewSegment: () => true,
   clearCache: () => undefined,
   updateStats: undefined as any, // assigned per-test via vi.fn()
 };

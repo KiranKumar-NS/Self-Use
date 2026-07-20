@@ -981,7 +981,12 @@ export class TransactionService {
 
     const q = query(collection(this.firestore, 'transactions'), ...constraints);
     const snapshot = await getDocs(q);
-    const transactions = snapshot.docs.map((d) => d.data() as Transaction);
+    let transactions = snapshot.docs.map((d) => d.data() as Transaction);
+    // Viewer segment scoping runs after the page fetch, so a restricted viewer may
+    // get short pages; the cursor still advances over the unfiltered page.
+    if (this.authService.isSegmentRestricted()) {
+      transactions = transactions.filter((t) => this.authService.canViewSegment(t.segment));
+    }
     const last = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
 
     return { transactions, lastDoc: last };

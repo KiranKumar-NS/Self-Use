@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@ang
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { UserService } from '../../../core/services/user.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { AppUser } from '../../../core/models/user.model';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
@@ -58,6 +59,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
                 <td>
                   <mat-slide-toggle
                     [checked]="user.isActive"
+                    [disabled]="user.uid === auth.currentUser()?.uid"
                     (change)="toggleActive(user)"
                     color="primary" />
                 </td>
@@ -103,6 +105,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 })
 export class UserManagementComponent implements OnInit {
   private userService = inject(UserService);
+  auth = inject(AuthService);
   private router = inject(Router);
   private toast = inject(ToastService);
 

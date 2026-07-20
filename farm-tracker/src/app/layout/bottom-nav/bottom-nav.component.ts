@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, output } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-bottom-nav',
@@ -13,18 +14,25 @@ import { MatIconModule } from '@angular/material/icon';
         <mat-icon>dashboard</mat-icon>
         <span>Home</span>
       </a>
-      <a routerLink="/transactions" routerLinkActive="active" class="nav-item">
-        <mat-icon>receipt_long</mat-icon>
-        <span>Txns</span>
-      </a>
-      <a routerLink="/loans" routerLinkActive="active" class="nav-item">
-        <mat-icon>account_balance</mat-icon>
-        <span>Loans</span>
-      </a>
-      <a routerLink="/stock" routerLinkActive="active" class="nav-item">
-        <mat-icon>inventory_2</mat-icon>
-        <span>Stock</span>
-      </a>
+      @if (!auth.isViewer()) {
+        <a routerLink="/transactions" routerLinkActive="active" class="nav-item">
+          <mat-icon>receipt_long</mat-icon>
+          <span>Txns</span>
+        </a>
+        <a routerLink="/loans" routerLinkActive="active" class="nav-item">
+          <mat-icon>account_balance</mat-icon>
+          <span>Loans</span>
+        </a>
+        <a routerLink="/stock" routerLinkActive="active" class="nav-item">
+          <mat-icon>inventory_2</mat-icon>
+          <span>Stock</span>
+        </a>
+      } @else {
+        <a routerLink="/tasks" routerLinkActive="active" class="nav-item">
+          <mat-icon>view_kanban</mat-icon>
+          <span>Tasks</span>
+        </a>
+      }
       <button class="nav-item" (click)="moreClick.emit()">
         <mat-icon>more_horiz</mat-icon>
         <span>More</span>
@@ -82,5 +90,6 @@ import { MatIconModule } from '@angular/material/icon';
   `],
 })
 export class BottomNavComponent {
+  auth = inject(AuthService);
   moreClick = output();
 }

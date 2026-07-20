@@ -9,10 +9,12 @@ import {
   where,
 } from '@angular/fire/firestore';
 import { MonthlySummary, YearlySummary } from '../models/monthly-summary.model';
+import { AuthService } from './auth.service';
 
 @Injectable({ providedIn: 'root' })
 export class SummaryService {
   private firestore = inject(Firestore);
+  private auth = inject(AuthService);
 
   private monthCache = new Map<string, { data: MonthlySummary[]; time: number }>();
   private allCache: { data: MonthlySummary[]; time: number } | null = null;
@@ -23,10 +25,16 @@ export class SummaryService {
     this.allCache = null;
   }
 
+  /** Caches hold unfiltered data; viewer segment scoping is applied on the return path. */
+  private scope<T extends { segment: string }>(summaries: T[]): T[] {
+    if (!this.auth.isSegmentRestricted()) return summaries;
+    return summaries.filter((s) => this.auth.canViewSegment(s.segment));
+  }
+
   async getForMonth(month: string): Promise<MonthlySummary[]> {
     const cached = this.monthCache.get(month);
     if (cached && Date.now() - cached.time < this.CACHE_TTL) {
-      return cached.data;
+      return this.scope(cached.data);
     }
     const q = query(
       collection(this.firestore, 'monthlySummaries'),
@@ -35,10 +43,11 @@ export class SummaryService {
     const snapshot = await getDocs(q);
     const result = snapshot.docs.map((d) => d.data() as MonthlySummary);
     this.monthCache.set(month, { data: result, time: Date.now() });
-    return result;
+    return this.scope(result);
   }
 
   async getForMonthAndSegment(month: string, segment: string): Promise<MonthlySummary | null> {
+    if (!this.auth.canViewSegment(segment)) return null;
     const docId = `${month}-${segment}`;
     const docSnap = await getDoc(doc(this.firestore, 'monthlySummaries', docId));
     return docSnap.exists() ? (docSnap.data() as MonthlySummary) : null;
@@ -51,7 +60,7 @@ export class SummaryService {
       where('month', 'in', months)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => d.data() as MonthlySummary);
+    return this.scope(snapshot.docs.map((d) => d.data() as MonthlySummary));
   }
 
   async getForMonthsBatched(months: string[]): Promise<MonthlySummary[]> {
@@ -67,12 +76,12 @@ export class SummaryService {
 
   async getAll(): Promise<MonthlySummary[]> {
     if (this.allCache && Date.now() - this.allCache.time < this.CACHE_TTL) {
-      return this.allCache.data;
+      return this.scope(this.allCache.data);
     }
     const snapshot = await getDocs(collection(this.firestore, 'monthlySummaries'));
     const result = snapshot.docs.map((d) => d.data() as MonthlySummary);
     this.allCache = { data: result, time: Date.now() };
-    return result;
+    return this.scope(result);
   }
 
   async getForYear(year: number): Promise<YearlySummary[]> {
@@ -81,10 +90,11 @@ export class SummaryService {
       where('year', '==', year)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => d.data() as YearlySummary);
+    return this.scope(snapshot.docs.map((d) => d.data() as YearlySummary));
   }
 
   async getForYearAndSegment(year: number, segment: string): Promise<YearlySummary | null> {
+    if (!this.auth.canViewSegment(segment)) return null;
     const docId = `${year}-${segment}`;
     const docSnap = await getDoc(doc(this.firestore, 'yearlySummaries', docId));
     return docSnap.exists() ? (docSnap.data() as YearlySummary) : null;

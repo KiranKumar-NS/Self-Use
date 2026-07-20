@@ -1,4 +1,5 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
+import { Router } from '@angular/router';
 import {
   Auth,
   signInWithEmailAndPassword,
@@ -11,15 +12,21 @@ import {
   Firestore,
   doc,
   getDoc,
+  onSnapshot,
   setDoc,
   serverTimestamp,
 } from '@angular/fire/firestore';
 import { AppUser, UserRole } from '../models/user.model';
+import { ToastService } from './toast.service';
+
+const DEACTIVATED_MESSAGE = 'Your account has been deactivated. Contact the administrator.';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private auth = inject(Auth);
   private firestore = inject(Firestore);
+  private router = inject(Router);
+  private toast = inject(ToastService);
 
   currentUser = signal<User | null>(null);
   userProfile = signal<AppUser | null>(null);
@@ -31,8 +38,12 @@ export class AuthService {
   isViewer = computed(() => this.userRole() === 'viewer');
   isLoggedIn = computed(() => !!this.currentUser());
   assignedSegments = computed(() => this.userProfile()?.assignedSegments ?? []);
+  /** Non-admin users are always read-scoped to assignedSegments (client-side only).
+   *  Empty assignment = no data visible. Admins are never restricted. */
+  isSegmentRestricted = computed(() => this.isLoggedIn() && !this.isAdmin());
 
   private readyResolvers: (() => void)[] = [];
+  private profileUnsub: (() => void) | null = null;
 
   /**
    * Resolves once the initial auth state (claims + profile) has loaded.
@@ -52,34 +63,87 @@ export class AuthService {
 
   constructor() {
     onAuthStateChanged(this.auth, async (user) => {
+      this.detachProfileListener();
       this.currentUser.set(user);
-      if (user) {
-        try {
-          const tokenResult = await user.getIdTokenResult();
-          this.userRole.set((tokenResult.claims['role'] as UserRole) || null);
-          const userDoc = await getDoc(doc(this.firestore, 'users', user.uid));
-          if (userDoc.exists()) {
-            this.userProfile.set(userDoc.data() as AppUser);
-            // If role not in claims, default to viewer (don't trust Firestore role)
-            if (!this.userRole()) {
-              this.userRole.set('viewer');
-            }
-          }
-        } catch (err) {
-          console.error('Error loading user profile:', err);
-        }
-      } else {
+      if (!user) {
         this.userRole.set(null);
         this.userProfile.set(null);
+        this.markReady();
+        return;
       }
-      this.isLoading.set(false);
-      this.readyResolvers.forEach((resolve) => resolve());
-      this.readyResolvers = [];
+      this.isLoading.set(true);
+      try {
+        const tokenResult = await user.getIdTokenResult();
+        this.userRole.set((tokenResult.claims['role'] as UserRole) || null);
+      } catch (err) {
+        console.error('Error loading user claims:', err);
+      }
+      this.watchProfile(user.uid);
     });
   }
 
+  /** Live listener on own users/{uid} doc: keeps profile fresh and signs the
+   *  user out the moment an admin flips isActive off. */
+  private watchProfile(uid: string): void {
+    this.profileUnsub = onSnapshot(
+      doc(this.firestore, 'users', uid),
+      (snap) => {
+        if (this.auth.currentUser?.uid !== uid) return; // stale after sign-out/re-auth
+        if (snap.exists()) {
+          this.userProfile.set(snap.data() as AppUser);
+          // If role not in claims, default to viewer (don't trust Firestore role)
+          if (!this.userRole()) {
+            this.userRole.set('viewer');
+          }
+        }
+        this.markReady();
+        if (snap.exists() && (snap.data() as AppUser).isActive === false) {
+          void this.kickDeactivatedUser();
+        }
+      },
+      (err) => {
+        console.error('Error loading user profile:', err);
+        this.markReady();
+      },
+    );
+  }
+
+  private async kickDeactivatedUser(): Promise<void> {
+    this.detachProfileListener();
+    await this.logout();
+    this.toast.error(DEACTIVATED_MESSAGE);
+    await this.router.navigateByUrl('/auth/login');
+  }
+
+  private detachProfileListener(): void {
+    this.profileUnsub?.();
+    this.profileUnsub = null;
+  }
+
+  private markReady(): void {
+    this.isLoading.set(false);
+    this.readyResolvers.forEach((resolve) => resolve());
+    this.readyResolvers = [];
+  }
+
   async login(email: string, password: string): Promise<void> {
-    await signInWithEmailAndPassword(this.auth, email, password);
+    const credential = await signInWithEmailAndPassword(this.auth, email, password);
+    try {
+      const snap = await getDoc(doc(this.firestore, 'users', credential.user.uid));
+      if (snap.exists()) {
+        const profile = snap.data() as AppUser;
+        if (profile.isActive === false) {
+          await signOut(this.auth);
+          throw new Error(DEACTIVATED_MESSAGE);
+        }
+        // Prime the signal so authGuard checks a real profile immediately
+        this.userProfile.set(profile);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message === DEACTIVATED_MESSAGE) throw err;
+      // Fail open on network errors — firestore.rules still block data server-side
+      console.error('Error checking user status at login:', err);
+    }
   }
 
   async register(email: string, password: string, displayName: string, role: UserRole, assignedSegments: string[]): Promise<string> {
@@ -132,5 +196,10 @@ export class AuthService {
   hasSegmentAccess(segment: string): boolean {
     if (this.isAdmin()) return true;
     return this.assignedSegments().includes(segment);
+  }
+
+  /** Read-side check (segment id, not name). Empty assignment on a viewer = see all. */
+  canViewSegment(segmentId: string): boolean {
+    return !this.isSegmentRestricted() || this.assignedSegments().includes(segmentId);
   }
 }

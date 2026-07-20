@@ -437,10 +437,19 @@ export class LoanService {
 
     const q = query(collection(this.firestore, 'loans'), ...constraints);
     const snapshot = await getDocs(q);
-    const loans = snapshot.docs.map((d) => d.data() as Loan);
+    let loans = snapshot.docs.map((d) => d.data() as Loan);
+    if (this.authService.isSegmentRestricted()) {
+      loans = loans.filter((l) => this.canViewLoan(l));
+    }
     const last = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
 
     return { loans, lastDoc: last };
+  }
+
+  /** Formal loans can span multiple segments; visible if any of them is viewable. */
+  private canViewLoan(loan: Loan): boolean {
+    return this.authService.canViewSegment(loan.segment)
+      || (loan.segments ?? []).some((id) => this.authService.canViewSegment(id));
   }
 
   async getById(id: string): Promise<Loan | null> {
@@ -470,7 +479,9 @@ export class LoanService {
     upcomingEMIAmount: number;
     totalInterestPaid: number;
   }> {
-    if (this.summaryCache && Date.now() - this.summaryCache.time < this.SUMMARY_CACHE_TTL) {
+    // Restricted viewers bypass the cache: the cached aggregate is unfiltered
+    const restricted = this.authService.isSegmentRestricted();
+    if (!restricted && this.summaryCache && Date.now() - this.summaryCache.time < this.SUMMARY_CACHE_TTL) {
       return this.summaryCache.data;
     }
 
@@ -480,7 +491,8 @@ export class LoanService {
       limit(500)
     );
     const snapshot = await getDocs(q);
-    const loans = snapshot.docs.map((d) => d.data() as Loan);
+    let loans = snapshot.docs.map((d) => d.data() as Loan);
+    if (restricted) loans = loans.filter((l) => this.canViewLoan(l));
 
     // Formal loan metrics
     const formalLoans = loans.filter(l => l.loanCategory === 'formal');
@@ -515,7 +527,7 @@ export class LoanService {
       upcomingEMIAmount,
       totalInterestPaid: formalLoans.reduce((sum, l) => sum + (l.totalInterestPaid ?? 0), 0),
     };
-    this.summaryCache = { data: result, time: Date.now() };
+    if (!restricted) this.summaryCache = { data: result, time: Date.now() };
     return result;
   }
 

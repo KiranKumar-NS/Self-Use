@@ -82,10 +82,12 @@ import { MatIconModule } from '@angular/material/icon';
           <span>Tasks</span>
         </a>
 
-        <a routerLink="/schedules" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
-          <mat-icon>alarm</mat-icon>
-          <span>Reminders</span>
-        </a>
+        @if (!auth.isViewer()) {
+          <a routerLink="/schedules" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
+            <mat-icon>alarm</mat-icon>
+            <span>Reminders</span>
+          </a>
+        }
 
         @if (auth.isAdmin()) {
           <div class="nav-section">
