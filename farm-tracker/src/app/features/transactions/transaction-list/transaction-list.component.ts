@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { UpperCasePipe, DatePipe } from '@angular/common';
+import { UpperCasePipe, DatePipe, NgTemplateOutlet } from '@angular/common';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { SegmentService } from '../../../core/services/segment.service';
@@ -21,6 +21,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatInputModule } from '@angular/material/input';
+import { MatTabsModule } from '@angular/material/tabs';
 import { MatDialog } from '@angular/material/dialog';
 import { getMonthString } from '../../../core/utils/date.utils';
 import { normalizeName } from '../../../core/utils/name.utils';
@@ -30,9 +31,9 @@ import { normalizeName } from '../../../core/utils/name.utils';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    FormsModule, DatePipe, UpperCasePipe, CurrencyInrPipe,
+    FormsModule, DatePipe, UpperCasePipe, NgTemplateOutlet, CurrencyInrPipe,
     LoadingSpinnerComponent, EmptyStateComponent, DateRangeFilterComponent,
-    MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule,
+    MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatInputModule, MatTabsModule,
   ],
   template: `
     <!-- Header -->
@@ -64,15 +65,6 @@ import { normalizeName } from '../../../core/utils/name.utils';
       </div>
       <div class="filters" [class.collapsed]="!filtersOpen()">
         <mat-form-field appearance="outline" class="filter-field">
-          <mat-label>Type</mat-label>
-          <mat-select [(ngModel)]="filterType" (selectionChange)="loadData()">
-            <mat-option value="">All Types</mat-option>
-            <mat-option value="expense">Expense</mat-option>
-            <mat-option value="income">Income</mat-option>
-          </mat-select>
-        </mat-form-field>
-
-        <mat-form-field appearance="outline" class="filter-field">
           <mat-label>Segment</mat-label>
           <mat-select [(ngModel)]="filterSegment" (selectionChange)="loadData()">
             <mat-option value="">All Segments</mat-option>
@@ -96,10 +88,13 @@ import { normalizeName } from '../../../core/utils/name.utils';
           <mat-label>Payment</mat-label>
           <mat-select [(ngModel)]="filterPaymentStatus">
             <mat-option value="">All</mat-option>
-            <mat-option value="received">Received</mat-option>
-            <mat-option value="pending">Pending</mat-option>
-            <mat-option value="paid">Paid</mat-option>
-            <mat-option value="credit">Credit (Unpaid)</mat-option>
+            @if (filterType() === 'income') {
+              <mat-option value="received">Received</mat-option>
+              <mat-option value="pending">Pending</mat-option>
+            } @else {
+              <mat-option value="paid">Paid</mat-option>
+              <mat-option value="credit">Credit (Unpaid)</mat-option>
+            }
           </mat-select>
         </mat-form-field>
 
@@ -125,7 +120,34 @@ import { normalizeName } from '../../../core/utils/name.utils';
       </div>
     </mat-card>
 
-    <!-- Content -->
+    <!-- Expense / Income tabs -->
+    <mat-tab-group [selectedIndex]="filterType() === 'income' ? 1 : 0" (selectedTabChange)="onTabChange($event.index)">
+      <mat-tab>
+        <ng-template mat-tab-label>
+          <mat-icon class="tab-icon expense">arrow_downward</mat-icon>
+          Expense
+        </ng-template>
+        <ng-template matTabContent>
+          <div class="tab-body">
+            <ng-container *ngTemplateOutlet="txnContent" />
+          </div>
+        </ng-template>
+      </mat-tab>
+      <mat-tab>
+        <ng-template mat-tab-label>
+          <mat-icon class="tab-icon income">arrow_upward</mat-icon>
+          Income
+        </ng-template>
+        <ng-template matTabContent>
+          <div class="tab-body">
+            <ng-container *ngTemplateOutlet="txnContent" />
+          </div>
+        </ng-template>
+      </mat-tab>
+    </mat-tab-group>
+
+    <!-- Content (shared by both tabs) -->
+    <ng-template #txnContent>
     @if (loading()) {
       <app-loading-spinner />
     } @else if (loadFailed()) {
@@ -148,7 +170,7 @@ import { normalizeName } from '../../../core/utils/name.utils';
             <thead>
               <tr>
                 <th class="sortable" (click)="toggleSort('date')" [attr.aria-sort]="sortColumn() === 'date' ? (sortDirection() === 'asc' ? 'ascending' : 'descending') : null">Date <span class="sort-icon">{{ getSortIcon('date') }}</span></th>
-                <th class="sortable" (click)="toggleSort('type')" [attr.aria-sort]="sortColumn() === 'type' ? (sortDirection() === 'asc' ? 'ascending' : 'descending') : null">Type <span class="sort-icon">{{ getSortIcon('type') }}</span></th>
+                <th>Status</th>
                 <th class="sortable" (click)="toggleSort('segmentName')" [attr.aria-sort]="sortColumn() === 'segmentName' ? (sortDirection() === 'asc' ? 'ascending' : 'descending') : null">Segment <span class="sort-icon">{{ getSortIcon('segmentName') }}</span></th>
                 <th class="sortable" (click)="toggleSort('categoryName')" [attr.aria-sort]="sortColumn() === 'categoryName' ? (sortDirection() === 'asc' ? 'ascending' : 'descending') : null">Category <span class="sort-icon">{{ getSortIcon('categoryName') }}</span></th>
                 <th class="sortable" (click)="toggleSort('amount')" [attr.aria-sort]="sortColumn() === 'amount' ? (sortDirection() === 'asc' ? 'ascending' : 'descending') : null">Amount <span class="sort-icon">{{ getSortIcon('amount') }}</span></th>
@@ -162,11 +184,7 @@ import { normalizeName } from '../../../core/utils/name.utils';
               @for (txn of paginatedTransactions(); track txn.id) {
                 <tr (click)="viewDetail(txn.id)" class="clickable-row" [class.income-row]="txn.type === 'income'" [class.expense-row]="txn.type === 'expense'">
                   <td class="date-cell">{{ txn.date.toDate() | date:'dd MMM yyyy' }}</td>
-                  <td>
-                    <span class="type-badge" [class]="txn.type">
-                      <mat-icon class="type-icon">{{ txn.type === 'expense' ? 'arrow_downward' : 'arrow_upward' }}</mat-icon>
-                      {{ txn.type }}
-                    </span>
+                  <td class="status-cell">
                     @if (txn.type === 'income') {
                       <span class="dist-chip" [class]="getDistStatus(txn)">{{ getDistLabel(txn) }}</span>
                       @if (txn.paymentStatus === 'pending') {
@@ -178,6 +196,9 @@ import { normalizeName } from '../../../core/utils/name.utils';
                     }
                     @if (txn.type === 'expense' && txn.linkedSaleTransactionId) {
                       <span class="pay-status-chip sale-link" [title]="txn.linkedSaleLabel || 'Linked to sale'">Sale</span>
+                    }
+                    @if (txn.type === 'expense' && txn.expensePaymentStatus !== 'pending' && !txn.linkedSaleTransactionId) {
+                      <span class="status-empty">—</span>
                     }
                   </td>
                   <td>{{ txn.segmentName }}</td>
@@ -253,6 +274,7 @@ import { normalizeName } from '../../../core/utils/name.utils';
         </div>
       }
     }
+    </ng-template>
   `,
   styles: [`
     .filter-header { cursor: pointer; }
@@ -272,14 +294,14 @@ import { normalizeName } from '../../../core/utils/name.utils';
     .summary-label { font-size: var(--font-sm); color: var(--color-text-muted); text-transform: uppercase; }
     .summary-value { font-size: var(--font-base); color: var(--color-text); font-weight: 600; }
 
-    .type-badge {
-      display: inline-flex; align-items: center; gap: 4px;
-      padding: 3px 10px; border-radius: var(--radius-full); font-size: 0.7rem;
-      font-weight: 700; text-transform: uppercase;
-    }
-    .type-badge .type-icon { font-size: 14px; width: 14px; height: 14px; }
-    .type-badge.expense { background: var(--color-expense-bg); color: var(--color-expense); }
-    .type-badge.income { background: var(--color-income-bg); color: var(--color-income); }
+    .tab-icon { margin-right: 8px; }
+    .tab-icon.income { color: var(--color-income, #2e7d32); }
+    .tab-icon.expense { color: var(--color-expense, #c62828); }
+    .tab-body { padding: 1rem 0; }
+
+    .status-cell { white-space: nowrap; }
+    .status-cell .dist-chip, .status-cell .pay-status-chip { margin-left: 0; margin-right: 4px; }
+    .status-empty { color: var(--color-text-muted); }
 
     .amount-cell.expense { color: var(--color-expense); }
     .amount-cell.income { color: var(--color-income); }
@@ -332,7 +354,7 @@ export class TransactionListComponent implements OnInit {
   private lastDoc: any = null;
 
   filtersOpen = signal(window.innerWidth > 768);
-  filterType = signal('');
+  filterType = signal<'expense' | 'income'>('expense');
   filterSegment = signal('');
   filterPaidBy = signal('');
   filterPaymentStatus = signal('');
@@ -346,7 +368,6 @@ export class TransactionListComponent implements OnInit {
 
   activeFilterCount = computed(() => {
     let count = 0;
-    if (this.filterType()) count++;
     if (this.filterSegment()) count++;
     if (this.filterPaidBy()) count++;
     if (this.filterPaymentStatus()) count++;
@@ -431,6 +452,14 @@ export class TransactionListComponent implements OnInit {
     await this.loadData();
   }
 
+  async onTabChange(index: number): Promise<void> {
+    const type = index === 1 ? 'income' : 'expense';
+    if (this.filterType() === type) return;
+    this.filterType.set(type);
+    this.filterPaymentStatus.set('');
+    await this.loadData();
+  }
+
   async loadData(): Promise<void> {
     this.lastDoc = null;
     this.currentPage.set(1);
@@ -463,7 +492,7 @@ export class TransactionListComponent implements OnInit {
   private buildQuery(): { filters: { type?: 'expense' | 'income'; segment?: string; month?: string }; limit: number } {
     const selection = this.currentSelection();
     const filters: { type?: 'expense' | 'income'; segment?: string; month?: string } = {};
-    if (this.filterType()) filters.type = this.filterType() as 'expense' | 'income';
+    filters.type = this.filterType();
     if (this.filterSegment()) filters.segment = this.filterSegment();
 
     // Use server-side month filter only for single month mode
@@ -486,7 +515,6 @@ export class TransactionListComponent implements OnInit {
   }
 
   clearFilters(): void {
-    this.filterType.set('');
     this.filterSegment.set('');
     this.filterPaidBy.set('');
     this.filterPaymentStatus.set('');
