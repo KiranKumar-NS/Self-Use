@@ -136,7 +136,13 @@
       "Bash(node scripts/delete-non-admin-users.js --dry-run)",
       "Bash(node scripts/delete-non-admin-users.js --yes)",
       "Bash(node scripts/clean-db.js status)",
-      "Bash(node smoke.js)"
+      "Bash(node smoke.js)",
+      "Bash(rm -rf dist && npx ng build --configuration production)",
+      "Bash(node check-checklist.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://farm-tracker-tn70.web.app/ngsw.json)"
+    ],
+    "additionalDirectories": [
+      "D:\\kk\\self-use-repo\\farm-tracker\\dist"
     ]
   }
 }

@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import {
   Firestore, collection, doc, getDocs, getDoc, setDoc, updateDoc,
-  query, orderBy, where, serverTimestamp, Timestamp, increment,
+  query, orderBy, where, limit, writeBatch, serverTimestamp, Timestamp, increment,
 } from '@angular/fire/firestore';
 import { Supplier } from '../models/supplier.model';
 import { AuthService } from './auth.service';
@@ -96,6 +96,25 @@ export class SupplierService {
 
   async softDelete(id: string): Promise<void> {
     await updateDoc(doc(this.firestore, 'suppliers', id), { isDeleted: true });
+    this.clearCache();
+  }
+
+  /**
+   * Permanent delete, refused while any expense transaction still points at the
+   * supplier. Stock purchases are covered transitively — every supplier-linked
+   * stock movement also writes a linked expense transaction — and dues/payables
+   * are derived from those same transactions.
+   */
+  async hardDelete(id: string): Promise<void> {
+    const snap = await getDocs(
+      query(collection(this.firestore, 'transactions'), where('linkedSupplierId', '==', id), limit(1))
+    );
+    if (!snap.empty) {
+      throw new Error('Cannot permanently delete: supplier has linked transactions. Use soft delete instead.');
+    }
+    const batch = writeBatch(this.firestore);
+    batch.delete(doc(this.firestore, 'suppliers', id));
+    await batch.commit();
     this.clearCache();
   }
 }
