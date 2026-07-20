@@ -86,7 +86,7 @@ const SALE_UNITS: string[] = ['kg', 'head', 'dozen', 'litre', 'pieces', 'bag', '
               <div class="expense-fields">
                 <mat-form-field appearance="outline">
                   <mat-label>Segment</mat-label>
-                  <mat-select [(ngModel)]="expenseSegmentId" required>
+                  <mat-select [(ngModel)]="expenseSegmentId" required (selectionChange)="onExpenseSegmentChange()">
                     @for (seg of segments(); track seg.id) {
                       <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
                     }
@@ -96,7 +96,7 @@ const SALE_UNITS: string[] = ['kg', 'head', 'dozen', 'litre', 'pieces', 'bag', '
                 <mat-form-field appearance="outline">
                   <mat-label>Category</mat-label>
                   <mat-select [(ngModel)]="expenseCategoryId" required>
-                    @for (cat of expenseCategories(); track cat.id) {
+                    @for (cat of filteredExpenseCategories(); track cat.id) {
                       <mat-option [value]="cat.id">{{ cat.name }}</mat-option>
                     }
                   </mat-select>
@@ -193,6 +193,18 @@ export class StockMovementDialogComponent implements OnInit {
   expenseCategoryId = '';
   expensePaymentStatus: 'paid' | 'pending' = 'paid';
 
+  filteredExpenseCategories(): Category[] {
+    return this.expenseCategories().filter(c =>
+      !this.expenseSegmentId || !c.segments?.length || c.segments.includes(this.expenseSegmentId)
+    );
+  }
+
+  onExpenseSegmentChange(): void {
+    if (this.expenseCategoryId && !this.filteredExpenseCategories().some(c => c.id === this.expenseCategoryId)) {
+      this.expenseCategoryId = '';
+    }
+  }
+
   get titleLabel(): string {
     const labels = { purchase: 'Record Purchase', used: 'Record Usage', wastage: 'Record Wastage' };
     return labels[this.data.type];
@@ -217,7 +229,7 @@ export class StockMovementDialogComponent implements OnInit {
         // Sensible defaults: the item's first segment, and a category matching
         // the consumable category (e.g. feed → Feed) when one exists
         this.expenseSegmentId = this.data.item.segments?.[0] || '';
-        const match = this.expenseCategories().find(
+        const match = this.filteredExpenseCategories().find(
           c => c.id === this.data.item.category || c.name.toLowerCase() === this.data.item.category
         );
         this.expenseCategoryId = match?.id || '';

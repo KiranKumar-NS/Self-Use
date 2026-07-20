@@ -224,7 +224,11 @@ export class RecurringSetupDialogComponent implements OnInit {
   }
 
   filteredCategories(): Category[] {
-    return this.categories().filter(c => c.type === this.txnType() && c.isActive);
+    const segment = this.selectedSegment();
+    return this.categories().filter(c =>
+      c.type === this.txnType() && c.isActive &&
+      (!segment || !c.segments?.length || c.segments.includes(segment))
+    );
   }
 
   onCategoryChange(): void {
@@ -235,6 +239,10 @@ export class RecurringSetupDialogComponent implements OnInit {
   onSegmentChange(): void {
     const seg = this.segments().find(s => s.id === this.selectedSegment());
     this.segmentName = seg?.name || '';
+    if (this.selectedCategory() && !this.filteredCategories().some(c => c.id === this.selectedCategory())) {
+      this.selectedCategory.set('');
+      this.categoryName = '';
+    }
   }
 
   onPaidByChange(): void {

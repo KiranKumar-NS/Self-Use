@@ -3,6 +3,8 @@ export interface Category {
   name: string;
   type: 'expense' | 'income';
   isActive: boolean;
+  /** Segment ids this category applies to; empty/missing = all segments. */
+  segments?: string[];
 }
 
 export const DEFAULT_CATEGORIES: Category[] = [

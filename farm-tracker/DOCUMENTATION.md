@@ -192,7 +192,7 @@ Kanban board: backlog → todo → in_progress → done. Priority: low/medium/hi
 
 **User Management:** CRUD users, role assignment (admin/manager/viewer), segment assignment per user, active/inactive toggle.
 
-**Data Setup** `/admin/data-setup`: Seed default segments (Goats/Chickens/Dragon Fruit) and categories. Segment budget management (monthly expense limit, income target). Category creation.
+**Data Setup** `/admin/data-setup`: Seed default segments (Goats/Chickens/Dragon Fruit) and categories. Segment budget management (monthly expense limit, income target). Category creation with optional segment scoping; per-category segment assignment (multi-select; empty = all segments).
 
 ### Authentication
 
@@ -253,9 +253,10 @@ uid, email, displayName, role (`admin|manager|viewer`), assignedSegments[], isAc
 id, name, description, icon, isActive, segmentType (`animal|crop`), unit (`head|kg|trees|litres`), currentStock?, breeds[]?, budgets? {monthlyExpenseLimit?, monthlyIncomeTarget?}, createdAt
 
 ### `categories/{id}`
-id, name, type (`expense|income`), isActive
+id, name, type (`expense|income`), isActive, segments[]? (segment IDs this category applies to; empty/missing = all segments — transaction form filters the category dropdown by the selected segment)
 Expense: feed, medicine, labor, transport, maintenance, loan-repayment, other-expense
 Income: milk, eggs, animal-sales, crop-sales, fruit-sales, other-income
+Defaults seed with no segment restriction; admins assign segments per category in Data Setup.
 
 ### `transactions/{id}`
 id, type (`expense|income`), date, amount, quantity?, unit? (`kg|head|dozen|litre|pieces|bag|bundle`), ratePerUnit?, category (ID), categoryName, segment (ID), segmentName, description, paymentMethod (`cash|upi`), paidBy (uid|"other"|null), paidByName, paymentStatus? (`received|pending`), expensePaymentStatus? (`paid|pending`), distributions? [{uid, name, amount}], linkedLoanId?, linkedAnimalIds[]?, linkedAnimalNames[]?, animalCostSplit? {animalId: amount}, linkedBuyerId?, linkedBuyerName?, linkedSupplierId?, linkedSupplierName?, tags[]?, timeline [{action, by, byName, at, changes?}], createdBy, createdByName, createdAt, isDeleted, month (`YYYY-MM`), year

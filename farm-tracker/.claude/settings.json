@@ -130,7 +130,13 @@
       "PowerShell(git commit -F \"C:\\\\Users\\\\Admin\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--kk-self-use-repo-farm-tracker\\\\ffe644c0-2ae1-4565-8350-ca2ef8f51892\\\\scratchpad\\\\commit-msg.txt\")",
       "PowerShell(git add .claude/settings.json .claude/skills/schema/SKILL.md .claude/skills/verify/SKILL.md docs/manual-test-checklist.html)",
       "PowerShell(npm run test:run)",
-      "Edit(/.claude/skills/ship/**)"
+      "Edit(/.claude/skills/ship/**)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" https://farm-tracker-tn70.web.app/ngsw.json)",
+      "Bash(node scripts/clean-db.js all --yes)",
+      "Bash(node scripts/delete-non-admin-users.js --dry-run)",
+      "Bash(node scripts/delete-non-admin-users.js --yes)",
+      "Bash(node scripts/clean-db.js status)",
+      "Bash(node smoke.js)"
     ]
   }
 }

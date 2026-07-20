@@ -172,6 +172,16 @@ import {
                         <mat-icon>delete</mat-icon>
                       </button>
                     </div>
+                    <mat-form-field appearance="outline" class="cat-seg-field" subscriptSizing="dynamic">
+                      <mat-label>Segments</mat-label>
+                      <mat-select multiple placeholder="All segments"
+                        [ngModel]="cat.segments || []"
+                        (ngModelChange)="updateCategorySegments(cat, $event)">
+                        @for (seg of segments(); track seg.id) {
+                          <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
                   </mat-card>
                 }
               </div>
@@ -194,6 +204,16 @@ import {
                         <mat-icon>delete</mat-icon>
                       </button>
                     </div>
+                    <mat-form-field appearance="outline" class="cat-seg-field" subscriptSizing="dynamic">
+                      <mat-label>Segments</mat-label>
+                      <mat-select multiple placeholder="All segments"
+                        [ngModel]="cat.segments || []"
+                        (ngModelChange)="updateCategorySegments(cat, $event)">
+                        @for (seg of segments(); track seg.id) {
+                          <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
                   </mat-card>
                 }
               </div>
@@ -219,6 +239,15 @@ import {
                     <mat-option value="expense">Expense</mat-option>
                     <mat-option value="income">Income</mat-option>
                   </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Segments</mat-label>
+                  <mat-select multiple placeholder="All segments" [ngModel]="newCategory().segments" (ngModelChange)="newCategory().segments = $event">
+                    @for (seg of segments(); track seg.id) {
+                      <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
+                    }
+                  </mat-select>
+                  <mat-hint>Leave empty to show in all segments</mat-hint>
                 </mat-form-field>
                 <button mat-flat-button color="primary" (click)="addCategory()" [disabled]="!newCategory().id || !newCategory().name">
                   <mat-icon>add</mat-icon> Add
@@ -425,6 +454,7 @@ import {
     .expense-card { border-left: 3px solid var(--color-expense); }
     .income-card { border-left: 3px solid var(--color-income); }
     .cat-delete { margin: -8px -8px -8px auto; }
+    .cat-seg-field { width: 100%; margin-top: 0.75rem; }
     .expense-card .item-header, .income-card .item-header { min-height: 24px; }
     .sub-heading { margin: 1rem 0 0.5rem; font-size: 0.9rem; color: var(--color-text-subtle); }
     .no-data { color: var(--color-text-muted); font-size: 0.85rem; padding: 0.5rem 0; }
@@ -500,7 +530,7 @@ export class DataSetupComponent implements OnInit {
   incomeCategories = signal<Category[]>([]);
 
   newSegment = signal<{ id: string; name: string; description: string; icon: string; segmentType: 'animal' | 'crop' }>({ id: '', name: '', description: '', icon: '', segmentType: 'animal' });
-  newCategory = signal<{ id: string; name: string; type: 'expense' | 'income' }>({ id: '', name: '', type: 'expense' });
+  newCategory = signal<{ id: string; name: string; type: 'expense' | 'income'; segments: string[] }>({ id: '', name: '', type: 'expense', segments: [] });
 
 
   async ngOnInit(): Promise<void> {
@@ -597,9 +627,11 @@ export class DataSetupComponent implements OnInit {
         name: newCategory.name,
         type: newCategory.type,
         isActive: true,
+        segments: newCategory.segments,
       });
+      this.categoryService.clearCache();
       this.successMsg.set(`Category "${newCategory.name}" added!`);
-      this.newCategory.set({ id: '', name: '', type: 'expense' });
+      this.newCategory.set({ id: '', name: '', type: 'expense', segments: [] });
       await this.loadData();
     } catch (err: any) {
       this.errorMsg.set(err.message);
@@ -621,8 +653,24 @@ export class DataSetupComponent implements OnInit {
     this.clearMessages();
     try {
       await deleteDoc(doc(this.firestore, 'categories', id));
+      this.categoryService.clearCache();
       this.successMsg.set(`Category "${id}" deleted.`);
       await this.loadData();
+    } catch (err: any) {
+      this.errorMsg.set(err.message);
+    }
+  }
+
+  async updateCategorySegments(cat: Category, segments: string[]): Promise<void> {
+    this.clearMessages();
+    try {
+      await setDoc(doc(this.firestore, 'categories', cat.id), { segments }, { merge: true });
+      this.categoryService.clearCache();
+      // Patch signals in place — a full loadData() would close the open multi-select
+      const patch = (list: Category[]) => list.map((c) => (c.id === cat.id ? { ...c, segments } : c));
+      this.categories.update(patch);
+      this.expenseCategories.update(patch);
+      this.incomeCategories.update(patch);
     } catch (err: any) {
       this.errorMsg.set(err.message);
     }

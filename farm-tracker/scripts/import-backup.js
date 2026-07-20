@@ -717,6 +717,7 @@ async function importBackup(wb, dryRun) {
         name: str(r['Name']),
         type: str(r['Type']) || 'expense',
         isActive: bool(r['Active']),
+        segments: splitSemi(r['Segments']),
       }});
       count('categories');
     }

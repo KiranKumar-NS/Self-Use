@@ -316,7 +316,7 @@ const SHEETS = {
   },
   'Categories': {
     ref: r => db.collection('categories').doc(str(r['ID'])),
-    fields: { 'Name': ['name', 'str'], 'Type': ['type', 'str'], 'Active': ['isActive', 'bool'] },
+    fields: { 'Name': ['name', 'str'], 'Type': ['type', 'str'], 'Active': ['isActive', 'bool'], 'Segments': ['segments', 'listSemi'] },
   },
   'Segments': {
     ref: r => db.collection('segments').doc(str(r['ID'])),

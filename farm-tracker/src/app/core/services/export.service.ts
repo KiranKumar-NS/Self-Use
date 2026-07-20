@@ -868,6 +868,7 @@ export class ExportService {
     // --- Categories Sheet ---
     const categoryRows = data.categories.map(c => ({
       'ID': c.id, 'Name': c.name, 'Type': c.type, 'Active': c.isActive,
+      'Segments': joinSemi(c.segments),
     }));
 
     // --- Segments Sheet ---

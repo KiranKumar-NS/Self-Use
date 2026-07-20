@@ -112,7 +112,7 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
         <div class="form-row">
           <mat-form-field appearance="outline">
             <mat-label>Segment</mat-label>
-            <mat-select [(ngModel)]="segment" name="segment" required (selectionChange)="loadActiveAnimals()" #segmentModel="ngModel">
+            <mat-select [(ngModel)]="segment" name="segment" required (selectionChange)="onSegmentChange()" #segmentModel="ngModel">
               @for (seg of filteredSegments(); track seg.id) {
                 <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
               }
@@ -718,10 +718,21 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
     }
   }
 
+  onSegmentChange(): void {
+    this.onTypeChange();
+    this.loadActiveAnimals();
+  }
+
   onTypeChange(): void {
     this.filteredCategories.set(
-      this.allCategories().filter((c) => c.type === this.type)
+      this.allCategories().filter((c) =>
+        c.type === this.type &&
+        (!this.segment || !c.segments?.length || c.segments.includes(this.segment))
+      )
     );
+    if (this.category && !this.filteredCategories().some((c) => c.id === this.category)) {
+      this.category = '';
+    }
     // Default to UPI for expense, cash for income
     if (!this.isEdit()) {
       this.paymentMethod = this.type === 'expense' ? 'upi' : 'cash';
