@@ -1,17 +1,26 @@
 ---
 name: schema
-description: Load the full farm-tracker data schema, entity links, write-path flow, and change-ripple checklist BEFORE adding or modifying any feature, field, collection, or link.
+description: Load the farm-tracker project purpose, zero-cost (Spark plan) constraints, full data schema, entity links, write-path flow, and change-ripple checklist BEFORE adding or modifying any feature, field, collection, or link.
 ---
 
 # Farm-tracker data schema & flow
 
 Read this before implementing any "add X" / "change X" request. Deep per-field schema lives in `DOCUMENTATION.md` ("Firestore Schema" section) — read the relevant collection's section there; this skill covers what that doc doesn't: linking, write sequencing, and the ripple a schema change causes.
 
+## What this project is & why
+Personal multi-user farm financial management PWA for the family farm. It tracks **money** (transactions, loans, dues, distributions), **livestock & crops** (animals, breeding, harvests, crop activities), **people** (buyers, suppliers, users with admin/manager/viewer roles), and **operations** (tasks, schedules/reminders, consumable inventory) across three segments: Goats 🐐, Chickens 🐔, Dragon Fruit 🌵. All money is INR. The goal is a single trustworthy ledger the family can use from phones (768px bottom-nav layout) with per-animal/per-person/per-segment profit visibility.
+
+## Zero-cost constraint (everything runs on free tiers)
+- Firebase **Spark plan**: no Cloud Functions, no scheduled functions, no extensions → ALL aggregation, counter maintenance, and scheduling are client-side. "Client-side cron" = `ScheduleService.processOverdueSchedules()` on app startup.
+- Hosting = Firebase Hosting free tier. Daily Drive backup = free **Google Apps Script** (`backup-script/Code.gs`), not a paid service.
+- No local emulator possible (machine is stuck on Java 8) — testing is Vitest + headless verification against built dist (see the `verify` skill).
+- Rule for new features: never propose anything that needs the Blaze plan, a paid API, or any server component.
+
 ## Sources of truth (read first)
 - `DOCUMENTATION.md` — authoritative per-collection field lists, features, routes, services.
 - `firestore.rules` — validation + access. Role comes from the Auth **custom claim** `request.auth.token.role` (NOT the `users` doc; the doc only supplies `isActive` + `assignedSegments`). Managers need segment access; pseudo-segment `'personal'` exists. Rules enforce: txn `amount > 0`, `createdBy == uid`, summary doc-ID format, `timeline` ≤ 100 entries.
 - `firestore.indexes.json` — composite indexes. Nearly every list query leads with `isDeleted` + a date field DESC, so any new queryable/filterable field needs a new composite index (+ `firebase deploy` pushes rules & indexes).
-- Firebase **Spark plan**: no Cloud Functions. ALL aggregation, scheduling, and counter maintenance is client-side.
+- Spark-plan consequence (see "Zero-cost constraint" above): every write path below is client-side — there is no server to fix drift or run triggers.
 
 ## Collections → model → owning service
 All models in `src/app/core/models/`, services in `src/app/core/services/`.

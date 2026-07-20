@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Farm Tracker — Manual Test Checklist</title>
+<style>
+  :root{
+    --bg:#f6f7f4; --card:#ffffff; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb;
+    --green:#2e7d32; --green-soft:#e8f5e9; --red:#c62828; --red-soft:#fdecea;
+    --amber:#b45309; --amber-soft:#fef3c7; --blue:#1d4ed8; --blue-soft:#e0e7ff;
+    --chip:#eef2f7;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#111418; --card:#1b2027; --ink:#e5e7eb; --muted:#9aa3af; --line:#2c343d;
+      --green:#66bb6a; --green-soft:#173620; --red:#ef5350; --red-soft:#3a1d1d;
+      --amber:#fbbf24; --amber-soft:#3a2f10; --blue:#93b4ff; --blue-soft:#1e2947;
+      --chip:#242b33;
+    }
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif; background:var(--bg); color:var(--ink); line-height:1.5; padding-bottom:60px;}
+  header{position:sticky; top:0; z-index:20; background:var(--card); border-bottom:1px solid var(--line); padding:10px 14px; box-shadow:0 2px 8px rgba(0,0,0,.06);}
+  header h1{font-size:1.05rem; display:flex; align-items:center; gap:8px;}
+  .progress-wrap{display:flex; align-items:center; gap:10px; margin-top:8px;}
+  .bar{flex:1; height:10px; background:var(--chip); border-radius:6px; overflow:hidden; position:relative;}
+  .bar .fill{height:100%; background:var(--green); width:0%; transition:width .3s;}
+  .bar .fill.fail{background:var(--red); position:absolute; top:0;}
+  .counts{font-size:.8rem; color:var(--muted); white-space:nowrap;}
+  .toolbar{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;}
+  .toolbar button{border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:16px; padding:4px 12px; font-size:.8rem; cursor:pointer;}
+  .toolbar button.active{background:var(--blue-soft); border-color:var(--blue); color:var(--blue); font-weight:600;}
+  .toolbar .spacer{flex:1;}
+  .toolbar button.danger{color:var(--red); border-color:var(--red);}
+  main{max-width:860px; margin:0 auto; padding:14px;}
+  .intro{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:16px; font-size:.9rem;}
+  .intro h2{font-size:1rem; margin-bottom:6px;}
+  .intro ul{margin:6px 0 0 18px;}
+  .intro li{margin-bottom:4px;}
+  .module{background:var(--card); border:1px solid var(--line); border-radius:12px; margin-bottom:14px; overflow:hidden;}
+  .module > summary{list-style:none; cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:10px; user-select:none;}
+  .module > summary::-webkit-details-marker{display:none;}
+  .module > summary .arrow{transition:transform .2s; font-size:.7rem; color:var(--muted);}
+  .module[open] > summary .arrow{transform:rotate(90deg);}
+  .module > summary h2{font-size:.98rem; flex:1;}
+  .mchip{font-size:.72rem; padding:2px 10px; border-radius:12px; background:var(--chip); color:var(--muted); white-space:nowrap;}
+  .mchip.done{background:var(--green-soft); color:var(--green); font-weight:600;}
+  .mchip.hasfail{background:var(--red-soft); color:var(--red); font-weight:600;}
+  .cases{border-top:1px solid var(--line);}
+  .case{border-bottom:1px solid var(--line); padding:12px 16px;}
+  .case:last-child{border-bottom:none;}
+  .case.hidden{display:none;}
+  .case-head{display:flex; align-items:flex-start; gap:10px;}
+  .cid{font-size:.72rem; font-weight:700; color:var(--blue); background:var(--blue-soft); border-radius:6px; padding:2px 7px; margin-top:2px; white-space:nowrap;}
+  .ctitle{font-weight:600; font-size:.92rem; flex:1;}
+  .opt-badge{font-size:.68rem; color:var(--amber); background:var(--amber-soft); border-radius:6px; padding:1px 6px; margin-left:6px; vertical-align:middle;}
+  .statebtns{display:flex; gap:6px;}
+  .statebtns button{border:1px solid var(--line); background:transparent; color:var(--muted); border-radius:8px; width:38px; height:30px; font-size:.95rem; cursor:pointer;}
+  .statebtns button.p.on{background:var(--green-soft); border-color:var(--green); color:var(--green);}
+  .statebtns button.f.on{background:var(--red-soft); border-color:var(--red); color:var(--red);}
+  .case.pass .ctitle{color:var(--green);}
+  .case.fail .ctitle{color:var(--red);}
+  .cbody{margin-top:8px; font-size:.86rem;}
+  .cbody .lbl{font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:8px 0 3px;}
+  .cbody ol{margin-left:20px;}
+  .cbody ol li{margin-bottom:2px;}
+  .expect, .verify{border-radius:8px; padding:8px 10px; margin-top:3px;}
+  .expect{background:var(--green-soft);}
+  .expect div::before{content:"✔ "; color:var(--green);}
+  .verify{background:var(--amber-soft);}
+  .verify div::before{content:"🔎 "; }
+  .expect div, .verify div{margin-bottom:3px;}
+  .expect div:last-child, .verify div:last-child{margin-bottom:0;}
+  .note{width:100%; margin-top:8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); padding:6px 9px; font-size:.82rem; font-family:inherit; resize:vertical; min-height:30px;}
+  .note::placeholder{color:var(--muted);}
+  footer{text-align:center; font-size:.75rem; color:var(--muted); padding:20px;}
+  .toast{position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:8px 18px; border-radius:20px; font-size:.85rem; opacity:0; transition:opacity .3s; pointer-events:none; z-index:50;}
+  .toast.show{opacity:1;}
+  @media(max-width:600px){
+    .case-head{flex-wrap:wrap;}
+    .statebtns{margin-left:auto;}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧪 Farm Tracker — Manual Test Checklist</h1>
+  <div class="progress-wrap">
+    <div class="bar"><div class="fill" id="fillPass"></div></div>
+    <div class="counts" id="counts"></div>
+  </div>
+  <div class="toolbar">
+    <button data-filter="all" class="active">All</button>
+    <button data-filter="remaining">Remaining</button>
+    <button data-filter="pass">Passed</button>
+    <button data-filter="fail">Failed</button>
+    <span class="spacer"></span>
+    <button id="copyReport">📋 Copy report</button>
+    <button id="resetAll" class="danger">Reset</button>
+  </div>
+</header>
+
+<main>
+  <div class="intro">
+    <h2>How to use this checklist</h2>
+    <ul>
+      <li><b>Follow the order.</b> Later tests use data created by earlier tests (buyers → transactions → dues → sales…).</li>
+      <li>For each case: do the <b>Steps</b> in the app, confirm the <b>Expected</b> result on screen, then do the <b>Verify</b> checks on other pages — this catches counter/summary drift, the biggest risk in this app.</li>
+      <li>Tap <b>✓</b> for pass, <b>✗</b> for fail. Write what went wrong in the note box. Progress saves in this browser automatically.</li>
+      <li>When done (or when you find bugs), press <b>Copy report</b> and paste the result back to Claude to get fixes.</li>
+      <li><b>Before you start:</b> use test data you are okay keeping, OR run the app against a clean DB (<code>node scripts/clean-db.js seed</code>). For role tests you need a second browser/incognito window.</li>
+      <li>Cases marked <span class="opt-badge">optional</span> need extra setup (second user, waiting for dates) — skip if not practical.</li>
+    </ul>
+  </div>
+  <div id="modules"></div>
+</main>
+
+<footer>Farm Tracker manual QA · progress is saved only in this browser (localStorage)</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+const DATA = [
+{ id:"AUTH", icon:"🔐", title:"1. Login & Roles", cases:[
+ { id:"AUTH-01", t:"Login with correct admin account",
+   s:["Open the app, go to /auth/login","Enter your admin email + password, press Login"],
+   e:["Dashboard loads with income/expense cards","Sidebar shows all menus (Transactions, Stock, Loans, Admin…)"],
+   v:["Header shows your display name","Refresh the page — you stay logged in"] },
+ { id:"AUTH-02", t:"Wrong password is rejected",
+   s:["Logout","Login with correct email but wrong password"],
+   e:["Clear error message shown, you stay on the login page"],
+   v:["No partial login — dashboard is not reachable by typing /dashboard in the URL"] },
+ { id:"AUTH-03", t:"Forgot password sends reset email",
+   s:["On login page click Forgot Password","Enter your email, submit"],
+   e:["Success message shown"],
+   v:["Reset email arrives in the inbox (check spam too)"] },
+ { id:"AUTH-04", t:"Viewer role sees only Dashboard + Tasks", opt:true,
+   s:["In a second browser, login as a viewer-role user"],
+   e:["Menu shows only Dashboard and Tasks"],
+   v:["Typing /transactions in the URL is blocked/redirected","Dashboard has no add/edit buttons"] },
+ { id:"AUTH-05", t:"Manager sees only assigned segments", opt:true,
+   s:["Login as a manager assigned only to Goats","Open Transactions → Add"],
+   e:["Segment dropdown shows only Goats (+ personal where allowed)"],
+   v:["Transaction list shows only Goats records","Admin menu is hidden"] },
+]},
+{ id:"ADM", icon:"⚙️", title:"2. Admin — Users, Categories, Budgets", cases:[
+ { id:"ADM-01", t:"Segments & categories exist (seed check)",
+   s:["Go to Admin → Data Setup","If DB is fresh, press Seed Defaults"],
+   e:["Segments Goats 🐐, Chickens 🐔, Dragon Fruit 🌵 listed","Default expense + income categories listed"],
+   v:["Transaction form shows these segments and categories in dropdowns"] },
+ { id:"ADM-02", t:"Add a new category 'Transport' (expense)",
+   s:["Admin → Data Setup → add category: name Transport, type expense"],
+   e:["Transport appears in the category list"],
+   v:["Transaction form: Transport appears ONLY when type = expense, not for income"] },
+ { id:"ADM-03", t:"Set Goats monthly budget ₹10,000",
+   s:["Admin → Data Setup → segment budgets","Set Goats monthlyExpenseLimit = 10000, save"],
+   e:["Budget saved message"],
+   v:["Dashboard budget widget shows Goats limit ₹10,000 (spent % will be tested later in DSH-03)"] },
+ { id:"ADM-04", t:"Create a new user",
+   s:["Admin → Register: create test user (email + password)","Admin → Users: set displayName 'Suresh', role manager, assign segment Chickens"],
+   e:["User appears in Admin user list as active"],
+   v:["IMPORTANT: role only fully works after running: node firebase/set-custom-claims.js <uid> manager, then that user logs out + in again","'Suresh' now appears in Paid By / Received By dropdowns in the transaction form"] },
+ { id:"ADM-05", t:"Deactivate a user blocks their login",
+   s:["Admin → Users: toggle the test user to inactive","In the second browser, try to login as that user"],
+   e:["Login blocked / signed out with a message"],
+   v:["Re-activate the user and confirm login works again"] },
+]},
+{ id:"BS", icon:"🤝", title:"3. Buyers & Suppliers", cases:[
+ { id:"BS-01", t:"Add buyer 'Ravi Traders'",
+   s:["Buyers → Add","Name: Ravi Traders, Phone: 98765 43210, Location: Hosur → Save"],
+   e:["Ravi Traders appears in buyer list"],
+   v:["Open buyer detail: totalPurchases = 0, total amount = ₹0 (stats start empty)"] },
+ { id:"BS-02", t:"Buyer form validation — empty name blocked",
+   s:["Buyers → Add → leave name empty → try Save"],
+   e:["Save blocked, name field shows required error"],
+   v:["No empty buyer row appears in the list"] },
+ { id:"BS-03", t:"Add buyer 'Kumar Chicken Stall'",
+   s:["Buyers → Add: Kumar Chicken Stall, phone optional → Save"],
+   e:["Second buyer listed"],
+   v:["Both buyers appear in the transaction form buyer dropdown"] },
+ { id:"BS-04", t:"Edit buyer phone",
+   s:["Edit Ravi Traders → change phone to 98765 00000 → Save"],
+   e:["List/detail shows new phone"],
+   v:["Reload the page — change persisted"] },
+ { id:"BS-05", t:"Add supplier 'Sri Lakshmi Feeds'",
+   s:["Suppliers → Add","Name: Sri Lakshmi Feeds, GST optional, category: feed → Save"],
+   e:["Supplier listed"],
+   v:["Detail: totalOrders 0, pendingAmount ₹0","Appears in transaction form supplier dropdown"] },
+ { id:"BS-06", t:"Soft delete a throwaway buyer",
+   s:["Add buyer 'Test Buyer' → then delete it (confirm dialog)"],
+   e:["Test Buyer disappears from buyer list"],
+   v:["Transaction form buyer dropdown no longer shows Test Buyer"] },
+]},
+{ id:"TXN", icon:"💰", title:"4. Transactions — Add / Edit / Delete", cases:[
+ { id:"TXN-01", t:"Add paid expense — goat feed ₹4,500",
+   s:["Note the Dashboard total expense FIRST","Transactions → Add: type Expense, today, amount 4500, segment Goats, category Feed, payment cash, status Paid, paid by you","Save"],
+   e:["Appears at top of transaction list"],
+   v:["Dashboard total expense increased by exactly ₹4,500","Goats segment breakdown increased by ₹4,500"] },
+ { id:"TXN-02", t:"Add income with qty × rate auto-fill — egg sale ₹1,200",
+   s:["Add: type Income, segment Chickens, category egg/sales","Quantity 30, unit dozen, rate 40 — watch the amount field"],
+   e:["Amount auto-fills to 1200","Payment method defaulted to cash (income default)"],
+   v:["Dashboard total income +₹1,200","Chickens segment breakdown +₹1,200"] },
+ { id:"TXN-03", t:"Add PENDING income — credit goat sale ₹15,000 to Ravi",
+   s:["Add: Income, Goats, amount 15000, payment status = Pending","Expected payment date = 7 days from today","Link buyer: Ravi Traders → Save"],
+   e:["Saved with pending badge in list"],
+   v:["Dues page → To Receive tab: Ravi Traders shows ₹15,000","Dashboard pending-amounts card increased by ₹15,000","Dashboard total income should NOT include it yet as received (check how your dashboard counts pending)"] },
+ { id:"TXN-04", t:"Add PENDING expense — credit feed purchase ₹6,000",
+   s:["Add: Expense, Goats, amount 6000, expense status = Pending (credit)","Expected date +5 days, link supplier Sri Lakshmi Feeds → Save"],
+   e:["Saved with pending badge"],
+   v:["Dues → To Pay tab: Sri Lakshmi Feeds ₹6,000"] },
+ { id:"TXN-05", t:"Form validation — bad values blocked",
+   s:["Try saving with: amount 0 → then amount empty → then a future date → then no segment/category"],
+   e:["Each case blocks save with a field error","Date picker does not allow dates after today"],
+   v:["Transaction list has no junk rows after these attempts"] },
+ { id:"TXN-06", t:"'Other' payer with free-text name",
+   s:["Add small income ₹500, Received By = Other, type name 'Murugan' → Save","Start a second txn, choose Other, type 'Murugn' (misspelled)"],
+   e:["First save works with name Murugan","Second time a similar-name suggestion offers 'Murugan'"],
+   v:["Cancel the second txn. List shows the ₹500 with Murugan as payer"] },
+ { id:"TXN-07", t:"Auto-tags + custom tag",
+   s:["Edit TXN-01 (feed ₹4,500) → press auto-generate tags","Also add custom tag 'summer-feed' → Save"],
+   e:["Tags generated from category/segment + your custom tag saved"],
+   v:["Transaction list filter by tag 'summer-feed' finds it","(Tag rename/delete is tested at the end in REC-01/02)"] },
+ { id:"TXN-08", t:"Edit amount — summary must move by the DELTA only",
+   s:["Note dashboard total expense","Edit TXN-01: change 4500 → 5000 → Save"],
+   e:["List shows ₹5,000"],
+   v:["Dashboard total expense went up by exactly ₹500 (not ₹5,000 — that would be double counting)"] },
+ { id:"TXN-09", t:"Edit segment — totals move between segments",
+   s:["Note Goats & Chickens totals on dashboard","Edit the ₹500 Murugan income: change its segment to Chickens (if not already) or Goats → Save"],
+   e:["Saved with new segment"],
+   v:["Old segment total dropped by ₹500 and new segment rose by ₹500 — overall total unchanged"] },
+ { id:"TXN-10", t:"Edit date to last month — moves between monthly summaries",
+   s:["On dashboard set date filter to THIS month, note expense total","Edit TXN-01 (₹5,000 feed): change date to a day in last month → Save"],
+   e:["Saved"],
+   v:["This-month expense dropped by ₹5,000","Last-month filter now includes ₹5,000","All-Time total unchanged"] },
+ { id:"TXN-11", t:"Timeline / audit trail on detail page",
+   s:["Open TXN-01 detail page"],
+   e:["Timeline shows 'created' plus entries for each edit you made (amount, segment/date changes)"],
+   v:["Entries show who + when"] },
+ { id:"TXN-12", t:"Soft delete reverses all totals",
+   s:["Note dashboard income & Chickens totals","Delete TXN-02 (egg sale ₹1,200) — confirm dialog"],
+   e:["Gone from transaction list"],
+   v:["Dashboard total income dropped by ₹1,200","Chickens segment dropped by ₹1,200","It does NOT appear anywhere (search for it)"] },
+ { id:"TXN-13", t:"Inline '+ Add New Customer' from the form",
+   s:["Add income ₹800: in buyer dropdown choose + Add New Customer","Create 'Anand Meat Shop' inline → finish saving the txn"],
+   e:["Txn saved linked to the new buyer"],
+   v:["Buyers list now contains Anand Meat Shop with 1 purchase ₹800 in stats"] },
+ { id:"TXN-14", t:"Payment method defaults",
+   s:["Open Add form, pick type Expense — check payment method","Switch type to Income — check again"],
+   e:["Expense defaults to UPI, income defaults to Cash"],
+   v:["Cancel — nothing saved"] },
+ { id:"TXN-15", t:"Transaction list — filters, sort, pagination, search",
+   s:["On the list try: filter by segment, by category, by type income/expense, by paid-by, by date range","Sort by amount and by date; search a keyword from a description; page through"],
+   e:["Each filter narrows correctly and they combine; sort toggles asc/desc"],
+   v:["Filtered totals make sense vs dashboard with the same segment/date filter","Clear filters restores everything"] },
+ { id:"TXN-16", t:"Income FIRST, customer created LATER, then linked by edit",
+   s:["Add income ₹2,500 (milk sale) WITHOUT selecting any buyer → Save","Now go to Buyers → Add: 'Selvam Dairy' → Save","Note Selvam Dairy stats (should be ₹0)","EDIT the ₹2,500 income → link buyer = Selvam Dairy → Save"],
+   e:["Txn now shows Selvam Dairy as the customer"],
+   v:["Selvam Dairy stats updated retroactively: purchases 1, amount ₹2,500","Buyer detail purchase history shows this txn","Dashboard totals UNCHANGED (linking must not double-count income)"] },
+ { id:"TXN-17", t:"Change / remove the linked customer on an existing txn",
+   s:["Edit the same ₹2,500 income → change buyer from Selvam Dairy to Ravi Traders → Save","Then edit again → remove the buyer link completely → Save"],
+   e:["Each save succeeds and shows the current link state"],
+   v:["After change: Selvam Dairy stats dropped by ₹2,500, Ravi rose by ₹2,500","After removal: Ravi dropped back too — no buyer keeps a stale ₹2,500","Run Admin → Reconcile Counterparties later (REC-04): must still report 0 corrections"] },
+ { id:"TXN-18", t:"Expense FIRST, supplier created LATER, then linked by edit",
+   s:["Add PENDING expense ₹3,000 (medicine purchase) WITHOUT supplier → Save — check Dues → To Pay shows it ungrouped/under paid-by name","Suppliers → Add: 'Vet Care Agencies' → Save","EDIT the expense → link supplier = Vet Care Agencies → Save"],
+   e:["Txn shows Vet Care Agencies as supplier"],
+   v:["Dues → To Pay now groups the ₹3,000 under Vet Care Agencies","Mark it paid and confirm the due clears under that supplier","Note: supplier order-stats update only from consumable/inventory purchases — write down what the supplier detail shows here"] },
+]},
+{ id:"DUE", icon:"⏳", title:"5. Dues — Partial Payments & Aging", cases:[
+ { id:"DUE-01", t:"To Receive grouped by customer",
+   s:["Open Dues → To Receive tab"],
+   e:["Ravi Traders group: total ₹15,000, 1 txn, shows age in days + expected date"],
+   v:["Clicking the txn opens its detail page"] },
+ { id:"DUE-02", t:"Partial payment ₹5,000 received from Ravi",
+   s:["Note dashboard pending card","On the ₹15,000 due press partial payment → enter 5000 → save"],
+   e:["Remaining shows ₹10,000, txn still listed as pending/partial"],
+   v:["Dashboard pending amount dropped by ₹5,000","Buyer Ravi Traders detail: amount paid increased by ₹5,000"] },
+ { id:"DUE-03", t:"Partial payment cannot exceed remaining",
+   s:["Try partial payment 12000 (more than the ₹10,000 remaining)"],
+   e:["Blocked or capped at ₹10,000 with a clear message"],
+   v:["Remaining still ₹10,000 after the failed attempt"] },
+ { id:"DUE-04", t:"Mark received — due fully cleared",
+   s:["Press Mark Received on the remaining ₹10,000"],
+   e:["Txn disappears from Dues"],
+   v:["Dashboard pending card dropped by ₹10,000 (zero from this txn)","Transaction status is now received; full ₹15,000 counted in income","Ravi stats show the full amount"] },
+ { id:"DUE-05", t:"To Pay — partial payment to supplier",
+   s:["Dues → To Pay: on the ₹6,000 Sri Lakshmi Feeds due, partial pay 2000"],
+   e:["Remaining ₹4,000"],
+   v:["Supplier detail pendingAmount shows ₹4,000"] },
+ { id:"DUE-06", t:"Mark paid — payable cleared",
+   s:["Mark Paid on the remaining ₹4,000"],
+   e:["Gone from To Pay"],
+   v:["Supplier pendingAmount back to ₹0","Expense now fully counted in dashboard totals"] },
+ { id:"DUE-07", t:"Overdue chip + notification",
+   s:["Add a pending income ₹1,000 with expected date = YESTERDAY (edit date if the form blocks it, set expected date to yesterday)","Open Dues"],
+   e:["Red OVERDUE chip on that entry with days overdue"],
+   v:["Notification bell shows a due/receivable alert","Clean up: mark it received afterwards"] },
+]},
+{ id:"ANI", icon:"🐐", title:"6. Stock & Animals", cases:[
+ { id:"ANI-01", t:"Register individual goat 'Lakshmi'",
+   s:["Stock → Register Animal","Segment Goats, individual, tag G-101, name Lakshmi, female, breed Sirohi, origin purchase ₹8,000, date today → Save"],
+   e:["Lakshmi in Animals tab, status active"],
+   v:["Animal detail shows purchase price ₹8,000 as investment","Note: stock COUNT is driven by inventory events — check if the Goats stock number changed and note the behavior"] },
+ { id:"ANI-02", t:"Register goats 'Ganga' (F) and 'Raja' (M) for breeding tests",
+   s:["Register two more individual goats: Ganga female, Raja male, breed any, origin purchase"],
+   e:["Both listed as active"],
+   v:["Search by name finds each; gender saved correctly (needed for breeding pickers later)"] },
+ { id:"ANI-03", t:"Register batch — 50 chicks",
+   s:["Register Animal: segment Chickens, mode batch, label Batch-A, size 50, breed Aseel → Save"],
+   e:["Batch-A listed with size 50"],
+   v:["Batch shows in list distinct from individual animals"] },
+ { id:"ANI-04", t:"Record Event: purchase +5 goats (auto-create animal ON)",
+   s:["Note Goats stock count on the summary card","Stock → Record Event: purchase, count 5, breed local, value ₹30,000, keep 'also create animal record' ON → Save"],
+   e:["Event appears in Stock Log tab"],
+   v:["Goats stock count increased by 5","A batch/animal record of 5 was auto-created in Animals tab"] },
+ { id:"ANI-05", t:"Record Event: death −1",
+   s:["Record Event: death, count 1, Goats → Save"],
+   e:["Event in Stock Log"],
+   v:["Goats stock count decreased by 1"] },
+ { id:"ANI-06", t:"Vaccination record on Lakshmi",
+   s:["Open Lakshmi → Add Vaccination: PPR, today, cost ₹150, next due +6 months → Save"],
+   e:["Vaccination listed in her health history"],
+   v:["Her total invested increased by ₹150 (if cost is counted)","Next-due date saved (feeds reminders)"] },
+ { id:"ANI-07", t:"Medical record + weight logs with chart",
+   s:["On Lakshmi add Medical: treatment, deworming, cost ₹100","Add Weight Log: 22 kg (date last week), then 24 kg (today)"],
+   e:["Medical entry listed; weight chart shows 2 points going up"],
+   v:["Reload page — history persists"] },
+ { id:"ANI-08", t:"Cost attribution — feed expense split equally to 2 goats",
+   s:["Transactions → Add Expense ₹1,500, Goats, Feed","Tick Link to Animals, select Lakshmi + Ganga, split mode EQUAL → Save"],
+   e:["Txn saved showing 2 linked animals"],
+   v:["Lakshmi detail: cost entry +₹750; Ganga: +₹750","Each goat's total invested went up by ₹750"] },
+ { id:"ANI-09", t:"Delete attributed expense — costs removed from animals",
+   s:["Note Lakshmi's total invested","Delete the ₹1,500 linked expense from TXN list"],
+   e:["Txn gone"],
+   v:["Lakshmi & Ganga cost entries for ₹750 removed; invested totals back down","Dashboard expense also dropped ₹1,500"] },
+ { id:"ANI-10", t:"Record death — mortality dashboard updates",
+   s:["Note Stock → Mortality numbers first","Open one goat from the purchased batch → Record Death: cause disease → Save"],
+   e:["Animal status = dead"],
+   v:["Mortality dashboard: rate % and disease-cause chart updated, estimated loss increased","Goats stock count decreased by 1"] },
+ { id:"ANI-11", t:"SELL Lakshmi to Ravi ₹12,000 — the biggest ripple test",
+   s:["Note: dashboard income, Goats stock count, Ravi's buyer stats","Lakshmi detail → Sell: price 12000, buyer Ravi Traders, today → Save"],
+   e:["Lakshmi status = sold"],
+   v:["A new income transaction ₹12,000 exists in Transactions (auto-created)","Dashboard income +₹12,000","Goats stock count −1 (sale inventory event in Stock Log)","Ravi Traders: purchases +1, amount +₹12,000","Lakshmi detail shows profit = 12,000 − invested"] },
+ { id:"ANI-12", t:"Animal analytics page",
+   s:["Stock → Analytics"],
+   e:["Lakshmi appears with cost breakdown, sale price, profit/ROI"],
+   v:["Numbers match her detail page exactly"] },
+ { id:"ANI-13", t:"Edit + soft delete animal",
+   s:["Edit Raja: change breed → Save","Register a junk animal 'Test' then delete it"],
+   e:["Edit persists; Test animal gone from list"],
+   v:["Deleted animal not in dropdowns (breeding pickers, etc.)"] },
+ { id:"ANI-14", t:"Cost attribution — BY DAYS split", opt:true,
+   s:["Add Expense ₹900 feed, Goats, link to Ganga + Raja, split mode = BY DAYS (their origin dates differ)"],
+   e:["Split preview shows unequal amounts proportional to days on farm"],
+   v:["Each goat's cost entry matches the preview amounts; the two entries add up to ₹900"] },
+ { id:"ANI-15", t:"Stock page search, filters & sorting",
+   s:["Animals tab: search 'G-101', then by name 'Ganga'","Filter by segment Goats; sort by a column; page through if >1 page"],
+   e:["Search matches tag/name/breed/batch; filters and sort work together"],
+   v:["Clearing search/filters restores the full list; counts on summary cards unchanged by filtering"] },
+]},
+{ id:"HAR", icon:"🌵", title:"7. Harvests — Dragon Fruit", cases:[
+ { id:"HAR-01", t:"Add harvest 120 kg",
+   s:["Harvests → Add: Dragon Fruit, crop dragon fruit, today, quantity 120 kg, grade A, harvest cost ₹2,000 → Save"],
+   e:["Status = harvested, remaining 120 kg"],
+   v:["Detail shows pipeline at first stage"] },
+ { id:"HAR-02", t:"Record sale 80 kg @ ₹110 to Ravi",
+   s:["Note dashboard income + Ravi stats","Harvest detail → Record Sale: 80 kg, rate 110, buyer Ravi Traders → Save"],
+   e:["Sale row appears; status = partially_sold; remaining 40 kg; revenue ₹8,800"],
+   v:["Auto income transaction ₹8,800 in Transactions","Dashboard income +₹8,800","Ravi stats +₹8,800"] },
+ { id:"HAR-03", t:"Record wastage 10 kg",
+   s:["Record Wastage: 10 kg, reason overripe"],
+   e:["Remaining 30 kg, wastage tracked"],
+   v:["No money change anywhere (wastage is quantity only)"] },
+ { id:"HAR-04", t:"Oversell blocked",
+   s:["Try Record Sale of 50 kg (only 30 remain)"],
+   e:["Blocked with a clear message"],
+   v:["Remaining still 30 kg"] },
+ { id:"HAR-05", t:"Link an expense to the harvest",
+   s:["Harvest detail → Add Expense: packaging ₹500 (form opens pre-linked) → Save"],
+   e:["Expense saved with harvest link"],
+   v:["Harvest detail cost/net figures include the ₹500","Txn detail shows the harvest link"] },
+ { id:"HAR-06", t:"Sell remaining 30 kg → fully_sold",
+   s:["Record Sale: 30 kg @ ₹100, buyer Kumar Chicken Stall"],
+   e:["Status = fully_sold, remaining 0","Total revenue = ₹11,800, average rate computed"],
+   v:["Second auto income txn ₹3,000 exists","Kumar's buyer stats now non-zero"] },
+]},
+{ id:"SEL", icon:"🔗", title:"8. Sale–Expense Linking (Net Realization)", cases:[
+ { id:"SEL-01", t:"Add selling expense from a sale's detail",
+   s:["Open the ₹12,000 goat-sale income txn detail","Press Add Selling Expense → transport ₹800 (form comes pre-linked to the sale) → Save"],
+   e:["Expense saved with link to the sale"],
+   v:["Sale detail shows the linked selling expense and net realization ₹11,200"] },
+ { id:"SEL-02", t:"Link an existing expense via the form dropdown",
+   s:["Add Expense ₹200 commission, Goats — use the 'Link to Sale' dropdown and pick the same ₹12,000 sale → Save"],
+   e:["Saved linked"],
+   v:["Sale detail now shows 2 selling expenses, net realization ₹11,000"] },
+ { id:"SEL-03", t:"Delete a selling expense restores net",
+   s:["Delete the ₹200 commission expense"],
+   e:["Gone from list"],
+   v:["Sale net realization back to ₹11,200","Dashboard expense dropped ₹200"] },
+]},
+{ id:"CON", icon:"📦", title:"9. Consumables — Stock In/Out", cases:[
+ { id:"CON-01", t:"Add item 'Goat Feed 50kg bag'",
+   s:["Consumables → Add: name Goat Feed 50kg bag, category feed, unit bag, current stock 0, minimum stock 5, segment Goats → Save"],
+   e:["Card appears with 0 stock and a low-stock look (0 ≤ min 5)"],
+   v:["Progress bar reflects stock vs minimum"] },
+ { id:"CON-02", t:"Purchase 10 bags @ ₹1,450 — creates expense + supplier stats",
+   s:["Note dashboard expense + Sri Lakshmi Feeds stats","Item → Movement: purchase, qty 10, unit cost 1450, supplier Sri Lakshmi Feeds → Save"],
+   e:["Stock = 10; last rate ₹1,450"],
+   v:["Auto expense txn ₹14,500 in Transactions","Dashboard expense +₹14,500","Supplier stats: orders +1, amount +₹14,500"] },
+ { id:"CON-03", t:"Usage 3 bags",
+   s:["Movement: used, qty 3"],
+   e:["Stock = 7, total used = 3"],
+   v:["No new transaction created for usage (money already spent at purchase)"] },
+ { id:"CON-04", t:"Over-use blocked",
+   s:["Movement: used, qty 20 (only 7 in stock)"],
+   e:["Blocked with 'not enough stock' style error"],
+   v:["Stock still 7"] },
+ { id:"CON-05", t:"Wastage 1 bag",
+   s:["Movement: wastage, qty 1, note 'rain damage'"],
+   e:["Stock = 6, wastage = 1"],
+   v:["Movement history shows all 3 entries in order"] },
+ { id:"CON-06", t:"Low-stock alert triggers at minimum",
+   s:["Movement: used, qty 2 → stock becomes 4 (≤ min 5)"],
+   e:["Card highlighted as low stock"],
+   v:["Notification bell shows a low-stock alert for this item"] },
+ { id:"CON-07", t:"Edit item + soft delete a test item",
+   s:["Edit minimum stock to 3 → card no longer low (4 > 3)","Create a junk item and delete it"],
+   e:["Edit reflected immediately; junk item gone"],
+   v:["Deleted item not offered anywhere"] },
+]},
+{ id:"CB", icon:"🌱", title:"10. Crop Activities & Breeding", cases:[
+ { id:"CB-01", t:"Add crop activity — irrigation",
+   s:["Crops → Add: Dragon Fruit, irrigation, today, 2 hrs, cost ₹300 → Save"],
+   e:["Activity in the timeline list"],
+   v:["Filter by segment Dragon Fruit shows it"] },
+ { id:"CB-02", t:"Edit + delete activity",
+   s:["Edit cost 300 → 350 → Save","Add a junk activity, then delete it"],
+   e:["Edit persists; junk gone"],
+   v:["Reload page — state correct"] },
+ { id:"CB-03", t:"Add breeding record — Ganga × Raja",
+   s:["Breeding → Add: segment Goats, dam Ganga, sire Raja, natural, mating date today, status mated → Save"],
+   e:["Record listed with status badge 'mated'","Dam picker offered only FEMALE goats, sire only MALE"],
+   v:["Expected delivery date auto-suggested from gestation days"] },
+ { id:"CB-04", t:"Update status to confirmed_pregnant",
+   s:["Edit the record → status confirmed_pregnant → Save"],
+   e:["Badge changes"],
+   v:["If expected delivery is near, a delivery-expected notification appears in the bell (may need reload)"] },
+ { id:"CB-05", t:"Mark delivered with offspring",
+   s:["Edit → status delivered, actual date today, offspring 2 (1 male / 1 female), vet cost ₹500 → Save"],
+   e:["Delivered badge, offspring counts shown"],
+   v:["Optionally link offspring animal IDs after registering kids as animals"] },
+ { id:"CB-06", t:"Delete a breeding record",
+   s:["Add a junk record → delete it (confirm dialog)"],
+   e:["Gone from list"],
+   v:["Reload — still gone"] },
+]},
+{ id:"LOA", icon:"🏦", title:"11. Loans — Simple, EMI, Interest-only, Gold", cases:[
+ { id:"LOA-01", t:"Simple loan — borrowed ₹10,000 from Murugan",
+   s:["Loans → Add: simple, type received (you owe), amount 10000, person Murugan, purpose feed advance → Save"],
+   e:["Listed with repayment status pending"],
+   v:["Dashboard loan summary widget includes it"] },
+ { id:"LOA-02", t:"Partial repayment ₹4,000",
+   s:["Loan detail → Add Repayment: 4000"],
+   e:["Status = partial, balance ₹6,000"],
+   v:["A linked expense txn was created for the repayment","That txn CANNOT be edited from the transaction list (loan owns it)","It does NOT appear in Dues"] },
+ { id:"LOA-03", t:"Final repayment → completed",
+   s:["Add Repayment: 6000"],
+   e:["Status = completed"],
+   v:["Completed simple loan is no longer editable","Dashboard loan widget outstanding dropped to ₹0 for this loan"] },
+ { id:"LOA-04", t:"Formal EMI loan — Canara Bank ₹2,00,000",
+   s:["Loans → Add formal: bank, Canara Bank, person you, sanctioned 200000, disbursed today, 12% annual fixed, EMI, tenure 24 months","Add deduction: processing fee ₹2,000","Check EMI preview table before saving → Save"],
+   e:["EMI auto-calculated (~₹9,415) with 6-month preview","Net disbursed shows ₹1,98,000"],
+   v:["Loan detail shows all financial numbers correctly"] },
+ { id:"LOA-05", t:"Financial fields locked after creation",
+   s:["Edit the Canara loan"],
+   e:["Sanctioned amount / rate / tenure are locked (read-only); only cosmetic fields editable"],
+   v:["Save a cosmetic change (e.g., note) and confirm financials unchanged"] },
+ { id:"LOA-06", t:"Record EMI with segment override",
+   s:["Note Goats expense total","Loan detail → Record EMI Payment; set Expense Segment = Goats → Save"],
+   e:["Payment recorded with principal/interest split; outstanding dropped by the principal part"],
+   v:["A new expense txn for the EMI exists under segment GOATS","Goats expense total increased by the EMI amount"] },
+ { id:"LOA-07", t:"Part payment ₹20,000",
+   s:["Loan detail → Part Payment 20000"],
+   e:["Outstanding drops ₹20,000; EMI/tenure recalc as designed"],
+   v:["Linked expense txn created; timeline entry added"] },
+ { id:"LOA-08", t:"Interest-only loan + pay interest + close",
+   s:["Add formal: individual lender, ₹50,000, interest-only, 2% MONTHLY (check it auto-converts to 24% annual)","Pay Interest ₹1,000 → then Close With Principal"],
+   e:["Interest payment recorded; on close, status completed"],
+   v:["Both payments exist as expense txns; dashboard loan widget updated"] },
+ { id:"LOA-09", t:"Gold loan — items, purity, LTV", opt:true,
+   s:["Add formal: gold_loan; add 2 gold items (22K, net weight 10g each, rate/gram current)","Check gold value auto-calc and LTV eligibility → Save"],
+   e:["Gold value = weight × rate; LTV % shown with eligibility check"],
+   v:["Detail lists pledge items; collateral release / renewal / top-up buttons available"] },
+ { id:"LOA-10", t:"Utilization + personal use tracking",
+   s:["On the Canara loan: Add Utilization (₹50,000 shed construction)","Add Personal Use (₹10,000, person you)"],
+   e:["Both entries listed on the loan"],
+   v:["Utilization total + personal holdings reflected in loan detail (and analytics tab custody figures)"] },
+ { id:"LOA-11", t:"Loan export",
+   s:["Loan detail → export PDF and Excel"],
+   e:["Both files download and open"],
+   v:["Excel has multiple sheets (repayments, deductions, etc.) with correct numbers"] },
+ { id:"LOA-12", t:"Admin hard delete a test loan",
+   s:["Create a junk simple loan → hard delete (admin confirm)"],
+   e:["Loan gone permanently"],
+   v:["Its linked txns handled (check dashboard totals didn't drift — note any leftover txn as a bug)"] },
+ { id:"LOA-13", t:"Record penalty on the EMI loan",
+   s:["Canara loan detail → Record Penalty: ₹500, note 'late EMI charge'"],
+   e:["Penalty entry recorded on the loan"],
+   v:["A linked expense txn ₹500 exists; dashboard expense +₹500","Loan timeline has a penalty entry"] },
+ { id:"LOA-14", t:"Pre-close a formal loan with charges", opt:true,
+   s:["Create a junk formal loan (small amount, e.g. ₹10,000 EMI)","Detail → Pre-Close: enter pre-closure charge ₹200 → confirm"],
+   e:["Loan status = completed/closed; outstanding ₹0"],
+   v:["Closing payment + charge exist as expense txns","Dashboard loan widget no longer counts it as outstanding"] },
+ { id:"LOA-15", t:"Balance transfer to a new loan", opt:true,
+   s:["On a formal loan press Balance Transfer","It navigates to a new formal loan form pre-filled with transfer info → complete and save"],
+   e:["New loan created; old and new loans show the replaces/replaced-by link on their detail pages"],
+   v:["Old loan marked closed/transferred; only the NEW loan counts as outstanding in the dashboard widget"] },
+ { id:"LOA-16", t:"Gold loan renewal / top-up + collateral release", opt:true,
+   s:["On the gold loan (LOA-09): do a Renewal or Top-Up","After closing it, press Release Collateral"],
+   e:["Renewal creates the linked follow-up loan (renewedFrom/By link); top-up increases amount","Collateral marked released"],
+   v:["Loan-to-loan links visible on both details; released gold items no longer counted as pledged"] },
+]},
+{ id:"DIS", icon:"🧮", title:"12. Income Distribution", cases:[
+ { id:"DIS-01", t:"Distribute the ₹8,800 harvest sale",
+   s:["Open the ₹8,800 income txn detail → Distribute","Partner 1: ₹4,000, Partner 2: ₹3,000, Reinvestment: ₹1,800 → Save"],
+   e:["Distribution saved, fully allocated"],
+   v:["Dashboard person-investment cards show each partner's share","Undistributed income card decreased by ₹8,800"] },
+ { id:"DIS-02", t:"Over-allocation blocked",
+   s:["On another income try distributing MORE than the amount (e.g., ₹13,000 of ₹12,000)"],
+   e:["Validation error, save blocked"],
+   v:["No partial garbage saved — reopen dialog shows clean state"] },
+]},
+{ id:"SCH", icon:"🔁", title:"13. Schedules & Reminders (client cron)", cases:[
+ { id:"SCH-01", t:"Recurring monthly expense fires on app load",
+   s:["Schedules → Add Recurring: expense ₹2,000 electricity, Goats, monthly, START DATE = yesterday → Save","Now RELOAD the app (cron runs on startup)"],
+   e:["Schedule listed; after reload a new ₹2,000 transaction was auto-created"],
+   v:["Notification bell shows recurring-due alert","Schedule's next due date advanced one month","Dashboard expense +₹2,000"] },
+ { id:"SCH-02", t:"Reminder auto-creates a task",
+   s:["Add Reminder: deworming, due in 2 days, autoCreateTask ON, priority high, notify 3 days before → Save","Reload the app"],
+   e:["Reminder listed"],
+   v:["Upcoming-reminder notification in the bell","A task appears on the Tasks board (on/near due date)"] },
+ { id:"SCH-03", t:"Toggle inactive stops firing",
+   s:["Toggle the recurring schedule to inactive","Reload the app"],
+   e:["No new transaction created this time"],
+   v:["Toggle back on if you want it, or leave off"] },
+ { id:"SCH-04", t:"Delete schedule",
+   s:["Delete the test reminder (confirm)"],
+   e:["Gone from list"],
+   v:["Reload — no new tasks/notifications generated from it"] },
+]},
+{ id:"TSK", icon:"✅", title:"14. Tasks — Kanban", cases:[
+ { id:"TSK-01", t:"Add task with subtasks",
+   s:["Tasks → Add: 'Repair goat shed fence', priority high, due tomorrow, shared","Add 2 subtasks: buy wire mesh, fix posts → Save"],
+   e:["Card in Backlog/Todo column with priority badge"],
+   v:["Detail shows both subtasks unchecked"] },
+ { id:"TSK-02", t:"Drag between columns — order persists",
+   s:["Drag it Todo → In Progress","Reload the page"],
+   e:["Card stays in In Progress in the same position"],
+   v:["On mobile width the tab view shows the same state"] },
+ { id:"TSK-03", t:"Complete subtasks + mark done",
+   s:["Tick both subtasks → move card to Done"],
+   e:["Subtask progress 2/2; card in Done"],
+   v:["Completed date recorded on detail"] },
+ { id:"TSK-04", t:"Overdue task notification",
+   s:["Create a task with due date YESTERDAY","Reload app"],
+   e:["Task shows overdue styling"],
+   v:["Notification bell shows task-overdue alert","Clean up: mark done or delete"] },
+ { id:"TSK-05", t:"My Tasks filter + delete",
+   s:["Assign one task to another user → switch filter to My Tasks","Delete a junk task"],
+   e:["My Tasks hides the other user's task; delete removes card"],
+   v:["Reload — deleted task stays gone"] },
+]},
+{ id:"DSH", icon:"📊", title:"15. Dashboard, Filters & Exports", cases:[
+ { id:"DSH-01", t:"Segment filter isolates data",
+   s:["Dashboard → filter segment = Goats"],
+   e:["All cards/charts show ONLY Goats numbers"],
+   v:["Manually total 2–3 known Goats txns and compare — must match","Clear filter restores full totals"] },
+ { id:"DSH-02", t:"Date range filter",
+   s:["Set custom range = this month, note totals","Switch to All Time"],
+   e:["Totals change accordingly; the txn you moved to last month (TXN-10) is excluded from this month"],
+   v:["Monthly trend chart matches the same numbers"] },
+ { id:"DSH-03", t:"Budget warning at 80% and exceeded at 100%",
+   s:["Goats limit was ₹10,000 (ADM-03) — Goats spending from these tests should be well past it"],
+   e:["Budget widget shows EXCEEDED state for Goats"],
+   v:["Notification bell has budget alert","Optional: raise the limit so spending is ~80–99% → warning state shows instead"] },
+ { id:"DSH-04", t:"Excel full backup (v2, 28 sheets)",
+   s:["Dashboard header → Excel backup button"],
+   e:["File downloads"],
+   v:["Open it: has Meta sheet + ~28 sheets","Transactions sheet row count matches app (deleted txns EXCLUDED)","Spot-check the ₹12,000 goat sale row"] },
+ { id:"DSH-05", t:"PDF + CSV export",
+   s:["Export PDF report, then CSV"],
+   e:["Both download and open; PDF totals match dashboard"],
+   v:["CSV opens in Excel with readable columns and ₹ amounts"] },
+ { id:"DSH-06", t:"WhatsApp share",
+   s:["Press WhatsApp share → review the message preview → send to yourself"],
+   e:["Preview shows a correct summary"],
+   v:["Message arrives with the same numbers as dashboard"] },
+ { id:"DSH-07", t:"Notification bell dismiss persists",
+   s:["Open the bell, dismiss one alert","Reload the app"],
+   e:["Dismissed alert does not come back"],
+   v:["Other alerts still present"] },
+]},
+{ id:"REC", icon:"🛡️", title:"16. Final Safety Net — Tags & Reconciliation", cases:[
+ { id:"REC-01", t:"Tag rename propagates to transactions",
+   s:["Admin → Data Setup → tags: rename 'summer-feed' → 'summer-feeding'"],
+   e:["Tag renamed in the tag list"],
+   v:["The feed txn (TXN-07) now carries 'summer-feeding'","Filtering by the old name finds nothing"] },
+ { id:"REC-02", t:"Tag delete removes it everywhere",
+   s:["Delete tag 'summer-feeding'"],
+   e:["Gone from tag list"],
+   v:["The txn no longer has that tag; other tags on it untouched"] },
+ { id:"REC-03", t:"Reconcile Summaries — expect ZERO corrections",
+   s:["Admin → Data Setup → Reconcile Summaries → run"],
+   e:["Report completes"],
+   v:["Corrections = 0. If it corrected ANYTHING, one of the earlier flows leaked summary drift — note WHICH month/segment it fixed and report it as a bug"] },
+ { id:"REC-04", t:"Reconcile Counterparties — expect ZERO corrections",
+   s:["Run Reconcile Counterparties"],
+   e:["Report completes"],
+   v:["Ravi Traders / Kumar / Sri Lakshmi Feeds totals unchanged = 0 corrections. Any correction = buyer/supplier counter bug — note which one"] },
+ { id:"REC-05", t:"Verify backup script (terminal)", opt:true,
+   s:["In terminal: node scripts/verify-backup.js <the Excel file from DSH-04>"],
+   e:["Script exits clean (round-trip matches live DB)"],
+   v:["Any diff it prints = export/backup bug — copy the output"] },
+]},
+];
+
+const LS_KEY = 'ft-manual-test-checklist-v1';
+let state = {};
+try { state = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(e){ state = {}; }
+let filter = 'all';
+
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+const root = document.getElementById('modules');
+DATA.forEach(mod => {
+  const det = document.createElement('details');
+  det.className = 'module'; det.id = 'mod-'+mod.id; det.open = true;
+  det.innerHTML = `<summary><span class="arrow">▶</span><h2>${mod.icon} ${esc(mod.title)}</h2><span class="mchip" id="chip-${mod.id}"></span></summary>
+    <div class="cases">${mod.cases.map(c => caseHtml(c)).join('')}</div>`;
+  root.appendChild(det);
+});
+
+function caseHtml(c){
+  const st = state[c.id] || {};
+  return `<div class="case ${st.s||''}" id="case-${c.id}" data-id="${c.id}">
+    <div class="case-head">
+      <span class="cid">${c.id}</span>
+      <span class="ctitle">${esc(c.t)}${c.opt?'<span class="opt-badge">optional</span>':''}</span>
+      <span class="statebtns">
+        <button class="p ${st.s==='pass'?'on':''}" title="Pass" onclick="setState('${c.id}','pass')">✓</button>
+        <button class="f ${st.s==='fail'?'on':''}" title="Fail" onclick="setState('${c.id}','fail')">✗</button>
+      </span>
+    </div>
+    <div class="cbody">
+      <div class="lbl">Steps</div>
+      <ol>${c.s.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
+      <div class="lbl">Expected (on screen)</div>
+      <div class="expect">${c.e.map(x=>`<div>${esc(x)}</div>`).join('')}</div>
+      <div class="lbl">Verify (data ripple — other pages)</div>
+      <div class="verify">${c.v.map(x=>`<div>${esc(x)}</div>`).join('')}</div>
+      <textarea class="note" placeholder="Notes / what went wrong…" oninput="setNote('${c.id}', this.value)">${esc(st.n||'')}</textarea>
+    </div>
+  </div>`;
+}
+
+window.setState = function(id, s){
+  const cur = state[id] || {};
+  cur.s = (cur.s === s) ? '' : s;   // toggle off if pressed again
+  state[id] = cur; save(); refreshCase(id); refreshTotals(); applyFilter();
+};
+window.setNote = function(id, v){
+  const cur = state[id] || {}; cur.n = v; state[id] = cur; save();
+};
+
+function refreshCase(id){
+  const el = document.getElementById('case-'+id);
+  const st = state[id] || {};
+  el.classList.toggle('pass', st.s==='pass');
+  el.classList.toggle('fail', st.s==='fail');
+  el.querySelector('.p').classList.toggle('on', st.s==='pass');
+  el.querySelector('.f').classList.toggle('on', st.s==='fail');
+}
+
+function refreshTotals(){
+  let total=0, pass=0, fail=0;
+  DATA.forEach(m=>{
+    let mp=0, mf=0;
+    m.cases.forEach(c=>{
+      total++;
+      const s=(state[c.id]||{}).s;
+      if(s==='pass'){pass++;mp++;}
+      if(s==='fail'){fail++;mf++;}
+    });
+    const chip=document.getElementById('chip-'+m.id);
+    chip.textContent = `${mp}/${m.cases.length}` + (mf?` · ${mf} ✗`:'');
+    chip.className='mchip'+(mf?' hasfail':(mp===m.cases.length?' done':''));
+  });
+  document.getElementById('fillPass').style.width=(pass/total*100)+'%';
+  document.getElementById('counts').textContent=`${pass} ✓ · ${fail} ✗ · ${total-pass-fail} left of ${total}`;
+}
+
+function applyFilter(){
+  DATA.forEach(m=>{
+    let visible=0;
+    m.cases.forEach(c=>{
+      const s=(state[c.id]||{}).s||'';
+      const show = filter==='all' || (filter==='remaining'&&!s) || (filter==='pass'&&s==='pass') || (filter==='fail'&&s==='fail');
+      document.getElementById('case-'+c.id).classList.toggle('hidden',!show);
+      if(show)visible++;
+    });
+    document.getElementById('mod-'+m.id).style.display = visible? '' : 'none';
+  });
+}
+
+document.querySelectorAll('.toolbar [data-filter]').forEach(b=>{
+  b.onclick=()=>{
+    filter=b.dataset.filter;
+    document.querySelectorAll('.toolbar [data-filter]').forEach(x=>x.classList.toggle('active',x===b));
+    applyFilter();
+  };
+});
+
+document.getElementById('resetAll').onclick=()=>{
+  if(confirm('Clear ALL pass/fail marks and notes?')){
+    state={}; save();
+    DATA.forEach(m=>m.cases.forEach(c=>{refreshCase(c.id); document.querySelector('#case-'+c.id+' .note').value='';}));
+    refreshTotals(); applyFilter();
+  }
+};
+
+document.getElementById('copyReport').onclick=()=>{
+  let out=['FARM TRACKER MANUAL TEST REPORT','================================',''];
+  let pass=0,fail=0,total=0;
+  DATA.forEach(m=>m.cases.forEach(c=>{
+    total++; const st=state[c.id]||{};
+    if(st.s==='pass')pass++; if(st.s==='fail')fail++;
+  }));
+  out.push(`Result: ${pass} passed, ${fail} failed, ${total-pass-fail} not tested (of ${total})`,'');
+  const fails=[], notes=[];
+  DATA.forEach(m=>m.cases.forEach(c=>{
+    const st=state[c.id]||{};
+    if(st.s==='fail') fails.push(`❌ ${c.id} — ${c.t}${st.n?'\n   Note: '+st.n:''}`);
+    else if(st.n) notes.push(`📝 ${c.id} — ${c.t}\n   Note: ${st.n}`);
+  }));
+  if(fails.length){ out.push('FAILED CASES:',...fails,''); }
+  if(notes.length){ out.push('OTHER NOTES:',...notes,''); }
+  if(!fails.length&&!notes.length){ out.push('No failures, no notes. 🎉'); }
+  const text=out.join('\n');
+  const done=()=>toast('Report copied — paste it to Claude');
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done)); }
+  else fallbackCopy(text,done);
+};
+function fallbackCopy(text,done){
+  const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta);
+  ta.select(); document.execCommand('copy'); document.body.removeChild(ta); done();
+}
+let toastTimer;
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+refreshTotals(); applyFilter();
+</script>
+</body>
+</html>
