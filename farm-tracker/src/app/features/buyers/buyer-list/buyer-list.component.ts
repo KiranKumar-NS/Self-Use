@@ -190,12 +190,16 @@ export class BuyerListComponent implements OnInit {
 
   async confirmDelete(buyer: Buyer): Promise<void> {
     const ref = this.dialog.open(ConfirmDialogComponent, {
-      data: { title: 'Delete Buyer', message: `Delete "${buyer.name}"?`, confirmText: 'Delete' } as ConfirmDialogData,
+      data: { title: 'Delete Buyer', message: `Delete "${buyer.name}"?`, confirmText: 'Delete', showDeleteOptions: true } as ConfirmDialogData,
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
         try {
-          await this.buyerService.softDelete(buyer.id);
+          if (result.deleteType === 'hard') {
+            await this.buyerService.hardDelete(buyer.id);
+          } else {
+            await this.buyerService.softDelete(buyer.id);
+          }
           this.toast.success('Buyer deleted');
         } catch (err) {
           console.error('Failed to delete buyer', err);

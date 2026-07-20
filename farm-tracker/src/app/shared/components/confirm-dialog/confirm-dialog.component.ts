@@ -67,7 +67,7 @@ export class ConfirmDialogComponent {
     } else if (this.data.showInput) {
       this.dialogRef.close({ confirmed: true, inputValue: this.inputValue() });
     } else {
-      this.dialogRef.close(true);
+      this.dialogRef.close({ confirmed: true });
     }
   }
 }

@@ -135,4 +135,30 @@ export class BuyerService {
     await batch.commit();
     this.clearCache();
   }
+
+  /**
+   * Permanent delete, refused while any record still points at the buyer
+   * (transactions, animal sales, inventory events — harvest sales are covered
+   * by their linked income transaction). Soft-deleted links count too, since
+   * they can be restored.
+   */
+  async hardDelete(id: string): Promise<void> {
+    const links = [
+      { coll: 'transactions', field: 'linkedBuyerId', label: 'transactions' },
+      { coll: 'animals', field: 'buyerId', label: 'animal sales' },
+      { coll: 'inventoryEvents', field: 'buyerId', label: 'inventory events' },
+    ];
+    for (const link of links) {
+      const snap = await getDocs(
+        query(collection(this.firestore, link.coll), where(link.field, '==', id), limit(1))
+      );
+      if (!snap.empty) {
+        throw new Error(`Cannot permanently delete: buyer has linked ${link.label}. Use soft delete instead.`);
+      }
+    }
+    const batch = writeBatch(this.firestore);
+    batch.delete(doc(this.firestore, 'buyers', id));
+    await batch.commit();
+    this.clearCache();
+  }
 }
