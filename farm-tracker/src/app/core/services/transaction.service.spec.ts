@@ -13,6 +13,7 @@ const mockInjected = {
   canViewSegment: () => true,
   clearCache: () => undefined,
   updateStats: undefined as any, // assigned per-test via vi.fn()
+  removeCost: undefined as any, // AnimalService.removeCost, assigned per-test via vi.fn()
 };
 
 vi.mock('@angular/fire/firestore', () => {
@@ -101,6 +102,7 @@ describe('TransactionService', () => {
     mockGetDocResults.length = 0;
     mockTxnCaptures.length = 0;
     mockInjected.updateStats = vi.fn().mockResolvedValue(undefined);
+    mockInjected.removeCost = vi.fn().mockResolvedValue(undefined);
   });
 
   const baseExpenseData = {
@@ -353,6 +355,49 @@ describe('TransactionService', () => {
       await service.softDelete('txn-1');
 
       expect(mockInjected.updateStats).toHaveBeenCalledWith('buyer-1', -5000, -5, null, 'seg1');
+    });
+
+    it('should remove attributed cost from each linked animal (ANI-09)', async () => {
+      queueGetDoc({
+        ...baseExpenseData, isDeleted: false, createdBy: 'test-uid', timeline: [],
+        date: { toDate: () => new Date() },
+        linkedAnimalIds: ['a1', 'a2'],
+      });
+
+      await service.softDelete('txn-1');
+
+      expect(mockInjected.removeCost).toHaveBeenCalledTimes(2);
+      expect(mockInjected.removeCost).toHaveBeenCalledWith('a1', 'txn-1');
+      expect(mockInjected.removeCost).toHaveBeenCalledWith('a2', 'txn-1');
+    });
+
+    it('should not touch animals when the txn has no links', async () => {
+      queueGetDoc({
+        ...baseExpenseData, isDeleted: false, createdBy: 'test-uid', timeline: [],
+        date: { toDate: () => new Date() },
+      });
+
+      await service.softDelete('txn-1');
+
+      expect(mockInjected.removeCost).not.toHaveBeenCalled();
+    });
+  });
+
+  // ──────────── hardDelete ────────────
+
+  describe('hardDelete', () => {
+    it('should remove attributed cost from each linked animal (ANI-09)', async () => {
+      queueGetDoc({
+        ...baseExpenseData, isDeleted: false, createdBy: 'test-uid', timeline: [],
+        date: { toDate: () => new Date() },
+        linkedAnimalIds: ['a1', 'a2'],
+      });
+
+      await service.hardDelete('txn-1');
+
+      expect(mockInjected.removeCost).toHaveBeenCalledTimes(2);
+      expect(mockInjected.removeCost).toHaveBeenCalledWith('a1', 'txn-1');
+      expect(mockInjected.removeCost).toHaveBeenCalledWith('a2', 'txn-1');
     });
   });
 

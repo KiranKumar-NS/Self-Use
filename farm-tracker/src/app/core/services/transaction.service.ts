@@ -21,6 +21,7 @@ import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatu
 import { AuthService } from './auth.service';
 import { SummaryService } from './summary.service';
 import { BuyerService } from './buyer.service';
+import { AnimalService } from './animal.service';
 import { appendTimelineCapped } from '../utils/timeline.utils';
 
 @Injectable({ providedIn: 'root' })
@@ -29,6 +30,7 @@ export class TransactionService {
   private authService = inject(AuthService);
   private summaryService = inject(SummaryService);
   private buyerService = inject(BuyerService);
+  private animalService = inject(AnimalService);
 
   /**
    * Keep buyer purchase counters in sync with income transactions
@@ -48,6 +50,22 @@ export class TransactionService {
       await this.buyerService.updateStats(buyerId, amountDelta, countDelta, date, segment);
     } catch (err) {
       console.error('Failed to update buyer stats', err);
+    }
+  }
+
+  /**
+   * Strip attributed cost entries from linked animals after a txn is deleted.
+   * Runs post-commit (removeCost does its own reads/writes, disallowed inside
+   * runTransaction) and best-effort per animal, mirroring buyer-stats sync.
+   */
+  private async reverseAnimalCosts(txn: Transaction | undefined, txnId: string): Promise<void> {
+    if (!txn?.linkedAnimalIds?.length) return;
+    for (const animalId of txn.linkedAnimalIds) {
+      try {
+        await this.animalService.removeCost(animalId, txnId);
+      } catch (err) {
+        console.error('Failed to remove attributed animal cost', animalId, err);
+      }
     }
   }
 
@@ -656,6 +674,7 @@ export class TransactionService {
     if (capturedOld?.type === 'income' && capturedOld.linkedBuyerId) {
       await this.adjustBuyerStats(capturedOld.linkedBuyerId, -capturedOld.amount, -(capturedOld.quantity || 1), null, capturedOld.segment);
     }
+    await this.reverseAnimalCosts(capturedOld, id);
   }
 
   async hardDelete(id: string): Promise<void> {
@@ -700,6 +719,7 @@ export class TransactionService {
     if (capturedOld?.type === 'income' && capturedOld.linkedBuyerId) {
       await this.adjustBuyerStats(capturedOld.linkedBuyerId, -capturedOld.amount, -(capturedOld.quantity || 1), null, capturedOld.segment);
     }
+    await this.reverseAnimalCosts(capturedOld, id);
   }
 
   async updateDistribution(transactionId: string, distributions: DistributionEntry[]): Promise<void> {

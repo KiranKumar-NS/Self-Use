@@ -6,6 +6,7 @@ import { SegmentService } from '../../../core/services/segment.service';
 import { Segment } from '../../../core/models/segment.model';
 import { UserRole } from '../../../core/models/user.model';
 import { ToastService } from '../../../core/services/toast.service';
+import { withTimeout } from '../../../core/utils/async.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -133,18 +134,36 @@ export class RegisterComponent implements OnInit {
         ? this.segments().map((s) => s.id)
         : this.selectedSegments;
 
-      await this.authService.register(
+      await withTimeout(this.authService.register(
         this.email(), this.password(), this.displayName(),
         this.role, assignedSegments
-      );
+      ));
       this.success.set(`User "${this.displayName()}" created successfully!`);
       this.displayName.set('');
       this.email.set('');
       this.password.set('');
     } catch (err: any) {
-      this.error.set(err.message || 'Registration failed');
+      this.error.set(this.friendlyError(err));
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  /** Turn Firebase Auth/Firestore error codes into guidance an admin can act on. */
+  private friendlyError(err: any): string {
+    switch (err?.code) {
+      case 'auth/email-already-in-use':
+        return 'An account with this email already exists. If this user was removed, delete the leftover login in Firebase Console → Authentication (or run firebase/delete-auth-user.js) before recreating.';
+      case 'auth/weak-password':
+        return 'Password must be at least 6 characters.';
+      case 'auth/invalid-email':
+        return 'Enter a valid email address.';
+      case 'auth/operation-not-allowed':
+        return 'Email/Password sign-in is disabled in the Firebase console.';
+      case 'permission-denied':
+        return 'Your admin account is missing the admin claim — run set-custom-claims.js and log in again.';
+      default:
+        return err?.message || 'Registration failed';
     }
   }
 }

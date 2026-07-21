@@ -139,7 +139,15 @@
       "Bash(node smoke.js)",
       "Bash(rm -rf dist && npx ng build --configuration production)",
       "Bash(node check-checklist.js)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://farm-tracker-tn70.web.app/ngsw.json)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://farm-tracker-tn70.web.app/ngsw.json)",
+      "Read(//c/Users/Admin/Downloads/**)",
+      "Bash(python -c \"import PyPDF2; print\\(len\\(PyPDF2.PdfReader\\('C:/Users/Admin/Downloads/13.pdf'\\).pages\\)\\)\")",
+      "Bash(python -c \"import pdfplumber\")",
+      "Bash(python -c \"import fitz\")",
+      "Bash(python -c \"import pdfminer\")",
+      "Bash(pip list *)",
+      "Bash(pdftotext -layout \"13.pdf\" \"13.txt\")",
+      "Bash(echo \"=== EXIT: $? ===\")"
     ],
     "additionalDirectories": [
       "D:\\kk\\self-use-repo\\farm-tracker\\dist"

@@ -24,3 +24,23 @@ export async function safeLoad(
     loading.set(false);
   }
 }
+
+/**
+ * Rejects with `message` if `promise` doesn't settle within `ms`.
+ * Guards against a network call (e.g. Firebase Auth/Firestore) hanging forever
+ * and leaving the UI stuck on a loading state. The underlying promise is left
+ * to settle on its own — only the caller stops waiting.
+ */
+export function withTimeout<T>(
+  promise: Promise<T>,
+  ms = 20_000,
+  message = 'Network timed out — check your connection and try again.'
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); }
+    );
+  });
+}

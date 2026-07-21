@@ -159,17 +159,29 @@ export class AuthService {
       const credential = await createUser(secondaryAuth, email, password);
       const uid = credential.user.uid;
 
-      await setDoc(doc(this.firestore, 'users', uid), {
-        uid,
-        email,
-        displayName,
-        role,
-        assignedSegments,
-        isActive: true,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        createdBy: this.currentUser()?.uid || uid,
-      } as Partial<AppUser>);
+      try {
+        await setDoc(doc(this.firestore, 'users', uid), {
+          uid,
+          email,
+          displayName,
+          role,
+          assignedSegments,
+          isActive: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          createdBy: this.currentUser()?.uid || uid,
+        } as Partial<AppUser>);
+      } catch (writeErr) {
+        // Roll back the Auth account so a failed profile write can't leave an
+        // orphaned login (email-already-in-use on every future retry). The
+        // secondary auth is signed in AS the new user, so it can delete itself.
+        try {
+          await credential.user.delete();
+        } catch (rollbackErr) {
+          console.error('Failed to roll back orphaned Auth account:', rollbackErr);
+        }
+        throw writeErr;
+      }
 
       await deleteApp(secondaryApp);
       return uid;
