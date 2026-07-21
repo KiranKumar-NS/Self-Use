@@ -48,6 +48,9 @@ import { MatDialog } from '@angular/material/dialog';
           <mat-icon>insights</mat-icon> <span class="btn-label">Analytics</span>
         </button>
         @if (!auth.isViewer()) {
+          <button mat-stroked-button (click)="registerAnimal()">
+            <mat-icon>pets</mat-icon> <span class="btn-label">Register Animal</span>
+          </button>
           <button mat-flat-button color="primary" (click)="openEventDialog()">
             <mat-icon>add</mat-icon> <span class="btn-label">Record Event</span>
           </button>
@@ -481,6 +484,7 @@ export class StockPageComponent implements OnInit {
   viewDetail(id: string): void { this.router.navigate(['/stock', id]); }
   edit(id: string): void { this.router.navigate(['/stock', id, 'edit']); }
   openAnalytics(): void { this.router.navigate(['/stock/analytics']); }
+  registerAnimal(): void { this.router.navigate(['/stock/new']); }
 
   async confirmDeleteAnimal(animal: Animal): Promise<void> {
     const ref = this.dialog.open(ConfirmDialogComponent, {

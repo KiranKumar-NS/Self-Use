@@ -763,14 +763,23 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
       const resolvedPaidByName = isCustom ? normalizeName(this.customPaidByName) : paidByUser?.displayName;
 
       // Resolve customer/supplier link ('__new__' creates the record first;
-      // blank new-name falls back to no link — never persist the sentinel)
+      // blank new-name falls back to no link — never persist the sentinel).
+      // Track any inline-created party so we can roll it back if the txn write
+      // is later rejected (otherwise a rejected save leaves an orphan record).
+      let createdBuyerId = '';
+      let createdSupplierId = '';
       let buyerId = '';
       let buyerName = '';
       if (this.type === 'income') {
         if (this.linkedBuyerId === '__new__') {
           const name = normalizeName(this.newBuyerName || '');
           if (name) {
-            buyerId = await this.buyerService.create({ name });
+            try {
+              buyerId = await this.buyerService.create({ name });
+            } catch (err) {
+              throw this.saveError(err, 'create the customer');
+            }
+            createdBuyerId = buyerId;
             buyerName = name;
           }
         } else if (this.linkedBuyerId) {
@@ -784,7 +793,12 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         if (this.linkedSupplierId === '__new__') {
           const name = normalizeName(this.newSupplierName || '');
           if (name) {
-            supplierId = await this.supplierService.create({ name });
+            try {
+              supplierId = await this.supplierService.create({ name });
+            } catch (err) {
+              throw this.saveError(err, 'create the supplier');
+            }
+            createdSupplierId = supplierId;
             supplierName = name;
           }
         } else if (this.linkedSupplierId) {
@@ -838,9 +852,23 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         formData.linkedAnimalNames = animalNames;
       }
 
-      if (this.isEdit()) {
-        await this.transactionService.update(this.editId, formData);
+      // The transaction write (and its summary batch) is the most likely point
+      // of a permission rejection — keep it in its own try so the error names
+      // this step, and roll back any inline-created party before surfacing it.
+      let savedTxnId = this.editId;
+      try {
+        if (this.isEdit()) {
+          await this.transactionService.update(this.editId, formData);
+        } else {
+          savedTxnId = await this.transactionService.create(formData);
+        }
+      } catch (err) {
+        await this.rollbackInlineParty(createdBuyerId, createdSupplierId);
+        throw this.saveError(err, 'save the transaction');
+      }
 
+      // Animal cost attribution runs after the txn is saved.
+      if (this.isEdit()) {
         // Re-attribute animal costs if links or amount changed
         if (this.type === 'expense') {
           const linksChanged = JSON.stringify(this.oldLinkedAnimalIds.sort()) !== JSON.stringify(this.selectedAnimalIds.sort());
@@ -861,12 +889,11 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
           }
         }
       } else {
-        const txnId = await this.transactionService.create(formData);
         // Attribute costs to animals
         if (this.selectedAnimalIds.length > 0 && this.type === 'expense') {
           await this.animalService.attributeCost(
             this.selectedAnimalIds,
-            txnId,
+            savedTxnId,
             { category: this.category, categoryName: formData.categoryName, date: this.date, totalAmount: this.amount, description: this.description },
             this.animalSplitMode
           );
@@ -883,6 +910,60 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
       this.toast.error(message);
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  /** True for a Firestore security-rules rejection, however it is surfaced. */
+  private isPermissionError(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const code = (err as { code?: string }).code;
+    const message = (err as { message?: string }).message || '';
+    return code === 'permission-denied' || /insufficient permissions/i.test(message);
+  }
+
+  /**
+   * Wrap a failed write in a message that names the step and, for permission
+   * rejections, the acting identity — so QA can see whether the block is a
+   * role-claim or segment-access problem rather than a generic "permissions"
+   * toast. The original error is logged for full detail.
+   */
+  private saveError(err: unknown, action: string): Error {
+    console.error(`Failed to ${action}`, err);
+    if (this.isPermissionError(err)) {
+      const role = this.authService.userRole() || '(no role claim)';
+      const segs = this.authService.assignedSegments();
+      const segList = segs.length ? segs.join(', ') : '(none)';
+      return new Error(
+        `Couldn't ${action}: permission denied. Signed in as role "${role}" ` +
+        `with segments [${segList}], writing segment "${this.segment || '(none)'}". ` +
+        `If your role/segments look wrong, re-login after an admin updates them.`,
+        { cause: err },
+      );
+    }
+    const base = err instanceof Error ? err.message : String(err);
+    return new Error(`Couldn't ${action}: ${base}`, { cause: err });
+  }
+
+  /**
+   * Best-effort cleanup of a buyer/supplier that was created inline for the
+   * transaction, when the transaction write itself is rejected. Uses soft
+   * delete (an update the creator is always allowed to make) so a rejected
+   * save does not leave an orphaned party in the lists.
+   */
+  private async rollbackInlineParty(buyerId: string, supplierId: string): Promise<void> {
+    if (buyerId) {
+      try {
+        await this.buyerService.softDelete(buyerId);
+      } catch (e) {
+        console.error('Failed to roll back inline-created buyer', e);
+      }
+    }
+    if (supplierId) {
+      try {
+        await this.supplierService.softDelete(supplierId);
+      } catch (e) {
+        console.error('Failed to roll back inline-created supplier', e);
+      }
     }
   }
 
