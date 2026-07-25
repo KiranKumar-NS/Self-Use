@@ -64,6 +64,15 @@ interface DocRow {
   note: string;
 }
 
+/**
+ * Drop keys whose value is `undefined`. Firestore rejects `undefined` anywhere
+ * in a write payload — including inside objects nested in arrays (deductions,
+ * collaterals, documents) — so optional fields must be omitted, not set to undefined.
+ */
+function omitUndefined<T extends Record<string, any>>(obj: T): T {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
+}
+
 @Component({
   selector: 'app-loan-form',
   standalone: true,
@@ -1034,7 +1043,7 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
       segmentNames: this.selectedSegments.length > 0
         ? this.selectedSegments.map(id => this.segments().find(s => s.id === id)?.name ?? id)
         : [primarySegObj?.name || 'Personal'],
-      deductions: this.deductions.filter(d => d.amount > 0).map(d => ({
+      deductions: this.deductions.filter(d => d.amount > 0).map(d => omitUndefined({
         type: d.type,
         customLabel: d.type === 'other' ? d.customLabel : undefined,
         amount: d.amount,
@@ -1044,7 +1053,7 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
         isFinanced: d.isFinanced,
         note: d.note || undefined,
       })) as any[],
-      collaterals: this.collaterals.filter(c => c.description || c.itemName).map(c => ({
+      collaterals: this.collaterals.filter(c => c.description || c.itemName).map(c => omitUndefined({
         type: c.type,
         description: c.description || c.itemName || '',
         estimatedValue: c.estimatedValue,
@@ -1059,7 +1068,7 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
         goldRatePerGram: c.type === 'gold' ? (c.goldRatePerGram ?? undefined) : undefined,
         goldValue: c.type === 'gold' ? (c.goldValue ?? undefined) : undefined,
       })),
-      documents: this.loanDocs.filter(d => d.referenceNumber || d.note).map(d => ({
+      documents: this.loanDocs.filter(d => d.referenceNumber || d.note).map(d => omitUndefined({
         type: d.type,
         customLabel: d.type === 'other' ? d.customLabel : undefined,
         referenceNumber: d.referenceNumber || undefined,
