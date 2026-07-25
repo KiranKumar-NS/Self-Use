@@ -147,7 +147,8 @@
       "Bash(python -c \"import pdfminer\")",
       "Bash(pip list *)",
       "Bash(pdftotext -layout \"13.pdf\" \"13.txt\")",
-      "Bash(echo \"=== EXIT: $? ===\")"
+      "Bash(echo \"=== EXIT: $? ===\")",
+      "Bash(node -e 'try{require.resolve\\(\"puppeteer\"\\);console.log\\(\"puppeteer OK\"\\)}catch\\(e\\){try{require.resolve\\(\"playwright\"\\);console.log\\(\"playwright OK\"\\)}catch\\(e2\\){try{require.resolve\\(\"jsdom\"\\);console.log\\(\"jsdom OK\"\\)}catch\\(e3\\){console.log\\(\"none: puppeteer/playwright/jsdom not installed\"\\)}}}')"
     ],
     "additionalDirectories": [
       "D:\\kk\\self-use-repo\\farm-tracker\\dist"

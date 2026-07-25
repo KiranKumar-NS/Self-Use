@@ -78,6 +78,24 @@ export interface LoanDocument {
   note?: string;
 }
 
+/**
+ * Cash advanced from a formal loan's unused funds to a person to hold for a
+ * business purpose (a float / imprest). It is custody, NOT personal debt:
+ * the person holds `amount − spent − returned` in hand until they spend it
+ * (booked as a business expense) or return the rest to the holder.
+ */
+export interface LoanAdvance {
+  id: string;
+  personUid?: string;
+  personName: string;
+  amount: number;    // total cash handed to the person
+  spent: number;     // settled as a business expense so far
+  returned: number;  // returned to the loan/holder so far
+  date: Timestamp;
+  note?: string;
+  status: 'open' | 'settled';
+}
+
 /** Computed on-the-fly — NOT stored in Firestore */
 export interface EMIEntry {
   emiNumber: number;
@@ -208,6 +226,10 @@ export interface Loan {
   // Loan holder — who physically holds/manages the remaining loan funds
   heldByUid?: string;              // user UID of the person holding the money
   heldByName?: string;             // display name
+
+  // Cash advances handed to other people to hold for business use (float / imprest).
+  // The holder's own custody = utilizationRemaining − Σ(open advance balances).
+  advances?: LoanAdvance[];
 
   // Multi-segment support (formal loans can span multiple segments)
   segments?: string[];

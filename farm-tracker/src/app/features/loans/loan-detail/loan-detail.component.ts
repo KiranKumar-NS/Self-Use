@@ -7,7 +7,7 @@ import { SegmentService } from '../../../core/services/segment.service';
 import { CategoryService } from '../../../core/services/category.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { safeLoad } from '../../../core/utils/async.utils';
-import { Loan, Repayment } from '../../../core/models/loan.model';
+import { Loan, Repayment, LoanAdvance } from '../../../core/models/loan.model';
 import { Transaction } from '../../../core/models/transaction.model';
 import { AppUser } from '../../../core/models/user.model';
 import { Segment } from '../../../core/models/segment.model';
@@ -23,6 +23,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
@@ -34,7 +35,7 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
   imports: [
     FormsModule, DatePipe, TitleCasePipe, DecimalPipe, RouterLink, CurrencyInrPipe, LoadingSpinnerComponent,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
-    MatDatepickerModule, MatProgressBarModule, MatSelectModule, MatTabsModule,
+    MatDatepickerModule, MatProgressBarModule, MatSelectModule, MatTabsModule, MatCheckboxModule,
   ],
   template: `
     @if (loading()) {
@@ -581,6 +582,9 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
           </div>
           <mat-progress-bar mode="determinate"
             [value]="(loan()!.netDisbursedAmount ?? 0) > 0 ? ((loan()!.utilizationTotal ?? 0) / (loan()!.netDisbursedAmount ?? 1)) * 100 : 0" />
+          @if (advancedOut() > 0) {
+            <div class="advance-note">In hand (holder): {{ holderAvailable() | currencyInr }} &middot; Advanced out to people: {{ advancedOut() | currencyInr }}</div>
+          }
 
           <mat-tab-group>
             <mat-tab label="Business Use ({{ linkedTransactions().length }})">
@@ -598,7 +602,7 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
               }
 
               <!-- Add Business Utilization Form -->
-              @if (loan()!.repaymentStatus !== 'completed' && (loan()!.utilizationRemaining ?? 0) > 0) {
+              @if (loan()!.repaymentStatus !== 'completed' && holderAvailable() > 0) {
                 <div class="inline-form">
                   @if (utilizationError()) { <div class="error-message">{{ utilizationError() }}</div> }
                   <div class="repayment-form">
@@ -658,7 +662,7 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
               }
 
               <!-- Add Personal Withdrawal Form -->
-              @if (loan()!.repaymentStatus !== 'completed' && (loan()!.utilizationRemaining ?? 0) > 0) {
+              @if (loan()!.repaymentStatus !== 'completed' && holderAvailable() > 0) {
                 <div class="inline-form">
                   @if (personalError()) { <div class="error-message">{{ personalError() }}</div> }
                   <div class="repayment-form">
@@ -692,6 +696,102 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                     </mat-form-field>
                     <button mat-flat-button color="accent" (click)="addPersonalUse()" [disabled]="savingPersonal()">
                       {{ savingPersonal() ? 'Adding...' : 'Add' }}
+                    </button>
+                  </div>
+                </div>
+              }
+            </mat-tab>
+
+            <mat-tab label="Advances ({{ openAdvances().length }})">
+              @for (a of loanAdvances(); track a.id) {
+                <div class="list-entry">
+                  <div class="list-main">
+                    <strong>{{ a.personName }}</strong>
+                    <span class="list-amount">{{ (a.amount - a.spent - a.returned) | currencyInr }} in hand</span>
+                  </div>
+                  <div class="list-meta">
+                    Advanced {{ a.amount | currencyInr }} &middot; spent {{ a.spent | currencyInr }}@if (a.returned > 0) { &middot; returned {{ a.returned | currencyInr }} } &middot; {{ a.status }}@if (a.note) { &middot; {{ a.note }} }
+                  </div>
+                  @if (a.status === 'open' && loan()!.repaymentStatus !== 'completed') {
+                    @if (settlingAdvanceId() === a.id) {
+                      <div class="inline-form">
+                        @if (settleError()) { <div class="error-message">{{ settleError() }}</div> }
+                        <div class="repayment-form">
+                          <mat-form-field appearance="outline">
+                            <mat-label>Amount Spent</mat-label>
+                            <input matInput type="number" [(ngModel)]="settleSpent" min="0" />
+                          </mat-form-field>
+                          <mat-form-field appearance="outline">
+                            <mat-label>Expense Description</mat-label>
+                            <input matInput [(ngModel)]="settleDesc" placeholder="e.g. Bought goats" />
+                          </mat-form-field>
+                          <mat-form-field appearance="outline">
+                            <mat-label>Segment</mat-label>
+                            <mat-select [(ngModel)]="settleSegment">
+                              @for (seg of allSegments(); track seg.id) { <mat-option [value]="seg.id">{{ seg.name }}</mat-option> }
+                            </mat-select>
+                          </mat-form-field>
+                          <mat-form-field appearance="outline">
+                            <mat-label>Category</mat-label>
+                            <mat-select [(ngModel)]="settleCategory">
+                              @for (cat of expenseCategories(); track cat.id) { <mat-option [value]="cat.id">{{ cat.name }}</mat-option> }
+                            </mat-select>
+                          </mat-form-field>
+                          <mat-form-field appearance="outline">
+                            <mat-label>Date</mat-label>
+                            <input matInput [matDatepicker]="sPicker" [(ngModel)]="settleDate" />
+                            <mat-datepicker-toggle matIconSuffix [for]="sPicker" /><mat-datepicker #sPicker />
+                          </mat-form-field>
+                          <mat-checkbox [(ngModel)]="settleReturn">Return the rest to holder</mat-checkbox>
+                          <button mat-flat-button color="primary" (click)="confirmSettle(a)" [disabled]="savingSettle()">
+                            {{ savingSettle() ? 'Saving...' : 'Save' }}
+                          </button>
+                          <button mat-button type="button" (click)="settlingAdvanceId.set('')">Cancel</button>
+                        </div>
+                      </div>
+                    } @else {
+                      <button mat-stroked-button class="settle-btn" (click)="startSettle(a)">Settle</button>
+                    }
+                  }
+                </div>
+              }
+              @if (loanAdvances().length === 0) {
+                <div class="empty-text">No advances given</div>
+              }
+
+              <!-- Give Advance Form -->
+              @if (loan()!.repaymentStatus !== 'completed' && holderAvailable() > 0) {
+                <div class="inline-form">
+                  @if (advanceError()) { <div class="error-message">{{ advanceError() }}</div> }
+                  <div class="repayment-form">
+                    <mat-form-field appearance="outline">
+                      <mat-label>Person</mat-label>
+                      <mat-select [(ngModel)]="advancePersonUid" (ngModelChange)="onAdvancePersonChange()">
+                        @for (u of activeUsers(); track u.uid) { <mat-option [value]="u.uid">{{ u.displayName }}</mat-option> }
+                        <mat-option value="other">Other (outside person)</mat-option>
+                      </mat-select>
+                    </mat-form-field>
+                    @if (advancePersonUid === 'other') {
+                      <mat-form-field appearance="outline">
+                        <mat-label>Person Name</mat-label>
+                        <input matInput [(ngModel)]="advanceCustomName" placeholder="e.g. Manager, Worker" />
+                      </mat-form-field>
+                    }
+                    <mat-form-field appearance="outline">
+                      <mat-label>Amount</mat-label>
+                      <input matInput type="number" [(ngModel)]="advanceAmount" min="1" />
+                    </mat-form-field>
+                    <mat-form-field appearance="outline">
+                      <mat-label>Date</mat-label>
+                      <input matInput [matDatepicker]="aPicker" [(ngModel)]="advanceDate" />
+                      <mat-datepicker-toggle matIconSuffix [for]="aPicker" /><mat-datepicker #aPicker />
+                    </mat-form-field>
+                    <mat-form-field appearance="outline">
+                      <mat-label>Note</mat-label>
+                      <input matInput [(ngModel)]="advanceNote" placeholder="e.g. To buy goats" />
+                    </mat-form-field>
+                    <button mat-flat-button color="primary" (click)="giveAdvance()" [disabled]="savingAdvance()">
+                      {{ savingAdvance() ? 'Adding...' : 'Give Advance' }}
                     </button>
                   </div>
                 </div>
@@ -844,6 +944,8 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
     .list-main { display: flex; justify-content: space-between; align-items: center; }
     .list-amount { font-weight: 600; color: var(--color-text); }
     .list-meta { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 2px; }
+    .settle-btn { margin-top: 8px; }
+    .advance-note { font-size: 0.8rem; color: var(--color-text-secondary); margin: 6px 0 0; }
     .total-row { font-weight: 600; background: var(--color-bg); display: flex; justify-content: space-between; }
     .empty-text { padding: 1rem; color: var(--color-text-muted); text-align: center; }
     .utilization-bar { display: flex; gap: 1rem; font-size: 0.875rem; color: var(--color-text-secondary); margin-bottom: 8px; }
@@ -953,6 +1055,18 @@ export class LoanDetailComponent implements OnInit {
   topUpAmount = 0;
   goldError = signal(''); savingGold = signal(false);
   personalError = signal(''); savingPersonal = signal(false);
+
+  // Advance to person (business float / imprest)
+  advancePersonUid = ''; advanceCustomName = ''; advanceAmount = 0; advanceDate = new Date(); advanceNote = '';
+  advanceError = signal(''); savingAdvance = signal(false);
+  // Settle advance
+  settlingAdvanceId = signal('');
+  settleSpent = 0; settleDesc = ''; settleSegment = ''; settleCategory = ''; settleDate = new Date(); settleReturn = false;
+  settleError = signal(''); savingSettle = signal(false);
+  loanAdvances = computed(() => this.loan()?.advances ?? []);
+  openAdvances = computed(() => this.loanAdvances().filter(a => a.status === 'open'));
+  advancedOut = computed(() => this.openAdvances().reduce((s, a) => s + (a.amount - a.spent - a.returned), 0));
+  holderAvailable = computed(() => (this.loan()?.utilizationRemaining ?? 0) - this.advancedOut());
 
   private loanId = '';
 
@@ -1133,6 +1247,68 @@ export class LoanDetailComponent implements OnInit {
       this.personalPersonUid = ''; this.personalCustomName = ''; this.personalAmount = 0; this.personalNote = '';
       await this.loadData();
     } catch (err: any) { this.personalError.set(err.message); } finally { this.savingPersonal.set(false); }
+  }
+
+  onAdvancePersonChange(): void {
+    if (this.advancePersonUid !== 'other') this.advanceCustomName = '';
+  }
+
+  async giveAdvance(): Promise<void> {
+    const isOther = this.advancePersonUid === 'other';
+    if ((!this.advancePersonUid || (isOther && !this.advanceCustomName.trim())) || this.advanceAmount <= 0) {
+      this.advanceError.set('Person and amount required');
+      return;
+    }
+    this.advanceError.set(''); this.savingAdvance.set(true);
+    try {
+      const personName = isOther
+        ? this.advanceCustomName.trim()
+        : (this.activeUsers().find(u => u.uid === this.advancePersonUid)?.displayName ?? '');
+      const personUid = isOther ? undefined : this.advancePersonUid;
+      await this.loanService.advanceToPerson(this.loanId, personUid, personName, this.advanceAmount, this.advanceDate, this.advanceNote);
+      this.advancePersonUid = ''; this.advanceCustomName = ''; this.advanceAmount = 0; this.advanceNote = '';
+      await this.loadData();
+    } catch (err: any) { this.advanceError.set(err.message); } finally { this.savingAdvance.set(false); }
+  }
+
+  startSettle(a: LoanAdvance): void {
+    this.settleError.set('');
+    this.settlingAdvanceId.set(a.id);
+    this.settleSpent = a.amount - a.spent - a.returned;
+    this.settleDesc = a.note || '';
+    this.settleSegment = this.loan()!.segment;
+    this.settleCategory = '';
+    this.settleDate = new Date();
+    this.settleReturn = false;
+  }
+
+  async confirmSettle(a: LoanAdvance): Promise<void> {
+    if (this.settleSpent > 0 && (!this.settleDesc.trim() || !this.settleCategory)) {
+      this.settleError.set('Description and category required when recording spend');
+      return;
+    }
+    if (this.settleSpent <= 0 && !this.settleReturn) {
+      this.settleError.set('Enter an amount spent, or tick "Return the rest"');
+      return;
+    }
+    this.settleError.set(''); this.savingSettle.set(true);
+    try {
+      const seg = this.allSegments().find(s => s.id === this.settleSegment);
+      const cat = this.expenseCategories().find(c => c.id === this.settleCategory);
+      await this.loanService.settleAdvance(
+        this.loanId, a.id, this.settleSpent,
+        {
+          description: this.settleDesc,
+          category: this.settleCategory,
+          categoryName: cat?.name ?? 'Other',
+          segment: this.settleSegment || this.loan()!.segment,
+          segmentName: seg?.name ?? this.loan()!.segmentName,
+        },
+        this.settleReturn, this.settleDate,
+      );
+      this.settlingAdvanceId.set('');
+      await this.loadData();
+    } catch (err: any) { this.settleError.set(err.message); } finally { this.savingSettle.set(false); }
   }
 
   // Gold loan actions

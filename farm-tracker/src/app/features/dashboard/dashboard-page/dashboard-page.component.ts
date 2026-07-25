@@ -83,8 +83,7 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
             }
             @if (hasLoanData()) {
               <app-loan-summary-widget
-                  [totalGiven]="loanSummary().totalGiven"
-                  [totalReceived]="loanSummary().totalReceived"
+                  [unusedInHand]="loanSummary().unusedInHand"
                   [pendingGiven]="loanSummary().pendingGiven"
                   [pendingReceived]="loanSummary().pendingReceived"
                   [totalSanctioned]="loanSummary().totalSanctioned"
@@ -148,7 +147,7 @@ export class DashboardPageComponent implements OnInit {
   trendTitle = signal('Monthly Trend (Last 6 Months)');
   currentMonthSummaries = signal<MonthlySummary[]>([]);
   personBreakdown = signal<Record<string, Record<string, { income: number; expense: number }>>>({});
-  loanSummary = signal({ totalGiven: 0, totalReceived: 0, pendingGiven: 0, pendingReceived: 0, totalSanctioned: 0, totalOutstanding: 0, upcomingEMICount: 0, upcomingEMIAmount: 0, totalInterestPaid: 0 });
+  loanSummary = signal({ totalGiven: 0, totalReceived: 0, pendingGiven: 0, pendingReceived: 0, totalSanctioned: 0, totalOutstanding: 0, upcomingEMICount: 0, upcomingEMIAmount: 0, totalInterestPaid: 0, unusedInHand: 0 });
   hasLoanData = computed(() => Object.values(this.loanSummary()).some(v => v > 0));
   noSegmentAccess = computed(() => this.auth.isSegmentRestricted() && this.auth.assignedSegments().length === 0);
   segments = signal<Segment[]>([]);

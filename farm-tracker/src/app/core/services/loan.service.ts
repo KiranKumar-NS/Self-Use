@@ -20,7 +20,7 @@ import {
 } from '@angular/fire/firestore';
 import {
   Loan, LoanFormData, Repayment, EMIEntry, InterestFrequency,
-  LoanDeduction, CollateralItem, LoanDocument,
+  LoanDeduction, CollateralItem, LoanDocument, LoanAdvance,
 } from '../models/loan.model';
 import { AuthService } from './auth.service';
 import { SummaryService } from './summary.service';
@@ -478,6 +478,7 @@ export class LoanService {
     upcomingEMICount: number;
     upcomingEMIAmount: number;
     totalInterestPaid: number;
+    unusedInHand: number;
   }> {
     // Restricted viewers bypass the cache: the cached aggregate is unfiltered
     const restricted = this.authService.isSegmentRestricted();
@@ -526,6 +527,8 @@ export class LoanService {
       upcomingEMICount,
       upcomingEMIAmount,
       totalInterestPaid: formalLoans.reduce((sum, l) => sum + (l.totalInterestPaid ?? 0), 0),
+      // Loan money received but not yet spent/allocated — cash in hand from active formal loans
+      unusedInHand: activeFormal.reduce((sum, l) => sum + (l.utilizationRemaining ?? 0), 0),
     };
     if (!restricted) this.summaryCache = { data: result, time: Date.now() };
     return result;
@@ -814,9 +817,13 @@ export class LoanService {
       if (loan.loanCategory !== 'formal') {
         throw new Error('Utilization can only be added to formal loans');
       }
-      const remaining = loan.utilizationRemaining ?? 0;
+      // Only the holder's own in-hand pool is spendable directly — funds advanced out to
+      // other people to hold are excluded (they're spent via settleAdvance, not here).
+      const advancedOut = (loan.advances ?? []).filter(a => a.status === 'open')
+        .reduce((s, a) => s + (a.amount - a.spent - a.returned), 0);
+      const remaining = (loan.utilizationRemaining ?? 0) - advancedOut;
       if (data.amount > remaining) {
-        throw new Error(`Amount ₹${data.amount.toLocaleString('en-IN')} exceeds remaining ₹${remaining.toLocaleString('en-IN')}`);
+        throw new Error(`Amount ₹${data.amount.toLocaleString('en-IN')} exceeds in-hand funds ₹${remaining.toLocaleString('en-IN')}`);
       }
 
       // Create expense transaction
@@ -924,9 +931,12 @@ export class LoanService {
       if (loan.loanCategory !== 'formal') {
         throw new Error('Personal utilization can only be added to formal loans');
       }
-      const remaining = loan.utilizationRemaining ?? 0;
+      // Exclude funds advanced out to others (they're not in the holder's pool)
+      const advancedOut = (loan.advances ?? []).filter(a => a.status === 'open')
+        .reduce((s, a) => s + (a.amount - a.spent - a.returned), 0);
+      const remaining = (loan.utilizationRemaining ?? 0) - advancedOut;
       if (amount > remaining) {
-        throw new Error(`Amount ₹${amount.toLocaleString('en-IN')} exceeds remaining ₹${remaining.toLocaleString('en-IN')}`);
+        throw new Error(`Amount ₹${amount.toLocaleString('en-IN')} exceeds in-hand funds ₹${remaining.toLocaleString('en-IN')}`);
       }
 
       // Create linked simple loan (type: 'given' = we gave money to person)
@@ -980,6 +990,182 @@ export class LoanService {
     });
 
     return simpleLoanId;
+  }
+
+  /** Advance loan cash to a person to hold for business use (float / imprest). 1 read, 1 write.
+   *  Custody only — reduces the holder's in-hand share, does NOT consume loan funds (nothing spent yet). */
+  async advanceToPerson(
+    loanId: string,
+    personUid: string | undefined,
+    personName: string,
+    amount: number,
+    date: Date,
+    note?: string,
+  ): Promise<void> {
+    const user = this.authService.requireUser();
+    if (amount <= 0) throw new Error('Amount must be greater than 0');
+
+    await runTransaction(this.firestore, async (transaction) => {
+      const loanRef = doc(this.firestore, 'loans', loanId);
+      const loanSnap = await transaction.get(loanRef);
+      const loan = loanSnap.data() as Loan;
+
+      if (loan.loanCategory !== 'formal') {
+        throw new Error('Advances can only be given from formal loans');
+      }
+
+      // Holder can only advance the unused funds they still hold (not already advanced out)
+      const openAdvances = (loan.advances ?? []).filter(a => a.status === 'open');
+      const advancedOut = openAdvances.reduce((s, a) => s + (a.amount - a.spent - a.returned), 0);
+      const holderAvailable = (loan.utilizationRemaining ?? 0) - advancedOut;
+      if (amount > holderAvailable) {
+        throw new Error(`Advance ₹${amount.toLocaleString('en-IN')} exceeds unused funds in hand ₹${holderAvailable.toLocaleString('en-IN')}`);
+      }
+
+      const advance: LoanAdvance = {
+        id: `adv_${Date.now()}`,
+        personName,
+        amount,
+        spent: 0,
+        returned: 0,
+        date: Timestamp.fromDate(date),
+        status: 'open',
+      };
+      if (personUid) advance.personUid = personUid;
+      if (note) advance.note = note;
+
+      transaction.update(loanRef, {
+        advances: [...(loan.advances ?? []), advance],
+        timeline: arrayUnion({
+          action: 'updated', by: user.uid, byName: user.displayName, at: Timestamp.now(),
+          changes: `advance ₹${amount.toLocaleString('en-IN')} to ${personName} (business float)`,
+        }),
+      });
+    });
+
+    this.invalidateCaches();
+  }
+
+  /** Settle an advance: record what was actually spent (books a business expense) and
+   *  optionally return the leftover to the holder. Any un-returned balance stays as the
+   *  person's cash in hand. 1 read, up to 4 writes. */
+  async settleAdvance(
+    loanId: string,
+    advanceId: string,
+    spentAmount: number,
+    expense: {
+      description: string;
+      category: string;
+      categoryName: string;
+      segment: string;
+      segmentName: string;
+      paymentMethod?: 'cash' | 'upi';
+    },
+    returnRemaining: boolean,
+    date: Date,
+  ): Promise<void> {
+    const user = this.authService.requireUser();
+    if (spentAmount < 0) throw new Error('Spent amount cannot be negative');
+
+    await runTransaction(this.firestore, async (transaction) => {
+      const loanRef = doc(this.firestore, 'loans', loanId);
+      const loanSnap = await transaction.get(loanRef);
+      const loan = loanSnap.data() as Loan;
+
+      if (loan.loanCategory !== 'formal') throw new Error('Not a formal loan');
+
+      const advances = [...(loan.advances ?? [])];
+      const idx = advances.findIndex(a => a.id === advanceId);
+      if (idx === -1) throw new Error('Advance not found');
+      const advance = advances[idx];
+      const balance = advance.amount - advance.spent - advance.returned;
+      if (spentAmount > balance) {
+        throw new Error(`Spent ₹${spentAmount.toLocaleString('en-IN')} exceeds advance balance ₹${balance.toLocaleString('en-IN')}`);
+      }
+
+      const month = getMonthString(date);
+      const year = getYear(date);
+
+      // Book the business expense for the spent portion, funded by the advance holder
+      if (spentAmount > 0) {
+        const paidBy = advance.personUid ?? 'other';
+        const paidByName = advance.personName;
+        const txnRef = doc(collection(this.firestore, 'transactions'));
+        transaction.set(txnRef, {
+          id: txnRef.id,
+          type: 'expense',
+          date: Timestamp.fromDate(date),
+          amount: spentAmount,
+          category: expense.category,
+          categoryName: expense.categoryName,
+          segment: expense.segment,
+          segmentName: expense.segmentName,
+          description: expense.description,
+          paymentMethod: expense.paymentMethod ?? 'cash',
+          paidBy,
+          paidByName,
+          createdBy: user.uid,
+          createdByName: user.displayName,
+          createdAt: serverTimestamp(),
+          isDeleted: false,
+          timeline: [{ action: 'created', by: user.uid, byName: user.displayName, at: Timestamp.now() }],
+          expensePaymentStatus: 'paid',
+          linkedLoanId: loanId,
+          month, year,
+        });
+
+        const personKey = paidBy === 'other'
+          ? paidByName.trim().replace(/\s+/g, ' ')
+              .split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+              .replace(/[.$/\[\]#]/g, '_')
+          : paidBy;
+
+        transaction.set(doc(this.firestore, 'monthlySummaries', `${month}-${expense.segment}`), {
+          totalExpense: increment(spentAmount),
+          netProfit: increment(-spentAmount),
+          [`expenseByCategory.${expense.category}`]: increment(spentAmount),
+          [`expenseByCategoryId.${expense.category}`]: increment(spentAmount),
+          [`expenseByPerson.${personKey}`]: increment(spentAmount),
+          month, year, segment: expense.segment, updatedAt: serverTimestamp(),
+        }, { merge: true });
+
+        transaction.set(doc(this.firestore, 'yearlySummaries', `${year}-${expense.segment}`), {
+          totalExpense: increment(spentAmount),
+          netProfit: increment(-spentAmount),
+          [`expenseByCategory.${expense.category}`]: increment(spentAmount),
+          [`expenseByCategoryId.${expense.category}`]: increment(spentAmount),
+          [`expenseByPerson.${personKey}`]: increment(spentAmount),
+          year, segment: expense.segment, updatedAt: serverTimestamp(),
+        }, { merge: true });
+      }
+
+      const returnedNow = returnRemaining ? (balance - spentAmount) : 0;
+      const updated: LoanAdvance = {
+        ...advance,
+        spent: advance.spent + spentAmount,
+        returned: advance.returned + returnedNow,
+      };
+      const newBalance = updated.amount - updated.spent - updated.returned;
+      updated.status = newBalance <= 0 ? 'settled' : 'open';
+      advances[idx] = updated;
+
+      const parts: string[] = [];
+      if (spentAmount > 0) parts.push(`spent ₹${spentAmount.toLocaleString('en-IN')}`);
+      if (returnedNow > 0) parts.push(`returned ₹${returnedNow.toLocaleString('en-IN')}`);
+
+      transaction.update(loanRef, {
+        advances,
+        // Only the spent portion is consumed from the loan; returned cash is unspent (back with holder)
+        utilizationTotal: increment(spentAmount),
+        utilizationRemaining: increment(-spentAmount),
+        timeline: arrayUnion({
+          action: 'updated', by: user.uid, byName: user.displayName, at: Timestamp.now(),
+          changes: `advance to ${advance.personName} settled: ${parts.join(', ') || 'no change'}`,
+        }),
+      });
+    });
+
+    this.invalidateCaches();
   }
 
   /** Remove a deduction from a formal loan — 1 read, 1 write */

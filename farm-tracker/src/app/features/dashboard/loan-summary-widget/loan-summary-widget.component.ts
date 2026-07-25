@@ -16,13 +16,9 @@ import { MatButtonModule } from '@angular/material/button';
         <button mat-button color="primary" (click)="viewAll()">View All</button>
       </div>
       <div class="loan-grid">
-        <div class="loan-item">
-          <span class="loan-label">Total Lent</span>
-          <span class="loan-value given">{{ totalGiven | currencyInr }}</span>
-        </div>
-        <div class="loan-item">
-          <span class="loan-label">Total Owed</span>
-          <span class="loan-value received">{{ totalReceived | currencyInr }}</span>
+        <div class="loan-item span-all">
+          <span class="loan-label">Unused (In Hand)</span>
+          <span class="loan-value inhand">{{ unusedInHand | currencyInr }}</span>
         </div>
         <div class="loan-item">
           <span class="loan-label">Pending (Lent)</span>
@@ -66,8 +62,8 @@ import { MatButtonModule } from '@angular/material/button';
     .loan-item { display: flex; flex-direction: column; }
     .loan-label { font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; }
     .loan-value { font-size: 1.25rem; font-weight: 700; }
-    .loan-value.given { color: var(--color-warning); }
-    .loan-value.received { color: var(--color-info); }
+    .loan-item.span-all { grid-column: 1 / -1; }
+    .loan-value.inhand { color: var(--color-income); }
     .loan-value.pending { color: var(--color-danger); }
     .loan-value.formal { color: var(--color-purple); }
     .loan-value.upcoming { color: var(--color-info); font-size: 1rem; }
@@ -82,8 +78,7 @@ import { MatButtonModule } from '@angular/material/button';
   `],
 })
 export class LoanSummaryWidgetComponent {
-  @Input() totalGiven = 0;
-  @Input() totalReceived = 0;
+  @Input() unusedInHand = 0;
   @Input() pendingGiven = 0;
   @Input() pendingReceived = 0;
 

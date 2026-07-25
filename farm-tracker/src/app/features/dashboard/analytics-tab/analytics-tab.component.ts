@@ -133,6 +133,12 @@ import { MatIconModule } from '@angular/material/icon';
             <div class="person-bar">
               <div class="person-fill" [style.width.%]="p.net > 0 ? (p.net / maxInvestment()) * 100 : 0"></div>
             </div>
+            @if (p.cashInHand > 0) {
+              <div class="cash-in-hand">
+                <span class="cash-label">Cash in Hand</span>
+                <span class="cash-value">{{ p.cashInHand | currencyInr }}</span>
+              </div>
+            }
             <div class="invest-details">
               <div class="invest-row">
                 <span class="invest-label">Expenses paid</span>
@@ -281,6 +287,9 @@ import { MatIconModule } from '@angular/material/icon';
     .person-amount { font-size: var(--font-xl); font-weight: 700; color: var(--color-expense); margin: 4px 0 8px; }
     .person-bar { height: 6px; background: var(--color-bg-alt); border-radius: 3px; overflow: hidden; margin-bottom: 10px; }
     .person-fill { height: 100%; background: var(--color-primary); border-radius: 3px; transition: width 0.3s; }
+    .cash-in-hand { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 10px; margin-bottom: 10px; background: var(--color-income-bg); border-radius: 6px; }
+    .cash-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--color-income); }
+    .cash-value { font-size: 1.1rem; font-weight: 700; color: var(--color-income); }
     .invest-details { display: flex; flex-direction: column; gap: 6px; }
     .invest-row { display: flex; justify-content: space-between; font-size: 0.8rem; }
     .invest-label { color: var(--color-text-secondary); }
@@ -375,6 +384,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     loanOwes: number;
     loanOwesDetails: { loanId: string; label: string; amount: number }[];
     net: number;
+    cashInHand: number;
   }[]>([]);
   maxInvestment = signal(0);
   incomeTransactions = signal<Transaction[]>([]);
@@ -616,16 +626,28 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
           });
         }
         // Formal loan fund holders = HOLDS (person manages business money, not personal debt)
-        if (loan.loanCategory === 'formal' && loan.heldByName && (loan.utilizationRemaining ?? 0) > 0 && loan.repaymentStatus !== 'completed') {
-          const name = resolveKey(loan.heldByUid, loan.heldByName);
-          ensurePerson(name);
-          const remaining = loan.utilizationRemaining ?? 0;
-          personMap[name].loanHolds += remaining;
-          personMap[name].loanHoldsDetails.push({
-            loanId: loan.id,
-            label: `${loan.loanSourceName ?? loan.personName}${loan.accountNumber ? ' (' + loan.accountNumber + ')' : ''}`,
-            amount: remaining,
-          });
+        if (loan.loanCategory === 'formal' && loan.repaymentStatus !== 'completed') {
+          const label = `${loan.loanSourceName ?? loan.personName}${loan.accountNumber ? ' (' + loan.accountNumber + ')' : ''}`;
+          // Cash advanced to other people to hold (float) — attribute to each of them
+          const openAdvances = (loan.advances ?? []).filter(a => a.status === 'open');
+          let advancedOut = 0;
+          for (const a of openAdvances) {
+            const bal = a.amount - a.spent - a.returned;
+            if (bal <= 0) continue;
+            advancedOut += bal;
+            const aName = resolveKey(a.personUid, a.personName);
+            ensurePerson(aName);
+            personMap[aName].loanHolds += bal;
+            personMap[aName].loanHoldsDetails.push({ loanId: loan.id, label: `Advance · ${label}`, amount: bal });
+          }
+          // The named holder keeps whatever unused funds are not advanced out
+          const holderShare = (loan.utilizationRemaining ?? 0) - advancedOut;
+          if (loan.heldByName && holderShare > 0) {
+            const name = resolveKey(loan.heldByUid, loan.heldByName);
+            ensurePerson(name);
+            personMap[name].loanHolds += holderShare;
+            personMap[name].loanHoldsDetails.push({ loanId: loan.id, label, amount: holderShare });
+          }
         }
       }
     } catch {}
@@ -635,6 +657,9 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
         name,
         ...data,
         net: data.expensesPaid - data.incomeReceived,
+        // Actual cash this person is holding right now: undistributed income + unused loan funds
+        // in their custody. Loan Owes is a receivable (money to return), so it's excluded here.
+        cashInHand: data.holding + data.loanHolds,
       }))
       .sort((a, b) => b.net - a.net);
 
@@ -805,12 +830,26 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
           investMap[name].loanOwes += loan.balanceRemaining;
           investMap[name].loanOwesDetails.push({ loanId: loan.id, label: loan.purpose || 'Personal use', amount: loan.balanceRemaining });
         }
-        if (loan.loanCategory === 'formal' && loan.heldByName && (loan.utilizationRemaining ?? 0) > 0 && loan.repaymentStatus !== 'completed') {
-          const name = resolveKey2(loan.heldByUid, loan.heldByName);
-          ensurePerson2(name);
-          const remaining = loan.utilizationRemaining ?? 0;
-          investMap[name].loanHolds += remaining;
-          investMap[name].loanHoldsDetails.push({ loanId: loan.id, label: `${loan.loanSourceName ?? loan.personName}${loan.accountNumber ? ' (' + loan.accountNumber + ')' : ''}`, amount: remaining });
+        if (loan.loanCategory === 'formal' && loan.repaymentStatus !== 'completed') {
+          const label = `${loan.loanSourceName ?? loan.personName}${loan.accountNumber ? ' (' + loan.accountNumber + ')' : ''}`;
+          const openAdvances = (loan.advances ?? []).filter(a => a.status === 'open');
+          let advancedOut = 0;
+          for (const a of openAdvances) {
+            const bal = a.amount - a.spent - a.returned;
+            if (bal <= 0) continue;
+            advancedOut += bal;
+            const aName = resolveKey2(a.personUid, a.personName);
+            ensurePerson2(aName);
+            investMap[aName].loanHolds += bal;
+            investMap[aName].loanHoldsDetails.push({ loanId: loan.id, label: `Advance · ${label}`, amount: bal });
+          }
+          const holderShare = (loan.utilizationRemaining ?? 0) - advancedOut;
+          if (loan.heldByName && holderShare > 0) {
+            const name = resolveKey2(loan.heldByUid, loan.heldByName);
+            ensurePerson2(name);
+            investMap[name].loanHolds += holderShare;
+            investMap[name].loanHoldsDetails.push({ loanId: loan.id, label, amount: holderShare });
+          }
         }
       }
     } catch {}
@@ -823,7 +862,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       summaryEntries = summaryEntries.filter(([name]) => name === this.filterPaidBy);
     }
     const summary = summaryEntries
-      .map(([name, data]) => ({ name, ...data, net: data.expensesPaid - data.incomeReceived }))
+      .map(([name, data]) => ({ name, ...data, net: data.expensesPaid - data.incomeReceived, cashInHand: data.holding + data.loanHolds }))
       .sort((a, b) => b.net - a.net);
     this.investmentSummary.set(summary);
     this.maxInvestment.set(summary.length > 0 ? Math.max(...summary.map(s => s.net)) : 0);
