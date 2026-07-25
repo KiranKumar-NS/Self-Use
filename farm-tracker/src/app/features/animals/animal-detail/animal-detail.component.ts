@@ -434,7 +434,7 @@ export class AnimalDetailComponent implements OnInit {
 
   addVaccination(): void {
     const ref = this.dialog.open(VaccinationDialogComponent, {
-      width: '90vw', maxWidth: '550px', data: { animalId: this.animalId },
+      width: '90vw', maxWidth: '550px', data: { animal: this.animal() },
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
@@ -446,7 +446,7 @@ export class AnimalDetailComponent implements OnInit {
 
   addMedicalRecord(): void {
     const ref = this.dialog.open(MedicalDialogComponent, {
-      width: '90vw', maxWidth: '550px', data: { animalId: this.animalId },
+      width: '90vw', maxWidth: '550px', data: { animal: this.animal() },
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {

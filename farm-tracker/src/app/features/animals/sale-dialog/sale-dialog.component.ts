@@ -14,12 +14,15 @@ import { BuyerService } from '../../../core/services/buyer.service';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { InventoryService } from '../../../core/services/inventory.service';
 import { SegmentService } from '../../../core/services/segment.service';
+import { UserService } from '../../../core/services/user.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { Animal } from '../../../core/models/animal.model';
 import { Buyer } from '../../../core/models/buyer.model';
+import { AppUser } from '../../../core/models/user.model';
 import { PaymentMethod, IncomePaymentStatus, SaleUnit } from '../../../core/models/transaction.model';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
-import { normalizeName } from '../../../core/utils/name.utils';
+import { normalizeName, nameKey } from '../../../core/utils/name.utils';
 
 export interface SaleDialogData {
   animal: Animal;
@@ -84,6 +87,32 @@ export interface SaleDialogData {
 
         <div class="form-row">
           <mat-form-field appearance="outline">
+            <mat-label>Received By</mat-label>
+            <mat-select [(ngModel)]="paidBy" (selectionChange)="onPaidByChange()">
+              @for (u of users(); track u.uid) {
+                <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
+              }
+              <mat-option value="other">Other (type name)</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          @if (paidBy === 'other') {
+            <mat-form-field appearance="outline">
+              <mat-label>Enter Name</mat-label>
+              <input matInput [(ngModel)]="customPaidByName" required placeholder="e.g. Raju"
+                     (ngModelChange)="filterNameSuggestions()" (focus)="filterNameSuggestions()"
+                     [matAutocomplete]="nameAuto" />
+              <mat-autocomplete #nameAuto="matAutocomplete">
+                @for (n of nameSuggestions(); track n) {
+                  <mat-option [value]="n">{{ n }}</mat-option>
+                }
+              </mat-autocomplete>
+            </mat-form-field>
+          }
+        </div>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline">
             <mat-label>Payment</mat-label>
             <mat-select [(ngModel)]="paymentMethod">
               <mat-option value="cash">Cash</mat-option>
@@ -108,7 +137,7 @@ export interface SaleDialogData {
 
     <mat-dialog-actions align="end">
       <button mat-button (click)="dialogRef.close()">Cancel</button>
-      <button mat-flat-button color="primary" [disabled]="saving() || !salePrice" (click)="save()">
+      <button mat-flat-button color="primary" [disabled]="saving() || !salePrice || (paidBy === 'other' && !customPaidByName.trim())" (click)="save()">
         {{ saving() ? 'Saving...' : 'Record Sale' }}
       </button>
     </mat-dialog-actions>
@@ -126,9 +155,12 @@ export class SaleDialogComponent implements OnInit {
   private transactionService = inject(TransactionService);
   private inventoryService = inject(InventoryService);
   private segmentService = inject(SegmentService);
+  private userService = inject(UserService);
+  private authService = inject(AuthService);
   private toast = inject(ToastService);
 
   buyers = signal<Buyer[]>([]);
+  users = signal<AppUser[]>([]);
   saving = signal(false);
   error = signal('');
 
@@ -140,14 +172,37 @@ export class SaleDialogComponent implements OnInit {
   newBuyerName = '';
   paymentMethod: PaymentMethod = 'cash';
   paymentStatus: IncomePaymentStatus = 'received';
+  paidBy = '';                 // uid | 'other'
+  customPaidByName = '';
+  nameSuggestions = signal<string[]>([]);
+  private knownNames: string[] = [];
 
   async ngOnInit(): Promise<void> {
     try {
-      this.buyers.set(await this.buyerService.getAll());
+      const [buyers, users] = await Promise.all([
+        this.buyerService.getAll(),
+        this.userService.getAll(),
+      ]);
+      this.buyers.set(buyers);
+      this.users.set(users.filter((u) => u.isActive));
     } catch (err) {
-      console.error('Failed to load buyers', err);
-      this.toast.error('Failed to load buyers. Check your connection and try again.');
+      console.error('Failed to load buyers/users', err);
+      this.toast.error('Failed to load data. Check your connection and try again.');
     }
+
+    // Default "Received By" to the logged-in user
+    this.paidBy = this.authService.currentUser()?.uid || '';
+
+    // Load known custom names for autocomplete suggestions
+    try {
+      const recent = await this.transactionService.getAll({}, 200);
+      this.knownNames = [...new Set(
+        recent.transactions
+          .filter(t => t.paidBy === 'other' && t.paidByName)
+          .map(t => t.paidByName!)
+      )];
+    } catch {}
+
     if (this.data.animal.trackingMode === 'batch') {
       this.countSold.set(this.data.animal.currentCount);
     }
@@ -155,6 +210,30 @@ export class SaleDialogComponent implements OnInit {
 
   onBuyerChange(): void {
     if (this.buyerId !== '__new__') this.newBuyerName = '';
+  }
+
+  onPaidByChange(): void {
+    if (this.paidBy !== 'other') {
+      this.customPaidByName = '';
+      this.nameSuggestions.set([]);
+    } else {
+      this.filterNameSuggestions();
+    }
+  }
+
+  filterNameSuggestions(): void {
+    const inputKey = nameKey(this.customPaidByName || '');
+    if (!inputKey) {
+      this.nameSuggestions.set([...this.knownNames].sort((a, b) => a.localeCompare(b)));
+      return;
+    }
+    const matches = this.knownNames.filter(n => nameKey(n).includes(inputKey));
+    matches.sort((a, b) => {
+      const aStarts = nameKey(a).startsWith(inputKey) ? 0 : 1;
+      const bStarts = nameKey(b).startsWith(inputKey) ? 0 : 1;
+      return aStarts - bStarts || a.localeCompare(b);
+    });
+    this.nameSuggestions.set(matches);
   }
 
   async save(): Promise<void> {
@@ -176,6 +255,12 @@ export class SaleDialogComponent implements OnInit {
         resolvedBuyerName = buyer?.name || '';
       }
 
+      // Resolve "Received By" (registered user vs. custom name)
+      const isCustom = this.paidBy === 'other';
+      const paidByUser = isCustom ? null : this.users().find(u => u.uid === this.paidBy);
+      const resolvedPaidBy = isCustom ? 'other' : this.paidBy;
+      const resolvedPaidByName = isCustom ? normalizeName(this.customPaidByName) : paidByUser?.displayName;
+
       // 1. Create income transaction
       const txnId = await this.transactionService.create({
         type: 'income',
@@ -191,8 +276,8 @@ export class SaleDialogComponent implements OnInit {
         description: `Sale of ${this.animalService.getDisplayName(animal)}${resolvedBuyerName ? ' to ' + resolvedBuyerName : ''}`,
         paymentMethod: this.paymentMethod,
         paymentStatus: this.paymentStatus,
-        paidBy: undefined,
-        paidByName: undefined,
+        paidBy: resolvedPaidBy,
+        paidByName: resolvedPaidByName,
         linkedAnimalIds: [animal.id],
         linkedAnimalNames: [this.animalService.getDisplayName(animal)],
         linkedBuyerId: resolvedBuyerId || undefined,

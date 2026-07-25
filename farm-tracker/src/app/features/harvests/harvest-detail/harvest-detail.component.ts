@@ -92,12 +92,6 @@ import { ToastService } from '../../../core/services/toast.service';
             <div class="stage-value">{{ harvest()!.totalQuantity }} {{ harvest()!.unit }}</div>
           </div>
           <div class="pipeline-arrow">→</div>
-          <div class="pipeline-stage" [class.active]="harvest()!.storageLocation">
-            <div class="stage-icon">📦</div>
-            <div class="stage-label">Storage</div>
-            <div class="stage-value">{{ harvest()!.remainingQuantity }} {{ harvest()!.unit }}</div>
-          </div>
-          <div class="pipeline-arrow">→</div>
           <div class="pipeline-stage" [class.active]="harvest()!.totalSold > 0">
             <div class="stage-icon">💰</div>
             <div class="stage-label">Sold</div>

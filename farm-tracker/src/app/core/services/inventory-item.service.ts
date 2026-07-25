@@ -73,13 +73,13 @@ export class InventoryItemService {
       quantity: qty,
       unitCost,
       totalCost,
-      linkedTransactionId: linkedTransactionId || undefined,
-      supplierId: supplierId || undefined,
-      supplierName: supplierName || undefined,
-      note,
       recordedBy: user.uid,
       recordedByName: user.displayName,
     };
+    if (linkedTransactionId) movement.linkedTransactionId = linkedTransactionId;
+    if (supplierId) movement.supplierId = supplierId;
+    if (supplierName) movement.supplierName = supplierName;
+    if (note) movement.note = note;
 
     const newMovements = [...item.movements, movement];
     const newTotalPurchased = item.totalPurchased + qty;
@@ -108,10 +108,10 @@ export class InventoryItemService {
       date: Timestamp.now(),
       type: 'used',
       quantity: -qty,
-      note,
       recordedBy: user.uid,
       recordedByName: user.displayName,
     };
+    if (note) movement.note = note;
 
     await this.update(itemId, {
       movements: [...item.movements, movement],
@@ -130,10 +130,10 @@ export class InventoryItemService {
       date: Timestamp.now(),
       type: 'wastage',
       quantity: -qty,
-      note: reason,
       recordedBy: user.uid,
       recordedByName: user.displayName,
     };
+    if (reason) movement.note = reason;
 
     await this.update(itemId, {
       movements: [...item.movements, movement],
