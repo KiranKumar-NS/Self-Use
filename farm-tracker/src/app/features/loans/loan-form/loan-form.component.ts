@@ -222,12 +222,12 @@ function omitUndefined<T extends Record<string, any>>(obj: T): T {
               <mat-label>Loan Amount Held By
               </mat-label>
               <mat-icon matPrefix class="info-icon" matTooltip="Who physically received and manages the loan money? e.g. Ramesh holds the SBI loan funds in his account">info</mat-icon>
-              <mat-select [(ngModel)]="heldByUid" name="heldByUid" (ngModelChange)="onHeldByChange()">
-                <mat-option value="">Not assigned</mat-option>
+              <mat-select [(ngModel)]="heldByUid" name="heldByUid" required (ngModelChange)="onHeldByChange()" #heldByModel="ngModel">
                 @for (u of activeUsers(); track u.uid) {
                   <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
                 }
               </mat-select>
+              <mat-error>{{ heldByModel.errors | errorMessage }}</mat-error>
             </mat-form-field>
           </div>
 
@@ -992,6 +992,9 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
   }
 
   private async saveFormalLoan(): Promise<void> {
+    if (!this.heldByUid) {
+      throw new Error('Please select who holds the loan money ("Loan Amount Held By").');
+    }
     // For edit mode, only update cosmetic fields
     if (this.isEdit()) {
       const seg = this.selectedSegments.length > 0

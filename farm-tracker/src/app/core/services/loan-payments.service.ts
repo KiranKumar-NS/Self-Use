@@ -166,6 +166,7 @@ export class LoanPaymentsService {
       if (allDone) {
         loanUpdates['loanClosureDate'] = Timestamp.fromDate(data.date);
         loanUpdates['closureReason'] = 'fully_paid';
+        loanUpdates['utilizationRemaining'] = 0;
       }
       transaction.update(loanRef, loanUpdates);
     });
@@ -387,6 +388,7 @@ export class LoanPaymentsService {
         totalPrincipalPaid: increment(outstanding),
         balanceRemaining: 0,
         outstandingBalance: 0,
+        utilizationRemaining: 0,
         repaymentStatus: 'completed',
         closureReason: 'fully_paid',
         loanClosureDate: Timestamp.fromDate(date),
@@ -512,6 +514,7 @@ export class LoanPaymentsService {
         totalPrincipalPaid: increment(amount),
         outstandingBalance: increment(-amount),
         totalPartPayments: increment(amount),
+        ...(newStatus === 'completed' ? { utilizationRemaining: 0 } : {}),
         timeline: appendTimelineCapped(loan.timeline, {
           action: 'updated', by: user.uid, byName: user.displayName, at: Timestamp.now(),
           changes: `part-payment: ₹${amount.toLocaleString('en-IN')} (principal reduced)`,
@@ -786,6 +789,7 @@ export class LoanPaymentsService {
         totalPrincipalPaid: increment(amount),
         balanceRemaining: 0,
         outstandingBalance: 0,
+        utilizationRemaining: 0,
         repaymentStatus: 'completed',
         closureReason: 'pre_closed',
         loanClosureDate: Timestamp.fromDate(date),
@@ -988,6 +992,7 @@ export class LoanPaymentsService {
         totalPrincipalPaid: increment(outstanding),
         balanceRemaining: 0,
         outstandingBalance: 0,
+        utilizationRemaining: 0,
         repaymentStatus: 'completed',
         closureReason: 'balance_transfer',
         loanClosureDate: Timestamp.fromDate(date),
