@@ -141,6 +141,16 @@ export class LoanService {
         changesList.push(`account: updated`);
         updates['accountNumber'] = data.accountNumber;
       }
+      if (oldData.segment !== data.segment) {
+        changesList.push(`segment: ${oldData.segmentName}→${data.segmentName}`);
+        updates['segment'] = data.segment;
+        updates['segmentName'] = data.segmentName;
+      }
+      if (data.segments && (oldData.segments ?? []).join(',') !== data.segments.join(',')) {
+        changesList.push(`segments: ${(oldData.segmentNames ?? []).join('/')}→${(data.segmentNames ?? []).join('/')}`);
+        updates['segments'] = data.segments;
+        updates['segmentNames'] = data.segmentNames ?? [];
+      }
 
       if (Object.keys(updates).length === 0) return;
 

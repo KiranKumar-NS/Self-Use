@@ -808,6 +808,7 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
         this.purpose = loan.purpose;
         this.loanSourceName = loan.loanSourceName ?? '';
         this.accountNumber = loan.accountNumber ?? '';
+        this.selectedSegments = loan.segments ?? (loan.segment ? [loan.segment] : []);
       } else {
         if (loan.repaymentStatus !== 'pending') {
           this.router.navigate(['/loans', this.editId]);
@@ -999,6 +1000,10 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
         purpose: this.purpose,
         segment: this.selectedSegments[0] || 'personal',
         segmentName: seg?.name || 'Personal',
+        segments: this.selectedSegments.length > 0 ? this.selectedSegments : [this.selectedSegments[0] || 'personal'],
+        segmentNames: this.selectedSegments.length > 0
+          ? this.selectedSegments.map(id => this.segments().find(s => s.id === id)?.name ?? id)
+          : [seg?.name || 'Personal'],
         month: getMonthString(this.disbursementDate),
         year: getYear(this.disbursementDate),
         loanCategory: 'formal',

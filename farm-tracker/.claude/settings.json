@@ -148,7 +148,9 @@
       "Bash(pip list *)",
       "Bash(pdftotext -layout \"13.pdf\" \"13.txt\")",
       "Bash(echo \"=== EXIT: $? ===\")",
-      "Bash(node -e 'try{require.resolve\\(\"puppeteer\"\\);console.log\\(\"puppeteer OK\"\\)}catch\\(e\\){try{require.resolve\\(\"playwright\"\\);console.log\\(\"playwright OK\"\\)}catch\\(e2\\){try{require.resolve\\(\"jsdom\"\\);console.log\\(\"jsdom OK\"\\)}catch\\(e3\\){console.log\\(\"none: puppeteer/playwright/jsdom not installed\"\\)}}}')"
+      "Bash(node -e 'try{require.resolve\\(\"puppeteer\"\\);console.log\\(\"puppeteer OK\"\\)}catch\\(e\\){try{require.resolve\\(\"playwright\"\\);console.log\\(\"playwright OK\"\\)}catch\\(e2\\){try{require.resolve\\(\"jsdom\"\\);console.log\\(\"jsdom OK\"\\)}catch\\(e3\\){console.log\\(\"none: puppeteer/playwright/jsdom not installed\"\\)}}}')",
+      "Bash(node \"C:/Users/Admin/AppData/Local/Temp/claude/d--kk-self-use-repo-farm-tracker/4f3b51a7-499d-4a89-bb59-0e7967b1671d/scratchpad/delete-masters.js\")",
+      "Bash(node scripts/_delete-masters-tmp.js)"
     ],
     "additionalDirectories": [
       "D:\\kk\\self-use-repo\\farm-tracker\\dist"
