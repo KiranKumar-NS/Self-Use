@@ -151,6 +151,17 @@ export class LoanService {
         updates['segments'] = data.segments;
         updates['segmentNames'] = data.segmentNames ?? [];
       }
+      if (data.loanSource && oldData.loanSource !== data.loanSource) {
+        changesList.push(`source type: ${oldData.loanSource}→${data.loanSource}`);
+        updates['loanSource'] = data.loanSource;
+      }
+      // Held By: '' means "Not assigned" — store empty string so a cleared
+      // assignment persists (Firestore rejects `undefined`, so never send that).
+      if ((oldData.heldByUid ?? '') !== (data.heldByUid ?? '')) {
+        changesList.push(`held by: ${oldData.heldByName || 'Not assigned'}→${data.heldByName || 'Not assigned'}`);
+        updates['heldByUid'] = data.heldByUid ?? '';
+        updates['heldByName'] = data.heldByName ?? '';
+      }
 
       if (Object.keys(updates).length === 0) return;
 

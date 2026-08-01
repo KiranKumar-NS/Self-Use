@@ -196,14 +196,14 @@ function omitUndefined<T extends Record<string, any>>(obj: T): T {
             <mat-form-field appearance="outline">
               <mat-label>Sanctioned Amount (INR)</mat-label>
               <input matInput type="number" [(ngModel)]="sanctionedAmount" name="sanctionedAmount" required min="1"
-                (ngModelChange)="recalculate()" #sanctionedModel="ngModel" />
+                [disabled]="isFormalEdit()" (ngModelChange)="recalculate()" #sanctionedModel="ngModel" />
               <mat-icon matSuffix class="info-icon" matTooltip="Total loan amount approved by the lender. e.g. Bank sanctions Rs.5,00,000">info</mat-icon>
               <mat-error>{{ sanctionedModel.errors | errorMessage }}</mat-error>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
               <mat-label>Disbursement Date</mat-label>
-              <input matInput [matDatepicker]="disPicker" [(ngModel)]="disbursementDate" name="disbursementDate" required #disbursementModel="ngModel" />
+              <input matInput [matDatepicker]="disPicker" [(ngModel)]="disbursementDate" name="disbursementDate" required [disabled]="isFormalEdit()" #disbursementModel="ngModel" />
               <mat-datepicker-toggle matIconSuffix [for]="disPicker" />
               <mat-datepicker #disPicker />
               <mat-error>{{ disbursementModel.errors | errorMessage }}</mat-error>
@@ -806,9 +806,14 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
         this.loanCategory = 'formal';
         this.personName = loan.personName;
         this.purpose = loan.purpose;
+        this.loanSource = loan.loanSource ?? this.loanSource;
         this.loanSourceName = loan.loanSourceName ?? '';
         this.accountNumber = loan.accountNumber ?? '';
+        this.sanctionedAmount = loan.sanctionedAmount ?? loan.amount;
+        this.disbursementDate = loan.disbursementDate?.toDate() ?? loan.date.toDate();
         this.selectedSegments = loan.segments ?? (loan.segment ? [loan.segment] : []);
+        this.heldByUid = loan.heldByUid ?? '';
+        this.heldByName = loan.heldByName ?? '';
       } else {
         if (loan.repaymentStatus !== 'pending') {
           this.router.navigate(['/loans', this.editId]);
@@ -1007,8 +1012,11 @@ export class LoanFormComponent implements OnInit, HasUnsavedChanges {
         month: getMonthString(this.disbursementDate),
         year: getYear(this.disbursementDate),
         loanCategory: 'formal',
+        loanSource: this.loanSource,
         loanSourceName: this.loanSourceName,
         accountNumber: this.accountNumber,
+        heldByUid: this.heldByUid || undefined,
+        heldByName: this.heldByName || undefined,
       });
       return;
     }
