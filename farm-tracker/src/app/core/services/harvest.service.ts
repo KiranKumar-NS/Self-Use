@@ -4,10 +4,22 @@ import {
   query, orderBy, where, limit, serverTimestamp, Timestamp,
 } from '@angular/fire/firestore';
 import { Harvest, HarvestSaleEntry } from '../models/harvest.model';
-import { Transaction, TransactionFormData, IncomePaymentStatus } from '../models/transaction.model';
+import { Transaction, TransactionFormData, IncomePaymentStatus, PaymentMethod, ExpensePaymentStatus } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 import { TransactionService } from './transaction.service';
 import { getMonthString, getYear } from '../utils/date.utils';
+import { stripUndefinedDeep } from '../utils/object.utils';
+
+/** "Who paid" + categorisation details for the auto-created harvest-cost expense (lives only on the transaction). */
+export interface HarvestExpenseMeta {
+  paidBy: string;                             // uid | 'other'
+  paidByName: string;                         // resolved display name / typed name
+  paymentMethod: PaymentMethod;               // 'cash' | 'upi'
+  expensePaymentStatus: ExpensePaymentStatus; // 'paid' | 'pending'
+  category?: string;                          // expense category id (defaults to 'other-expense')
+  categoryName?: string;
+  expectedPaymentDate?: Date;                 // only meaningful when status === 'pending'
+}
 
 @Injectable({ providedIn: 'root' })
 export class HarvestService {
@@ -17,10 +29,18 @@ export class HarvestService {
 
   private get ref() { return collection(this.firestore, 'harvests'); }
 
-  async create(data: Partial<Harvest>): Promise<string> {
+  async create(data: Partial<Harvest>, expenseMeta?: HarvestExpenseMeta): Promise<string> {
     const user = this.authService.requireUser();
     const docRef = doc(this.ref);
     const hDate = data.harvestDate?.toDate() || new Date();
+
+    // Auto-create a linked expense when a harvest cost is entered.
+    let harvestCostTransactionId: string | null = null;
+    if (data.harvestCost && data.harvestCost > 0) {
+      harvestCostTransactionId = await this.transactionService.create(
+        this.buildCostExpensePayload(docRef.id, data, expenseMeta),
+      );
+    }
 
     await setDoc(docRef, {
       id: docRef.id,
@@ -43,6 +63,7 @@ export class HarvestService {
       wastageDate: null,
       remainingQuantity: data.totalQuantity || 0,
       harvestCost: data.harvestCost || null,
+      harvestCostTransactionId,
       linkedCropActivityId: data.linkedCropActivityId || null,
       note: data.note || null,
       createdBy: user.uid,
@@ -55,8 +76,66 @@ export class HarvestService {
     return docRef.id;
   }
 
+  /** Generic partial writer — used by recordSale/recordWastage. Strips nested undefined (Firestore rejects it). */
   async update(id: string, data: Partial<Harvest>): Promise<void> {
-    await updateDoc(doc(this.firestore, 'harvests', id), { ...data });
+    await updateDoc(doc(this.firestore, 'harvests', id), stripUndefinedDeep({ ...data }));
+  }
+
+  /**
+   * Form-edit path: reconciles the linked harvest-cost expense (create / update / reverse)
+   * then writes the harvest doc fields. Do NOT route recordSale/recordWastage through here.
+   */
+  async updateDetails(id: string, data: Partial<Harvest>, expenseMeta?: HarvestExpenseMeta): Promise<void> {
+    const old = await this.getById(id);
+    const oldTxnId = old?.harvestCostTransactionId || null;
+    const newCost = data.harvestCost ?? null;
+
+    let harvestCostTransactionId = oldTxnId;
+    if (oldTxnId && newCost && newCost > 0) {
+      // Cost still present → update the linked expense in place.
+      await this.transactionService.update(oldTxnId, this.buildCostExpensePayload(id, data, expenseMeta));
+    } else if (oldTxnId && (!newCost || newCost <= 0)) {
+      // Cost cleared → reverse the linked expense.
+      await this.transactionService.softDelete(oldTxnId);
+      harvestCostTransactionId = null;
+    } else if (!oldTxnId && newCost && newCost > 0) {
+      // Cost newly added (incl. legacy harvests) → create the linked expense.
+      harvestCostTransactionId = await this.transactionService.create(this.buildCostExpensePayload(id, data, expenseMeta));
+    }
+
+    // Coerce to null (not undefined) so cleared values actually overwrite the stored field.
+    await this.update(id, {
+      ...data,
+      harvestCost: (newCost && newCost > 0 ? newCost : null) as any,
+      harvestCostTransactionId: (harvestCostTransactionId ?? null) as any,
+    });
+  }
+
+  /** Build the expense transaction payload for a harvest cost. */
+  private buildCostExpensePayload(harvestId: string, data: Partial<Harvest>, meta?: HarvestExpenseMeta): TransactionFormData {
+    const hDate = data.harvestDate?.toDate() || new Date();
+    return {
+      type: 'expense',
+      date: hDate,
+      amount: data.harvestCost || 0,
+      category: meta?.category || 'other-expense',
+      categoryName: meta?.categoryName || 'Other',
+      segment: data.segment || '',
+      segmentName: data.segmentName || '',
+      description: `${data.cropName || 'Crop'} — harvest cost`,
+      paymentMethod: meta?.paymentMethod || 'upi',
+      paidBy: meta?.paidBy,
+      paidByName: meta?.paidByName,
+      expensePaymentStatus: meta?.expensePaymentStatus || 'paid',
+      expectedPaymentDate: meta?.expensePaymentStatus === 'pending' ? meta?.expectedPaymentDate : undefined,
+      linkedHarvestId: harvestId,
+      linkedHarvestName: data.cropName && data.harvestDate
+        ? this.displayName({ cropName: data.cropName, harvestDate: data.harvestDate })
+        : undefined,
+      tags: ['harvest-cost'],
+      month: getMonthString(hDate),
+      year: getYear(hDate),
+    };
   }
 
   async getAll(filters: { segment?: string; status?: string } = {}, pageSize = 200): Promise<Harvest[]> {
@@ -113,7 +192,7 @@ export class HarvestService {
       quantity: saleData.quantity,
       unit: saleData.unit as any,
       ratePerUnit: saleData.ratePerUnit,
-      category: 'crop_sales',
+      category: 'crop-sales',
       categoryName: 'Crop Sales',
       segment: harvest.segment,
       segmentName: harvest.segmentName,
@@ -187,6 +266,15 @@ export class HarvestService {
   }
 
   async softDelete(id: string): Promise<void> {
+    const harvest = await this.getById(id);
+    if (harvest?.harvestCostTransactionId) {
+      // Reverse the linked cost expense; never let a txn hiccup block the harvest delete.
+      try {
+        await this.transactionService.softDelete(harvest.harvestCostTransactionId);
+      } catch (err) {
+        console.error('Failed to reverse linked harvest-cost expense', err);
+      }
+    }
     await updateDoc(doc(this.firestore, 'harvests', id), { isDeleted: true });
   }
 }

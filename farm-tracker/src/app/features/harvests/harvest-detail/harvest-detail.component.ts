@@ -7,8 +7,8 @@ import { Harvest } from '../../../core/models/harvest.model';
 import { Transaction } from '../../../core/models/transaction.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
-import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { HarvestSaleDialogComponent } from '../harvest-sale-dialog/harvest-sale-dialog.component';
+import { HarvestWastageDialogComponent } from '../harvest-wastage-dialog/harvest-wastage-dialog.component';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -213,11 +213,11 @@ import { ToastService } from '../../../core/services/toast.service';
                     </td>
                   </tr>
                 }
-                @if (harvest()!.harvestCost) {
+                @if (harvest()!.harvestCost && !harvest()!.harvestCostTransactionId) {
                   <tr>
                     <td class="date-cell">{{ harvest()!.harvestDate.toDate() | date:'dd MMM yyyy' }}</td>
                     <td>Initial cost</td>
-                    <td>Entered on harvest (manual)</td>
+                    <td>Entered on harvest (edit to sync as expense)</td>
                     <td class="expense-cell">{{ harvest()!.harvestCost! | currencyInr }}</td>
                     <td>-</td>
                     <td>-</td>
@@ -313,9 +313,6 @@ export class HarvestDetailComponent implements OnInit {
   linkedExpenses = signal<Transaction[]>([]);
   loading = signal(true);
 
-  wastageQuantity: number | null = null;
-  wastageReason = '';
-
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
@@ -341,7 +338,11 @@ export class HarvestDetailComponent implements OnInit {
   }
 
   totalCost(): number {
-    return this.linkedExpenseTotal() + (this.harvest()?.harvestCost || 0);
+    const h = this.harvest();
+    // Once harvestCost is synced to a linked expense it is already in linkedExpenseTotal;
+    // only add the raw field for legacy harvests that haven't been migrated yet.
+    const unlinkedCost = h && !h.harvestCostTransactionId ? (h.harvestCost || 0) : 0;
+    return this.linkedExpenseTotal() + unlinkedCost;
   }
 
   netProfit(): number {
@@ -379,33 +380,11 @@ export class HarvestDetailComponent implements OnInit {
   recordWastage(): void {
     const h = this.harvest();
     if (!h) return;
-
-    const ref = this.dialog.open(ConfirmDialogComponent, {
-      data: {
-        title: 'Record Wastage',
-        message: `Enter wastage quantity (${h.remainingQuantity} ${h.unit} available):`,
-        confirmText: 'Record',
-        showInput: true,
-        inputLabel: 'Quantity',
-        inputType: 'number',
-      } as ConfirmDialogData,
-    });
-
+    const ref = this.dialog.open(HarvestWastageDialogComponent, { width: '90vw', maxWidth: '500px', data: { harvest: h } });
     ref.afterClosed().subscribe(async (result) => {
-      if (result?.confirmed && result?.inputValue) {
-        const qty = parseFloat(result.inputValue);
-        if (qty > 0 && qty <= h.remainingQuantity) {
-          try {
-            await this.harvestService.recordWastage(h.id, qty);
-            this.toast.success('Wastage recorded');
-          } catch (err) {
-            console.error('Failed to record wastage', err);
-            this.toast.error(err instanceof Error ? err.message : 'Failed to record wastage');
-          }
-          await this.loadData(h.id);
-        } else {
-          this.toast.error('Invalid quantity');
-        }
+      if (result) {
+        this.toast.success('Wastage recorded');
+        await this.loadData(h.id);
       }
     });
   }

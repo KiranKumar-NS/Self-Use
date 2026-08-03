@@ -43,6 +43,8 @@ export interface Harvest {
   averageRate?: number;
 
   harvestCost?: number;
+  /** Back-reference to the auto-created expense transaction for harvestCost (kept in sync on edit/delete). */
+  harvestCostTransactionId?: string;
   linkedCropActivityId?: string;
 
   note?: string;

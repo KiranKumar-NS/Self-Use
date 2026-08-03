@@ -119,13 +119,13 @@ Animal pickers filter by gender within selected segment. Status badges with colo
 
 Track farming activities for crop segments (Dragon Fruit). Activity types: irrigation, fertilizer, pruning, spraying, weeding, flowering, harvest, planting, mulching, soil_testing, other. Fields: segment, activityType, date, description, productUsed, quantity, unit, area, duration (hours), laborCount, cost, weather, temperature, note.
 
-Timeline/table view filtered by segment. Activity type colored badges. Linked to transactions for cost tracking.
+Timeline/table view filtered by segment. Activity type colored badges. **Entering a `cost` (> 0) auto-creates a linked expense transaction** in the activity's crop segment (`tags: ['crop-activity']`) and stores its id in `linkedTransactionId`. The form captures who paid (family member or "Other" + name), payment method, paid/pending status (with an optional **Expected Payment Date** when pending), and a **cost category** picker (defaults smartly by activity type — fertilizer→Fertilizer, spraying→Medicine, planting→Seeds, labor→Labor, else Other). **"Already purchased — don't create an expense" toggle:** when a material is applied from already-purchased bulk stock (e.g. fertilizer bought earlier, used during irrigation), checking this records the activity WITHOUT creating an expense (avoids double-counting); it persists as `expenseSkipped` and, on edit, reverses any previously linked expense. Editing the cost updates the linked expense, clearing it reverses the expense, and deleting the activity soft-deletes the linked transaction — all via `CropActivityService`, which keeps monthly/yearly summaries in sync automatically.
 
 ### Harvests `/harvests`
 
 Harvest → Storage → Sale pipeline with wastage tracking. Status pipeline: harvested → in_storage → partially_sold → fully_sold.
 
-**Harvest Record:** segment, cropName, variety, harvestDate, totalQuantity, unit, grade, storageLocation, harvestCost, linkedCropActivityId.
+**Harvest Record:** segment, cropName, variety, harvestDate, totalQuantity, unit, grade, storageLocation, harvestCost, linkedCropActivityId. Entering a harvestCost auto-creates a linked expense transaction (tag `harvest-cost`, `linkedHarvestId`) with who-paid/payment-method/status, a **cost category** picker (default Other), and an optional **Expected Payment Date** when status is pending; edits keep it in sync and clearing/deleting reverses it (mirrors crop-activity cost).
 
 **Sale Recording:** Records sale from harvest with quantity, ratePerUnit, buyer selection. Auto-creates income transaction via TransactionService. Auto-updates buyer stats via BuyerService. Embedded sales[] array with per-sale tracking.
 
@@ -299,10 +299,10 @@ id, type (`recurring_transaction|reminder`), title, description, frequency (`dai
 id, segment, segmentName, sireId?, sireName?, damId, damName, matingDate, matingMethod? (`natural|artificial`), status (`mated|confirmed_pregnant|delivered|failed`), expectedDeliveryDate?, gestationDays?, actualDeliveryDate?, offspringCount?, offspringMale?, offspringFemale?, offspringAnimalIds?[], complications?, veterinaryCost?, linkedTransactionId?, note?, createdBy, createdByName, createdAt, isDeleted, month, year
 
 ### `cropActivities/{id}`
-id, segment, segmentName, activityType (`irrigation|fertilizer|pruning|spraying|weeding|flowering|harvest|planting|mulching|soil_testing|other`), date, description, productUsed?, quantity?, unit?, area?, duration?, laborCount?, cost?, linkedTransactionId?, weather?, temperature?, note?, createdBy, createdByName, createdAt, isDeleted, month, year
+id, segment, segmentName, activityType (`irrigation|fertilizer|pruning|spraying|weeding|flowering|harvest|planting|mulching|soil_testing|other`), date, description, productUsed?, quantity?, unit?, area?, duration?, laborCount?, cost?, linkedTransactionId?, expenseSkipped? (true = cost recorded without an expense, e.g. applied from bulk stock), weather?, temperature?, note?, createdBy, createdByName, createdAt, isDeleted, month, year
 
 ### `harvests/{id}`
-id, segment, segmentName, status (`harvested|in_storage|partially_sold|fully_sold`), harvestDate, cropName, variety?, totalQuantity, unit, grade?, storageLocation?, storageDate?, sales [{id, date, quantity, unit, ratePerUnit, totalAmount, buyerId?, buyerName?, linkedTransactionId?, note?}], totalSold, totalRevenue, wastageQuantity, wastageReason?, wastageDate?, remainingQuantity, averageRate?, harvestCost?, linkedCropActivityId?, note?, createdBy, createdByName, createdAt, isDeleted, month, year
+id, segment, segmentName, status (`harvested|in_storage|partially_sold|fully_sold`), harvestDate, cropName, variety?, totalQuantity, unit, grade?, storageLocation?, storageDate?, sales [{id, date, quantity, unit, ratePerUnit, totalAmount, buyerId?, buyerName?, linkedTransactionId?, note?}], totalSold, totalRevenue, wastageQuantity, wastageReason?, wastageDate?, remainingQuantity, averageRate?, harvestCost?, harvestCostTransactionId? (linked auto-expense), linkedCropActivityId?, note?, createdBy, createdByName, createdAt, isDeleted, month, year
 
 ### `tasks/{id}`
 id, title, description, priority (`low|medium|high|urgent`), status (`backlog|todo|in_progress|done`), visibility (`shared|personal`), assignee (uid|null), assigneeName, dueDate (Timestamp|null), subtasks [{id, title, done, dueDate (YYYY-MM-DD|null)}], tags[], kanbanOrder, createdBy, createdByName, createdAt, updatedAt, completedAt, isDeleted?

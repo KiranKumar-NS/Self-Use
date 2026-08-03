@@ -20,6 +20,8 @@ export interface CropActivity {
 
   cost?: number;
   linkedTransactionId?: string;
+  /** True when the cost was recorded WITHOUT creating an expense (e.g. material applied from already-purchased bulk stock). */
+  expenseSkipped?: boolean;
 
   weather?: string;
   temperature?: number;
