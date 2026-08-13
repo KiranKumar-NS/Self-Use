@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal, Input, OnChanges, SimpleChanges, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { Transaction } from '../../../core/models/transaction.model';
+import { Transaction, pendingRemaining, settledPortion } from '../../../core/models/transaction.model';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { LoanService } from '../../../core/services/loan.service';
 import { Loan } from '../../../core/models/loan.model';
@@ -88,10 +88,17 @@ import { MatIconModule } from '@angular/material/icon';
           <span class="stat-value" [class.income-text]="(hasFilters() ? netProfit() : summaryNetProfit()) >= 0" [class.expense-text]="(hasFilters() ? netProfit() : summaryNetProfit()) < 0">{{ (hasFilters() ? netProfit() : summaryNetProfit()) | currencyInr }}</span>
         </mat-card>
         @if ((hasFilters() ? pendingIncomeAmount() : summaryPendingIncome()) > 0) {
-          <mat-card class="stat-card pending-card" (click)="goToDues()">
-            <span class="stat-label">Pending Income</span>
+          <mat-card class="stat-card pending-card" (click)="goToDues('receivables')">
+            <span class="stat-label">Pending (To Receive)</span>
             <span class="stat-value pending-text">{{ (hasFilters() ? pendingIncomeAmount() : summaryPendingIncome()) | currencyInr }}</span>
             <span class="stat-count">to receive — view dues</span>
+          </mat-card>
+        }
+        @if ((hasFilters() ? pendingExpenseAmount() : summaryPendingExpense()) > 0) {
+          <mat-card class="stat-card credit-card" (click)="goToDues('payables')">
+            <span class="stat-label">Credit (To Pay)</span>
+            <span class="stat-value expense-text">{{ (hasFilters() ? pendingExpenseAmount() : summaryPendingExpense()) | currencyInr }}</span>
+            <span class="stat-count">to pay — view dues</span>
           </mat-card>
         }
         @if (totalUndistributed() > 0) {
@@ -272,6 +279,7 @@ import { MatIconModule } from '@angular/material/icon';
     .undistributed-card { border-color: var(--color-warning); background: var(--color-warning-light); }
     .pending-text { color: var(--color-expense); }
     .pending-card { border-color: var(--color-expense); background: var(--color-expense-bg); cursor: pointer; }
+    .credit-card { border-color: var(--color-expense); background: var(--color-expense-bg); cursor: pointer; }
     .stat-label { font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
     .stat-value {
       font-size: var(--font-2xl); font-weight: 700; color: var(--color-text); margin: 4px 0;
@@ -364,11 +372,13 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   tagProductivity = signal<{ income: number; expense: number; net: number; incomeCount: number; expenseCount: number } | null>(null);
 
   // Summary-based totals (accurate, from pre-aggregated Firestore summaries)
-  // Income/profit count received money only; pending sales are shown separately
+  // Income/profit/expense count settled money only; pending sales and credit
+  // purchases are shown separately as Pending (To Receive) / Credit (To Pay)
   summaryTotalExpense = signal(0);
   summaryTotalIncome = signal(0);
   summaryNetProfit = signal(0);
   summaryPendingIncome = signal(0);
+  summaryPendingExpense = signal(0);
 
   // Computed stats (from loaded transactions — used for charts/breakdowns)
   totalExpense = signal(0);
@@ -393,6 +403,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   netProfit = signal(0);
   totalUndistributed = signal(0);
   pendingIncomeAmount = signal(0);
+  pendingExpenseAmount = signal(0);
   filteredIncome = signal<Transaction[]>([]);
 
   // Cached data (loaded once, reused across filter changes)
@@ -462,12 +473,14 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       ]);
 
       // Set accurate totals from summaries.
-      // Summaries count income at billing time, so strip pending (unreceived)
-      // sales out of income/profit and surface them as Pending Income instead.
-      this.summaryTotalExpense.set(summaryTotals.totalExpense);
+      // Summaries count money at billing time, so strip pending (unreceived)
+      // sales and credit (unpaid) purchases out of the tiles and surface them
+      // separately as Pending (To Receive) / Credit (To Pay).
+      this.summaryTotalExpense.set(summaryTotals.totalExpense - summaryTotals.pendingExpense);
       this.summaryTotalIncome.set(summaryTotals.totalIncome - summaryTotals.pendingIncome);
-      this.summaryNetProfit.set(summaryTotals.netProfit - summaryTotals.pendingIncome);
+      this.summaryNetProfit.set(summaryTotals.netProfit - summaryTotals.pendingIncome + summaryTotals.pendingExpense);
       this.summaryPendingIncome.set(summaryTotals.pendingIncome);
+      this.summaryPendingExpense.set(summaryTotals.pendingExpense);
 
       let txns = result.transactions;
 
@@ -495,7 +508,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   }
 
   /** Load accurate totals from pre-aggregated monthly/yearly summaries */
-  private async loadSummaryTotals(): Promise<{ totalExpense: number; totalIncome: number; netProfit: number; pendingIncome: number }> {
+  private async loadSummaryTotals(): Promise<{ totalExpense: number; totalIncome: number; netProfit: number; pendingIncome: number; pendingExpense: number }> {
     try {
       if (this.currentSelection.mode === 'monthly' && this.currentSelection.month) {
         const summaries = await this.summaryService.getForMonth(this.currentSelection.month);
@@ -510,7 +523,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
         return this.summaryService.aggregateSummaries(summaries);
       }
     } catch {
-      return { totalExpense: 0, totalIncome: 0, netProfit: 0, pendingIncome: 0 };
+      return { totalExpense: 0, totalIncome: 0, netProfit: 0, pendingIncome: 0, pendingExpense: 0 };
     }
   }
 
@@ -547,7 +560,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     for (const txn of expenseTxns) {
       const name = resolveKey(txn.paidBy, txn.paidByName || txn.createdByName);
       ensurePerson(name);
-      personMap[name].expensesPaid += txn.amount;
+      personMap[name].expensesPaid += settledPortion(txn);
     }
 
     try {
@@ -571,7 +584,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segment === this.filterSegment);
       this.filteredIncome.set(incomeForRange);
       this.pendingIncomeAmount.set(
-        incomeForRange.filter(t => t.paymentStatus === 'pending').reduce((s, t) => s + t.amount, 0)
+        incomeForRange.reduce((s, t) => s + pendingRemaining(t), 0)
       );
 
       let distributedTotal = 0;
@@ -668,8 +681,8 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     this.totalUndistributed.set(Object.values(personMap).reduce((s, p) => s + p.holding, 0));
   }
 
-  goToDues(): void {
-    this.router.navigate(['/dues']);
+  goToDues(tab: 'receivables' | 'payables' = 'receivables'): void {
+    this.router.navigate(['/dues'], { queryParams: { tab } });
   }
 
   setFilter(type: 'all' | 'person' | 'segment', value: string): void {
@@ -722,13 +735,16 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     }
 
     this.filtered.set(txns);
-    this.totalExpense.set(txns.reduce((s, t) => s + t.amount, 0));
+    // Tiles/charts count settled cash only; the credit (unpaid) portion is
+    // surfaced separately in the Credit (To Pay) tile
+    this.totalExpense.set(txns.reduce((s, t) => s + settledPortion(t), 0));
+    this.pendingExpenseAmount.set(txns.reduce((s, t) => s + pendingRemaining(t), 0));
 
     // Segment totals
     const segMap = new Map<string, { total: number; count: number }>();
     txns.forEach((t) => {
       const e = segMap.get(t.segmentName) || { total: 0, count: 0 };
-      e.total += t.amount;
+      e.total += settledPortion(t);
       e.count++;
       segMap.set(t.segmentName, e);
     });
@@ -742,7 +758,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       const name = normalizeName(t.paidByName || 'Unknown');
       if (!personMap.has(name)) personMap.set(name, new Map());
       const segInner = personMap.get(name)!;
-      segInner.set(t.segmentName, (segInner.get(t.segmentName) || 0) + t.amount);
+      segInner.set(t.segmentName, (segInner.get(t.segmentName) || 0) + settledPortion(t));
     });
     this.personTotals.set(
       Array.from(personMap.entries()).map(([name, segs]) => ({
@@ -767,7 +783,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     if (this.filterTag) incomeForRange = incomeForRange.filter(t => t.tags?.includes(this.filterTag));
     this.filteredIncome.set(incomeForRange);
     this.pendingIncomeAmount.set(
-      incomeForRange.filter(t => t.paymentStatus === 'pending').reduce((s, t) => s + t.amount, 0)
+      incomeForRange.reduce((s, t) => s + pendingRemaining(t), 0)
     );
 
     // Compute tag productivity when a tag is selected
@@ -803,7 +819,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     for (const t of txns) {
       const name = resolveKey2(t.paidBy, t.paidByName || t.createdByName);
       ensurePerson2(name);
-      investMap[name].expensesPaid += t.amount;
+      investMap[name].expensesPaid += settledPortion(t);
     }
     for (const t of incomeForRange) {
       const totalAllocated = (t.distributions || []).reduce((s, d) => s + d.amount, 0);
@@ -987,7 +1003,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
 
     // Category doughnut
     const catMap = new Map<string, number>();
-    txns.forEach((t) => catMap.set(t.categoryName, (catMap.get(t.categoryName) || 0) + t.amount));
+    txns.forEach((t) => catMap.set(t.categoryName, (catMap.get(t.categoryName) || 0) + settledPortion(t)));
     const catEntries = Array.from(catMap.entries()).sort((a, b) => b[1] - a[1]);
     this.categoryChartData.set({
       labels: catEntries.map(([k]) => k),
@@ -1006,7 +1022,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
 
     // Monthly bar
     const monthMap = new Map<string, number>();
-    txns.forEach((t) => monthMap.set(t.month, (monthMap.get(t.month) || 0) + t.amount));
+    txns.forEach((t) => monthMap.set(t.month, (monthMap.get(t.month) || 0) + settledPortion(t)));
     const monthEntries = Array.from(monthMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
     this.monthlyChartData.set({
       labels: monthEntries.map(([m]) => {

@@ -22,6 +22,7 @@ import {
   Loan, LoanFormData, Repayment, EMIEntry, InterestFrequency,
   LoanDeduction, CollateralItem, LoanDocument, LoanAdvance,
 } from '../models/loan.model';
+import { personSummaryKey } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 import { SummaryService } from './summary.service';
 import { LoanPaymentsService } from './loan-payments.service';
@@ -890,11 +891,7 @@ export class LoanService {
       // Update monthly summary (replicates TransactionService.create pattern)
       const summaryId = `${month}-${data.segment}`;
       const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
-      const personKey = data.paidBy === 'other' && data.paidByName
-        ? data.paidByName.trim().replace(/\s+/g, ' ')
-            .split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-            .replace(/[.$/\[\]#]/g, '_')
-        : (data.paidBy ?? user.uid);
+      const personKey = personSummaryKey(data.paidBy, data.paidByName, user.uid);
 
       transaction.set(summaryRef, {
         totalExpense: increment(data.amount),
@@ -1140,11 +1137,7 @@ export class LoanService {
           month, year,
         });
 
-        const personKey = paidBy === 'other'
-          ? paidByName.trim().replace(/\s+/g, ' ')
-              .split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-              .replace(/[.$/\[\]#]/g, '_')
-          : paidBy;
+        const personKey = personSummaryKey(paidBy, paidByName, user.uid);
 
         transaction.set(doc(this.firestore, 'monthlySummaries', `${month}-${expense.segment}`), {
           totalExpense: increment(spentAmount),

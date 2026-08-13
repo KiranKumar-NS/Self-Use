@@ -18,6 +18,7 @@ vi.mock('@angular/fire/firestore', () => {
       path: args.length > 2 ? `${args[1]}/${args[2]}` : 'inventoryEvents/new-event-id',
     })),
     getDocs: vi.fn().mockResolvedValue({ docs: [], empty: true }),
+    getDoc: vi.fn(async () => ({ exists: () => false, data: () => undefined })),
     query: vi.fn(),
     orderBy: vi.fn(),
     where: vi.fn(),
@@ -51,7 +52,7 @@ vi.mock('@angular/core', async () => {
 });
 
 import { InventoryService } from './inventory.service';
-import { writeBatch, increment } from '@angular/fire/firestore';
+import { writeBatch, increment, getDoc } from '@angular/fire/firestore';
 
 describe('InventoryService', () => {
   let service: InventoryService;
@@ -119,6 +120,49 @@ describe('InventoryService', () => {
       const batch = getBatch();
       const setCall = batch.set.mock.calls[0][1];
       expect(setCall.count).toBe(-3);
+    });
+  });
+
+  describe('getEventById', () => {
+    it('should return null when the event does not exist', async () => {
+      expect(await service.getEventById('missing')).toBeNull();
+    });
+
+    it('should return null when the event is soft-deleted', async () => {
+      (getDoc as any).mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ id: 'e1', segment: 'seg1', count: 5, isDeleted: true }),
+      });
+      expect(await service.getEventById('e1')).toBeNull();
+    });
+
+    it('should return the event otherwise', async () => {
+      (getDoc as any).mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ id: 'e1', segment: 'seg1', count: 5 }),
+      });
+      expect(await service.getEventById('e1')).toEqual({ id: 'e1', segment: 'seg1', count: 5 });
+    });
+  });
+
+  describe('reverseEventInBatch', () => {
+    it('soft: marks the event deleted and reverses the stock delta', () => {
+      const batch = { update: vi.fn(), delete: vi.fn() };
+      service.reverseEventInBatch(batch as any, { id: 'e1', segment: 'seg1', count: 4 }, false);
+
+      expect(batch.delete).not.toHaveBeenCalled();
+      expect(batch.update).toHaveBeenCalledTimes(2);
+      expect(batch.update.mock.calls[0][1]).toEqual({ isDeleted: true });
+      expect(increment).toHaveBeenCalledWith(-4);
+    });
+
+    it('hard: deletes the event doc and reverses a negative delta', () => {
+      const batch = { update: vi.fn(), delete: vi.fn() };
+      service.reverseEventInBatch(batch as any, { id: 'e1', segment: 'seg1', count: -3 }, true);
+
+      expect(batch.delete).toHaveBeenCalledTimes(1);
+      expect(batch.update).toHaveBeenCalledTimes(1); // segment stock only
+      expect(increment).toHaveBeenCalledWith(3);
     });
   });
 

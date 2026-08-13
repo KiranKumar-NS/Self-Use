@@ -80,7 +80,28 @@ vi.mock('@angular/core', async () => {
 });
 
 import { TransactionService } from './transaction.service';
+import { personSummaryKey } from '../models/transaction.model';
 import { writeBatch, increment } from '@angular/fire/firestore';
+
+describe('personSummaryKey', () => {
+  it('returns the uid for registered payers', () => {
+    expect(personSummaryKey('uid-1', 'Anyone', 'fallback')).toBe('uid-1');
+  });
+
+  it('falls back to the given uid when paidBy is empty', () => {
+    expect(personSummaryKey('', null, 'fallback')).toBe('fallback');
+    expect(personSummaryKey(null, null, 'fallback')).toBe('fallback');
+  });
+
+  it('normalizes custom "other" names to a title-cased sanitized key', () => {
+    expect(personSummaryKey('other', '  raju   sharma ', 'fallback')).toBe('Raju Sharma');
+    expect(personSummaryKey('other', 'name.with$bad/chars[1]#', 'fallback')).toBe('Name_with_bad_chars_1__');
+  });
+
+  it('keeps the literal "other" key when no name is available', () => {
+    expect(personSummaryKey('other', '', 'fallback')).toBe('other');
+  });
+});
 
 describe('TransactionService', () => {
   let service: TransactionService;
@@ -259,6 +280,24 @@ describe('TransactionService', () => {
       // dots and slashes should be replaced with _
       expect(monthlySummary['expenseByPerson.Name_with_dots']).toBeDefined();
     });
+
+    it('should keep pending (credit) expense out of the person map', async () => {
+      await service.create({ ...baseExpenseData, expensePaymentStatus: 'pending' as any });
+
+      const batch = getBatch();
+      const monthlySummary = batch.set.mock.calls[1][1];
+      expect(monthlySummary.pendingExpense).toEqual({ _increment: 1000 });
+      expect(monthlySummary['expenseByPerson.test-uid']).toBeUndefined();
+    });
+
+    it('should keep pending income out of the person map', async () => {
+      await service.create({ ...baseIncomeData, paymentStatus: 'pending' as any });
+
+      const batch = getBatch();
+      const monthlySummary = batch.set.mock.calls[1][1];
+      expect(monthlySummary.pendingIncome).toEqual({ _increment: 5000 });
+      expect(monthlySummary['incomeByPerson.test-uid']).toBeUndefined();
+    });
   });
 
   // ──────────── update ────────────
@@ -339,6 +378,73 @@ describe('TransactionService', () => {
       });
 
       expect(mockInjected.updateStats).not.toHaveBeenCalled();
+    });
+  });
+
+  // ──────────── settlement (mark paid/received, partial payments) ────────────
+
+  describe('settlement', () => {
+    const pendingExpenseDoc = {
+      ...baseExpenseData,
+      isDeleted: false, createdBy: 'test-uid', timeline: [],
+      date: { toDate: () => new Date() },
+      expensePaymentStatus: 'pending' as any,
+    };
+
+    it('markAsPaid moves the remaining amount into expenseByPerson', async () => {
+      queueGetDoc({ ...pendingExpenseDoc, amountPaid: 400 });
+
+      await service.markAsPaid('txn-1');
+
+      const txn = mockTxnCaptures.slice(-1)[0];
+      const monthlySummary = txn.set.mock.calls[0][1];
+      expect(monthlySummary.pendingExpense).toEqual({ _increment: -600 });
+      expect(monthlySummary['expenseByPerson.test-uid']).toEqual({ _increment: 600 });
+      const yearlySummary = txn.set.mock.calls[1][1];
+      expect(yearlySummary['expenseByPerson.test-uid']).toEqual({ _increment: 600 });
+    });
+
+    it('markAsReceived moves the remaining amount into incomeByPerson', async () => {
+      queueGetDoc({
+        ...baseIncomeData,
+        isDeleted: false, createdBy: 'test-uid', timeline: [],
+        date: { toDate: () => new Date() },
+        paymentStatus: 'pending' as any,
+      });
+
+      await service.markAsReceived('txn-1');
+
+      const txn = mockTxnCaptures.slice(-1)[0];
+      const monthlySummary = txn.set.mock.calls[0][1];
+      expect(monthlySummary.pendingIncome).toEqual({ _increment: -5000 });
+      expect(monthlySummary['incomeByPerson.test-uid']).toEqual({ _increment: 5000 });
+    });
+
+    it('recordPartialPayment moves the paid amount into the person map', async () => {
+      queueGetDoc(pendingExpenseDoc);
+
+      await service.recordPartialPayment('txn-1', 300);
+
+      const txn = mockTxnCaptures.slice(-1)[0];
+      const monthlySummary = txn.set.mock.calls[0][1];
+      expect(monthlySummary.pendingExpense).toEqual({ _increment: -300 });
+      expect(monthlySummary['expenseByPerson.test-uid']).toEqual({ _increment: 300 });
+    });
+
+    it('update of a partially-paid expense moves only the paid portion', async () => {
+      // ₹400 of ₹1,000 already paid; amount edited to ₹1,200 (still pending)
+      queueGetDoc({ ...pendingExpenseDoc, amountPaid: 400 });
+
+      await service.update('txn-1', {
+        ...baseExpenseData, amount: 1200, expensePaymentStatus: 'pending' as any,
+      });
+
+      const txn = mockTxnCaptures.slice(-1)[0];
+      const monthlySummary = txn.set.mock.calls[0][1];
+      // settled portion unchanged (₹400 kept) → person delta omitted entirely
+      expect(monthlySummary['expenseByPerson.test-uid']).toBeUndefined();
+      // pending grows from ₹600 to ₹800
+      expect(monthlySummary.pendingExpense).toEqual({ _increment: 200 });
     });
   });
 

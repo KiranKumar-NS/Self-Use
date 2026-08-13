@@ -5,6 +5,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 
 import { HarvestService } from '../../../core/services/harvest.service';
 import { Harvest } from '../../../core/models/harvest.model';
@@ -23,7 +24,7 @@ export interface HarvestSaleDialogData {
   selector: 'app-harvest-sale-dialog',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, CurrencyInrPipe],
+  imports: [FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule, CurrencyInrPipe],
   template: `
     <h2 mat-dialog-title>Record Sale</h2>
     <mat-dialog-content>
@@ -65,6 +66,15 @@ export interface HarvestSaleDialogData {
             <mat-option value="pending">Pending</mat-option>
           </mat-select>
         </mat-form-field>
+
+        @if (paymentStatus === 'pending') {
+          <mat-form-field appearance="outline">
+            <mat-label>Expected Payment Date (optional)</mat-label>
+            <input matInput [matDatepicker]="expectedPicker" [(ngModel)]="expectedPaymentDate" />
+            <mat-datepicker-toggle matSuffix [for]="expectedPicker" />
+            <mat-datepicker #expectedPicker />
+          </mat-form-field>
+        }
 
         <mat-form-field appearance="outline">
           <mat-label>Note</mat-label>
@@ -112,6 +122,7 @@ export class HarvestSaleDialogComponent implements OnInit {
   buyerName = '';
   newBuyerName = '';
   paymentStatus: IncomePaymentStatus = 'received';
+  expectedPaymentDate: Date | null = null;
   note = '';
 
   async ngOnInit(): Promise<void> {
@@ -162,6 +173,7 @@ export class HarvestSaleDialogComponent implements OnInit {
         buyerName: buyerName || undefined,
         note: this.note || undefined,
         paymentStatus: this.paymentStatus,
+        expectedPaymentDate: this.paymentStatus === 'pending' ? (this.expectedPaymentDate || undefined) : undefined,
       });
       this.dialogRef.close(true);
     } catch (err: any) {

@@ -10,17 +10,33 @@ import {
   where,
   limit,
   writeBatch,
+  updateDoc,
   serverTimestamp,
   Timestamp,
 } from '@angular/fire/firestore';
 import { Animal, AnimalFormData, AnimalCostEntry, VaccinationEntry, MedicalEntry, WeightLogEntry } from '../models/animal.model';
 import { AuthService } from './auth.service';
+import { InventoryService } from './inventory.service';
+import { SegmentService } from './segment.service';
 import { getMonthString, getYear } from '../utils/date.utils';
+
+/** Outcome of deleting an animal — whether its origin stock event was reversed. */
+export interface AnimalDeleteResult {
+  stockReversed: boolean;
+  skippedReason?: 'legacy' | 'has-exits' | 'event-missing';
+}
 
 @Injectable({ providedIn: 'root' })
 export class AnimalService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
+  private inventoryService = inject(InventoryService);
+  private segmentService = inject(SegmentService);
+
+  /** Back-reference from the animal to its auto-created purchase expense transaction. */
+  async setPurchaseTransaction(animalId: string, transactionId: string): Promise<void> {
+    await updateDoc(doc(this.firestore, 'animals', animalId), { purchaseTransactionId: transactionId });
+  }
 
   async create(data: AnimalFormData): Promise<string> {
     const batch = writeBatch(this.firestore);
@@ -315,7 +331,7 @@ export class AnimalService {
     await batch.commit();
   }
 
-  async recordDeath(animalId: string, date: Date, note?: string, countDead?: number, deathCause?: string): Promise<void> {
+  async recordDeath(animalId: string, date: Date, note?: string, countDead?: number, deathCause?: string, deathInventoryEventId?: string): Promise<void> {
     const batch = writeBatch(this.firestore);
     const animalRef = doc(this.firestore, 'animals', animalId);
     const animalSnap = await getDoc(animalRef);
@@ -339,6 +355,7 @@ export class AnimalService {
     if (note) updates['note'] = (animal.note ? animal.note + '; ' : '') + note;
     if (deathCause) updates['deathCause'] = deathCause;
     if (note) updates['deathNote'] = note;
+    if (deathInventoryEventId) updates['deathInventoryEventId'] = deathInventoryEventId;
 
     // Compute age at death in days (legacy docs may lack originDate)
     const originMs = animal.originDate?.toDate?.()?.getTime();
@@ -351,16 +368,52 @@ export class AnimalService {
     await batch.commit();
   }
 
-  async softDelete(id: string): Promise<void> {
-    const batch = writeBatch(this.firestore);
-    batch.update(doc(this.firestore, 'animals', id), { isDeleted: true });
-    await batch.commit();
+  async softDelete(id: string): Promise<AnimalDeleteResult> {
+    return this.deleteWithStockReversal(id, false);
   }
 
-  async hardDelete(id: string): Promise<void> {
+  async hardDelete(id: string): Promise<AnimalDeleteResult> {
+    return this.deleteWithStockReversal(id, true);
+  }
+
+  /**
+   * Deletes the animal and, when safe, reverses its origin inventory event so
+   * segment stock stays correct. Reversal is skipped when the animal has no
+   * origin event (legacy), has recorded exits (its origin already nets against
+   * sale/death events), or the origin event no longer exists.
+   */
+  private async deleteWithStockReversal(id: string, hard: boolean): Promise<AnimalDeleteResult> {
+    const animalRef = doc(this.firestore, 'animals', id);
+    const snap = await getDoc(animalRef);
+
+    const result: AnimalDeleteResult = { stockReversed: false };
     const batch = writeBatch(this.firestore);
-    batch.delete(doc(this.firestore, 'animals', id));
+
+    if (snap.exists()) {
+      const animal = snap.data() as Animal;
+      if (!animal.originInventoryEventId) {
+        result.skippedReason = 'legacy';
+      } else if (animal.status !== 'active' || animal.currentCount !== animal.batchSize) {
+        result.skippedReason = 'has-exits';
+      } else {
+        const event = await this.inventoryService.getEventById(animal.originInventoryEventId);
+        if (!event) {
+          result.skippedReason = 'event-missing';
+        } else {
+          this.inventoryService.reverseEventInBatch(batch, event, hard);
+          result.stockReversed = true;
+        }
+      }
+    }
+
+    if (hard) {
+      batch.delete(animalRef);
+    } else {
+      batch.update(animalRef, { isDeleted: true });
+    }
     await batch.commit();
+    if (result.stockReversed) this.segmentService.clearCache();
+    return result;
   }
 
   getDisplayName(animal: Animal): string {

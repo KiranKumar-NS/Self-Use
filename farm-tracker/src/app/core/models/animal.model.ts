@@ -73,6 +73,7 @@ export interface Animal {
   originInventoryEventId?: string;
   purchasePrice?: number;
   purchasePricePerHead?: number;
+  purchaseTransactionId?: string;  // auto-created purchase expense (inventory event dialog)
 
   // Current status
   status: AnimalStatus;
@@ -82,6 +83,7 @@ export interface Animal {
   exitType?: 'sale' | 'death';
   saleTransactionId?: string;
   saleInventoryEventId?: string;
+  deathInventoryEventId?: string;
   salePrice?: number;
   salePricePerHead?: number;
   buyerId?: string;

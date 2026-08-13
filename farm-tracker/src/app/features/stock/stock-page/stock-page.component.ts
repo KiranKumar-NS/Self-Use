@@ -14,7 +14,7 @@ import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
-import { InventoryEventDialogComponent } from '../../inventory/inventory-event-dialog/inventory-event-dialog.component';
+import { InventoryEventDialogComponent } from '../inventory-event-dialog/inventory-event-dialog.component';
 import { sortData, toggleSortState, getSortIndicator, paginate, totalPages, pageStart, pageEnd, SortDirection } from '../../../core/utils/table.utils';
 import { safeLoad } from '../../../core/utils/async.utils';
 import { MatCardModule } from '@angular/material/card';
@@ -488,7 +488,12 @@ export class StockPageComponent implements OnInit {
   edit(id: string): void { this.router.navigate(['/stock', id, 'edit']); }
   openAnalytics(): void { this.router.navigate(['/stock/analytics']); }
   openMortality(): void { this.router.navigate(['/stock/mortality']); }
-  registerAnimal(): void { this.router.navigate(['/stock/new']); }
+  registerAnimal(): void {
+    const ref = this.dialog.open(InventoryEventDialogComponent, { width: '90vw', maxWidth: '500px', data: { mode: 'register' } });
+    ref.afterClosed().subscribe(async (result) => {
+      if (result) await this.refreshAll();
+    });
+  }
 
   async confirmDeleteAnimal(animal: Animal): Promise<void> {
     const ref = this.dialog.open(ConfirmDialogComponent, {
@@ -497,10 +502,17 @@ export class StockPageComponent implements OnInit {
     ref.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
         try {
-          if (result.deleteType === 'hard') await this.animalService.hardDelete(animal.id);
-          else await this.animalService.softDelete(animal.id);
-          this.toast.success('Animal deleted');
-          await this.loadAnimals();
+          const outcome = result.deleteType === 'hard'
+            ? await this.animalService.hardDelete(animal.id)
+            : await this.animalService.softDelete(animal.id);
+          if (outcome.stockReversed) {
+            this.toast.success('Animal deleted; stock count adjusted');
+          } else if (outcome.skippedReason === 'has-exits') {
+            this.toast.success('Animal deleted — it had recorded sales/deaths, adjust the Stock Log manually if needed');
+          } else {
+            this.toast.success('Animal deleted (no linked stock event — Stock Log unchanged)');
+          }
+          await this.refreshAll();
         } catch (err) {
           console.error('Failed to delete animal', err);
           this.toast.error(err instanceof Error ? err.message : 'Failed to delete animal');

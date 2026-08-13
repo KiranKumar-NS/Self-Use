@@ -22,7 +22,7 @@ Segments: Goats (🐐), Chickens (🐔), Dragon Fruit (🌵). Users assigned to 
 
 Summary cards (income/expense/profit), stock widget, budget vs actual (monthly mode), loan summary with EMI alerts, segment breakdown chart (hidden on mobile), monthly trend chart (hidden on mobile), person investment cards (expenses paid, income received, holdings, loan hold/owed), filter chips (person + segment + tag), tag productivity cards (income/expense/net per tag for crop tracking), undistributed income card, pending amounts tracking. Export: Excel/PDF/WhatsApp.
 
-**Analytics Tab:** Advanced analytics with person/segment/tag filters. Person investment summary with net investment, expense vs income breakdown, income undistributed amounts, loan holds in custody with per-loan detail. Tag productivity analysis when tag filter is active. Charts: expense by person (bar), expense by category (doughnut), expense by segment (doughnut), monthly expense trend (bar).
+**Analytics Tab:** Advanced analytics with person/segment/tag filters. Stat tiles are **cash-basis**: Total Expense/Income/Net Profit count settled money only; unsettled amounts surface as separate clickable tiles — "Pending (To Receive)" (pending income → `/dues?tab=receivables`) and "Credit (To Pay)" (pending credit expenses → `/dues?tab=payables`) — both net of partial payments via `pendingRemaining()`. Person investment summary with net investment, expense vs income breakdown (settled cash only via `settledPortion()`), income undistributed amounts, loan holds in custody with per-loan detail. Tag productivity analysis when tag filter is active. Charts: expense by person (bar), expense by category (doughnut), expense by segment (doughnut), monthly expense trend (bar) — all settled-cash amounts.
 
 **Date Range:** Monthly selection or custom period. Default: All Time view. Shared date range filter across all pages with year/month selection.
 
@@ -85,9 +85,11 @@ Expense & income CRUD with pagination, sorting, filtering. Fields: amount, date,
 
 ### Stock `/stock`
 
-Unified page (merged Animals + Inventory) with stock summary cards at top and two tabs: **Animals** (records list with filters, search, stats, pagination) and **Stock Log** (inventory event history). Actions: "Record Event" dialog, "Register Animal" form page, "Analytics" link, "Mortality" link.
+Unified page (merged Animals + Inventory) with stock summary cards at top and two tabs: **Animals** (records list with filters, search, stats, pagination) and **Stock Log** (inventory event history). Actions: "Record Event" dialog, "Register Animal" (opens the same dialog preset to Purchase/Birth with animal creation forced on), "Analytics" link, "Mortality" link.
 
-**Auto Animal Record Creation:** When recording a purchase/birth event via the "Record Event" dialog, an "Also create animal record" toggle (default: on) auto-creates a batch animal record (count > 1) or individual record (count = 1) with breed, purchase price, and batch label.
+**Single entry flow:** ALL stock-count mutations go through the Inventory Event dialog (`InventoryEventDialogComponent`, modes: `event | register | sale | death`). Registering an animal, selling from the animal detail page, and recording a death from the detail page all open this dialog with the appropriate preset — there is no separate registration form or sale dialog anymore, so double-counting via parallel entry paths is impossible. `/stock/:id/edit` (AnimalFormComponent) remains for editing identity fields only and never touches stock.
+
+**Auto Animal Record Creation:** When recording a purchase/birth event, an "Also create animal record" toggle (default: on, forced on in register mode) creates a batch or individual record per the Tracking Mode radio (segment defaults: goats→individual, chickens→batch; count > 1 forces batch) with breed, gender (individual), purchase price, and batch label. A purchase can also auto-create the linked expense transaction (who-paid, category, paid/pending). Deleting an active animal with no recorded exits also reverses its origin inventory event so the stock count stays correct (skipped for legacy animals or ones with recorded sales/deaths).
 
 **Individual Animals:** tag/ID, name, breed, gender (male/female/unknown). Origin: birth (with breed info) or purchase (with price). Status: active → sold/dead with exit tracking.
 
@@ -95,7 +97,7 @@ Unified page (merged Animals + Inventory) with stock summary cards at top and tw
 
 **Cost Tracking:** costEntries array linked to transactions. Each entry: transactionId, date, category, categoryName, amount, description. totalInvested = purchasePrice + sum(costEntries). profit = salePrice - totalInvested. profitMargin percentage.
 
-**Sale:** Sale dialog creates transaction + inventory event + updates buyer stats. Fields: salePrice, salePricePerHead, buyerId/Name, saleDate.
+**Sale:** The unified dialog in sale mode creates income transaction (opt-out checkbox; buyer stats flow through TransactionService via linkedBuyerId) + inventory event + updates the animal (saleTransactionId, saleInventoryEventId). Fields: salePrice, salePricePerHead, buyerId/Name (with inline "+ Add New Buyer"), received by, payment method, received/pending, saleDate.
 
 **Vaccination History:** Embedded array on Animal. Fields: vaccineName, date, dosage, administeredBy, nextDueDate, batchNumber, cost. Add via dialog from animal detail page.
 
@@ -103,7 +105,7 @@ Unified page (merged Animals + Inventory) with stock summary cards at top and tw
 
 **Weight History:** Embedded array on Animal. Fields: date, weight (kg), remarks. Weight chart (Chart.js line graph) on animal detail page. Add via dialog.
 
-**Death Recording:** Record death with cause (disease/accident/old_age/unknown). Auto-computes ageAtDeathDays from originDate. Fields: deathCause, deathNote, ageAtDeathDays.
+**Death Recording:** The unified dialog in death mode records the inventory event (decrements stock), estimated value for mortality-loss tracking, and cause. Auto-computes ageAtDeathDays from originDate. Fields: deathCause, deathNote, ageAtDeathDays, deathInventoryEventId.
 
 **Mortality Analysis** `/stock/mortality`: Dashboard with mortality rate %, cause breakdown (doughnut chart), estimated financial loss, average age at death, monthly trend (bar chart), per-segment statistics.
 
@@ -182,7 +184,7 @@ Name, phone, location, note. Denormalized stats auto-updated on sales: totalPurc
 
 ### Dues `/dues`
 
-Per-counterparty pending payments (receivables from buyers/customers, payables to suppliers). **Computed live — no `dues` collection, no counters** (deliberate, to avoid counter drift across write paths). `DuesService.getReceivables()` queries pending income (`type=income, paymentStatus=pending`); `getPayables()` queries pending credit expenses (`type=expense, expensePaymentStatus=pending`, excludes loan-linked). Groups by counterparty (`linkedBuyerId`/`linkedSupplierId`, else name, else `paidBy`), nets out partial payments via `pendingRemaining()` (exported from `transaction.model.ts` — the single source of truth for outstanding amounts), computes aging (`oldestDays`, `overdueCount`). Dashboard alerts via `due_receivable`/`due_payable` notification types.
+Per-counterparty pending payments (receivables from buyers/customers, payables to suppliers). **Computed live — no `dues` collection, no counters** (deliberate, to avoid counter drift across write paths). `DuesService.getReceivables()` queries pending income (`type=income, paymentStatus=pending`); `getPayables()` queries pending credit expenses (`type=expense, expensePaymentStatus=pending`, excludes loan-linked). Groups by counterparty (`linkedBuyerId`/`linkedSupplierId`, else name, else `paidBy`), nets out partial payments via `pendingRemaining()` (exported from `transaction.model.ts` — the single source of truth for outstanding amounts), computes aging (`oldestDays`, `overdueCount`). Dashboard alerts via `due_receivable`/`due_payable` notification types. Supports `?tab=payables` query param to open the "To Pay" tab directly (used by the dashboard Credit tile).
 
 ### Tasks `/tasks`
 
@@ -254,12 +256,12 @@ id, name, description, icon, isActive, segmentType (`animal|crop`), unit (`head|
 
 ### `categories/{id}`
 id, name, type (`expense|income`), isActive, segments[]? (segment IDs this category applies to; empty/missing = all segments — transaction form filters the category dropdown by the selected segment)
-Expense: feed, medicine, labor, transport, maintenance, loan-repayment, other-expense
+Expense: feed, medicine, fertilizer, seeds, labor, transport, animal-purchase, maintenance, loan-repayment, other-expense
 Income: milk, eggs, animal-sales, crop-sales, fruit-sales, other-income
 Defaults seed with no segment restriction; admins assign segments per category in Data Setup.
 
 ### `transactions/{id}`
-id, type (`expense|income`), date, amount, quantity?, unit? (`kg|head|dozen|litre|pieces|bag|bundle`), ratePerUnit?, category (ID), categoryName, segment (ID), segmentName, description, paymentMethod (`cash|upi`), paidBy (uid|"other"|null), paidByName, paymentStatus? (`received|pending`), expensePaymentStatus? (`paid|pending`), distributions? [{uid, name, amount}], linkedLoanId?, linkedAnimalIds[]?, linkedAnimalNames[]?, animalCostSplit? {animalId: amount}, linkedBuyerId?, linkedBuyerName?, linkedSupplierId?, linkedSupplierName?, tags[]?, timeline [{action, by, byName, at, changes?}], createdBy, createdByName, createdAt, isDeleted, month (`YYYY-MM`), year
+id, type (`expense|income`), date, amount, quantity?, unit? (`kg|head|dozen|litre|pieces|bag|bundle`), ratePerUnit?, category (ID), categoryName, segment (ID), segmentName, description, paymentMethod (`cash|upi`), paidBy (uid|"other"|null), paidByName, paymentStatus? (`received|pending`), expensePaymentStatus? (`paid|pending`), amountReceived?, amountPaid?, expectedPaymentDate?, distributions? [{uid, name, amount}], linkedLoanId?, linkedAnimalIds[]?, linkedAnimalNames[]?, animalCostSplit? {animalId: amount}, linkedBuyerId?, linkedBuyerName?, linkedSupplierId?, linkedSupplierName?, linkedHarvestId?, linkedHarvestName?, linkedSaleTransactionId?, linkedSaleLabel?, tags[]?, timeline [{action, by, byName, at, changes?}], createdBy, createdByName, createdAt, isDeleted, month (`YYYY-MM`), year
 
 ### `loans/{id}`
 **Base:** id, date, amount, type (`given|received`), personName, purpose, segment, segmentName, repaymentStatus (`pending|partial|completed`), totalRepaid, balanceRemaining, recordedBy, recordedByName, createdAt, isDeleted, timeline[], month, year
@@ -278,7 +280,7 @@ id, type (`expense|income`), date, amount, quantity?, unit? (`kg|head|dozen|litr
 id, date, amount (+repay/-disburse), note, paidBy?, paidByName?, recordedBy, recordedByName, createdAt, scheduledDueDate?, isEMIPayment?, emiNumber?, principalPortion?, interestPortion?, paymentReference?, transactionId?, isPreClosure?, preClosureCharges?, isPartPayment?, penaltyAmount?
 
 ### `animals/{id}`
-id, segment, segmentName, trackingMode (`individual|batch`), tag?, name?, breed?, gender? (`male|female|unknown`), batchLabel?, batchSize, currentCount, origin (`birth|purchase`), originDate, originInventoryEventId?, purchasePrice?, purchasePricePerHead?, status (`active|sold|dead`), exitDate?, exitType? (`sale|death`), saleTransactionId?, saleInventoryEventId?, salePrice?, salePricePerHead?, buyerId?, buyerName?, totalCosts, costEntries [{transactionId, date, category, categoryName, amount, description?}], totalInvested, profit?, profitMargin?, vaccinationHistory? [{id, date, vaccineName, dosage?, administeredBy?, nextDueDate?, batchNumber?, cost?, linkedTransactionId?, note?}], medicalHistory? [{id, date, type (`treatment|checkup|surgery|emergency`), disease?, symptoms?, medicine?, dosage?, doctor?, temperature?, weight?, cost?, linkedTransactionId?, note?}], weightLogs? [{id, date, weight, remarks?}], deathCause?, deathNote?, ageAtDeathDays?, createdBy, createdByName, createdAt, isDeleted, month, year, note?
+id, segment, segmentName, trackingMode (`individual|batch`), tag?, name?, breed?, gender? (`male|female|unknown`), batchLabel?, batchSize, currentCount, origin (`birth|purchase`), originDate, originInventoryEventId?, purchasePrice?, purchasePricePerHead?, purchaseTransactionId? (auto-created purchase expense from the Inventory Event dialog), status (`active|sold|dead`), exitDate?, exitType? (`sale|death`), saleTransactionId?, saleInventoryEventId?, deathInventoryEventId?, salePrice?, salePricePerHead?, buyerId?, buyerName?, totalCosts, costEntries [{transactionId, date, category, categoryName, amount, description?}], totalInvested, profit?, profitMargin?, vaccinationHistory? [{id, date, vaccineName, dosage?, administeredBy?, nextDueDate?, batchNumber?, cost?, linkedTransactionId?, note?}], medicalHistory? [{id, date, type (`treatment|checkup|surgery|emergency`), disease?, symptoms?, medicine?, dosage?, doctor?, temperature?, weight?, cost?, linkedTransactionId?, note?}], weightLogs? [{id, date, weight, remarks?}], deathCause?, deathNote?, ageAtDeathDays?, createdBy, createdByName, createdAt, isDeleted, month, year, note?
 
 ### `buyers/{id}`
 id, name, phone?, location?, note?, totalPurchases, totalAmountPaid, averageRate?, lastPurchaseDate?, purchasesBySegment? {segmentId: count}, amountBySegment? {segmentId: amount}, createdBy, createdByName, createdAt, isDeleted
@@ -309,6 +311,8 @@ id, title, description, priority (`low|medium|high|urgent`), status (`backlog|to
 
 ### `monthlySummaries/{YYYY-MM-segmentId}`
 month, year, segment, totalExpense, totalIncome, netProfit, expenseByCategory {name: amt}, incomeBySource {name: amt}, expenseByCategoryId? {id: amt}, incomeBySourceId? {id: amt}, expenseByPerson? {uid: amt}, incomeByPerson? {uid: amt}, pendingIncome?, pendingExpense?, totalDistributed?, distributionByPerson? {uid: amt}, updatedAt
+
+**Semantics:** `totalExpense`/`totalIncome`/`netProfit` and the category maps are accrual (full amount at billing time). `expenseByPerson`/`incomeByPerson` hold **settled cash only** (`settledPortion()` in `transaction.model.ts`): a pending (credit) transaction contributes nothing at creation; markAsPaid/markAsReceived/partial payments move the settled amount into the person map of the transaction's original month/segment summary. `pendingIncome`/`pendingExpense` track the outstanding remainder net of partials.
 
 ### `yearlySummaries/{year-segmentId}`
 Same fields as monthlySummaries, aggregated annually.
@@ -352,7 +356,7 @@ Same fields as monthlySummaries, aggregated annually.
 |------|--------|
 | `/dashboard` | All authenticated |
 | `/transactions`, `/loans`, `/stock`, `/buyers` | Admin, Manager |
-| `/stock/new`, `/stock/analytics`, `/stock/mortality`, `/stock/:id` | Admin, Manager |
+| `/stock/analytics`, `/stock/mortality`, `/stock/:id`, `/stock/:id/edit` | Admin, Manager |
 | `/schedules` | Admin, Manager |
 | `/breeding` | Admin, Manager |
 | `/crops` | Admin, Manager |
@@ -421,7 +425,7 @@ Guards: `authGuard` (login + active check), `roleGuard(roles)`, `unsavedChangesG
 
 **UI Components:** LoadingSpinnerComponent, LoadingSkeletonComponent, ConfirmDialogComponent (with optional text/number input), EmptyStateComponent, DateRangeFilterComponent, NotificationBellComponent.
 
-**Dialogs:** SaleDialogComponent (animal sale with buyer/price), CostAttributionDialogComponent (split costs across animals), DistributionDialogComponent (split income among partners), BuyerFormDialogComponent (inline buyer creation), InventoryEventDialogComponent (stock movement), WhatsappShareDialogComponent (formatted sharing), VaccinationDialogComponent (animal vaccination record), MedicalDialogComponent (animal medical record), WeightLogDialogComponent (animal weight log), RecurringSetupDialogComponent (recurring transaction schedule), ReminderFormDialogComponent (scheduled reminder), BreedingFormDialogComponent (breeding record), CropActivityFormDialogComponent (crop activity), HarvestFormDialogComponent (harvest record), HarvestSaleDialogComponent (harvest sale), SupplierFormDialogComponent (supplier CRUD), ConsumableFormDialogComponent (consumable item), StockMovementDialogComponent (consumable purchase/use/wastage).
+**Dialogs:** InventoryEventDialogComponent (unified stock entry: record event / register animal / sale / death modes), CostAttributionDialogComponent (split costs across animals), DistributionDialogComponent (split income among partners), BuyerFormDialogComponent (inline buyer creation), WhatsappShareDialogComponent (formatted sharing), VaccinationDialogComponent (animal vaccination record), MedicalDialogComponent (animal medical record), WeightLogDialogComponent (animal weight log), RecurringSetupDialogComponent (recurring transaction schedule), ReminderFormDialogComponent (scheduled reminder), BreedingFormDialogComponent (breeding record), CropActivityFormDialogComponent (crop activity), HarvestFormDialogComponent (harvest record), HarvestSaleDialogComponent (harvest sale), SupplierFormDialogComponent (supplier CRUD), ConsumableFormDialogComponent (consumable item), StockMovementDialogComponent (consumable purchase/use/wastage).
 
 **Chart Components:** WeightChartComponent (line chart for animal weight history).
 

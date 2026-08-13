@@ -7,6 +7,8 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatRadioModule } from '@angular/material/radio';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 
 import { InventoryItemService } from '../../../core/services/inventory-item.service';
 import { InventoryItem } from '../../../core/models/inventory-item.model';
@@ -16,11 +18,15 @@ import { TransactionService } from '../../../core/services/transaction.service';
 import { SegmentService } from '../../../core/services/segment.service';
 import { CategoryService } from '../../../core/services/category.service';
 import { TagService } from '../../../core/services/tag.service';
+import { UserService } from '../../../core/services/user.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Segment } from '../../../core/models/segment.model';
 import { Category } from '../../../core/models/category.model';
-import { SaleUnit } from '../../../core/models/transaction.model';
+import { AppUser } from '../../../core/models/user.model';
+import { SaleUnit, PaymentMethod } from '../../../core/models/transaction.model';
 import { ToastService } from '../../../core/services/toast.service';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
+import { normalizeName, nameKey } from '../../../core/utils/name.utils';
 
 export interface StockMovementDialogData {
   item: InventoryItem;
@@ -36,6 +42,7 @@ const SALE_UNITS: string[] = ['kg', 'head', 'dozen', 'litre', 'pieces', 'bag', '
   imports: [
     FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule,
     MatInputModule, MatSelectModule, MatCheckboxModule, MatRadioModule,
+    MatDatepickerModule, MatAutocompleteModule,
   ],
   template: `
     <h2 mat-dialog-title>{{ titleLabel }}</h2>
@@ -55,6 +62,13 @@ const SALE_UNITS: string[] = ['kg', 'head', 'dozen', 'litre', 'pieces', 'bag', '
           <mat-form-field appearance="outline">
             <mat-label>Unit Cost</mat-label>
             <input matInput type="number" [(ngModel)]="unitCost" min="0" step="any" />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Purchase Date</mat-label>
+            <input matInput [matDatepicker]="purchasePicker" [(ngModel)]="purchaseDate" [max]="today" />
+            <mat-datepicker-toggle matSuffix [for]="purchasePicker" />
+            <mat-datepicker #purchasePicker />
           </mat-form-field>
 
           <mat-form-field appearance="outline">
@@ -102,10 +116,48 @@ const SALE_UNITS: string[] = ['kg', 'head', 'dozen', 'litre', 'pieces', 'bag', '
                   </mat-select>
                 </mat-form-field>
 
+                <mat-radio-group [(ngModel)]="paymentMethod" class="pay-status">
+                  <mat-radio-button value="cash">Cash</mat-radio-button>
+                  <mat-radio-button value="upi">UPI</mat-radio-button>
+                </mat-radio-group>
+
                 <mat-radio-group [(ngModel)]="expensePaymentStatus" class="pay-status">
                   <mat-radio-button value="paid">Paid</mat-radio-button>
                   <mat-radio-button value="pending">Pending (Credit)</mat-radio-button>
                 </mat-radio-group>
+
+                @if (expensePaymentStatus === 'pending') {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Expected Payment Date (optional)</mat-label>
+                    <input matInput [matDatepicker]="expectedPicker" [(ngModel)]="expectedPaymentDate" />
+                    <mat-datepicker-toggle matSuffix [for]="expectedPicker" />
+                    <mat-datepicker #expectedPicker />
+                  </mat-form-field>
+                }
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Paid By</mat-label>
+                  <mat-select [(ngModel)]="paidBy" (selectionChange)="onPaidByChange()">
+                    @for (u of users(); track u.uid) {
+                      <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
+                    }
+                    <mat-option value="other">Other (type name)</mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                @if (paidBy === 'other') {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Enter Name</mat-label>
+                    <input matInput [(ngModel)]="customPaidByName" required placeholder="e.g. Raju"
+                           (ngModelChange)="filterNameSuggestions()" (focus)="filterNameSuggestions()"
+                           [matAutocomplete]="nameAuto" />
+                    <mat-autocomplete #nameAuto="matAutocomplete">
+                      @for (n of nameSuggestions(); track n) {
+                        <mat-option [value]="n">{{ n }}</mat-option>
+                      }
+                    </mat-autocomplete>
+                  </mat-form-field>
+                }
               </div>
             }
           </div>
@@ -133,7 +185,9 @@ const SALE_UNITS: string[] = ['kg', 'head', 'dozen', 'litre', 'pieces', 'bag', '
 
     <mat-dialog-actions align="end">
       <button mat-button (click)="dialogRef.close()">Cancel</button>
-      <button mat-flat-button color="primary" [disabled]="saving() || !quantity || quantity <= 0" (click)="save()">
+      <button mat-flat-button color="primary"
+              [disabled]="saving() || !quantity || quantity <= 0 || (data.type === 'purchase' && createExpense && totalCost > 0 && paidBy === 'other' && !customPaidByName.trim())"
+              (click)="save()">
         {{ saving() ? 'Saving...' : 'Record' }}
       </button>
     </mat-dialog-actions>
@@ -174,6 +228,8 @@ export class StockMovementDialogComponent implements OnInit {
   private segmentService = inject(SegmentService);
   private categoryService = inject(CategoryService);
   private tagService = inject(TagService);
+  private userService = inject(UserService);
+  private authService = inject(AuthService);
   private toast = inject(ToastService);
 
   saving = signal(false);
@@ -181,9 +237,12 @@ export class StockMovementDialogComponent implements OnInit {
   suppliers = signal<Supplier[]>([]);
   segments = signal<Segment[]>([]);
   expenseCategories = signal<Category[]>([]);
+  users = signal<AppUser[]>([]);
 
+  today = new Date();
   quantity: number | null = null;
   unitCost: number | null = null;
+  purchaseDate: Date = new Date();
   selectedSupplierId = '';
   note = '';
   reason = '';
@@ -192,6 +251,12 @@ export class StockMovementDialogComponent implements OnInit {
   expenseSegmentId = '';
   expenseCategoryId = '';
   expensePaymentStatus: 'paid' | 'pending' = 'paid';
+  paymentMethod: PaymentMethod = 'upi';
+  expectedPaymentDate: Date | null = null;
+  paidBy = '';                 // uid | 'other'
+  customPaidByName = '';
+  nameSuggestions = signal<string[]>([]);
+  private knownNames: string[] = [];
 
   filteredExpenseCategories(): Category[] {
     return this.expenseCategories().filter(c =>
@@ -237,7 +302,45 @@ export class StockMovementDialogComponent implements OnInit {
         console.error('Failed to load purchase form data', err);
         this.toast.error(err instanceof Error ? err.message : 'Failed to load form data');
       }
+
+      try {
+        this.users.set((await this.userService.getAll()).filter(u => u.isActive));
+      } catch (err) {
+        console.error('Failed to load users', err);
+      }
+      this.paidBy = this.authService.currentUser()?.uid || '';
+
+      try {
+        const recent = await this.transactionService.getAll({}, 200);
+        this.knownNames = [...new Set(
+          recent.transactions.filter(t => t.paidBy === 'other' && t.paidByName).map(t => t.paidByName!),
+        )];
+      } catch { /* suggestions are best-effort */ }
     }
+  }
+
+  onPaidByChange(): void {
+    if (this.paidBy !== 'other') {
+      this.customPaidByName = '';
+      this.nameSuggestions.set([]);
+    } else {
+      this.filterNameSuggestions();
+    }
+  }
+
+  filterNameSuggestions(): void {
+    const inputKey = nameKey(this.customPaidByName || '');
+    if (!inputKey) {
+      this.nameSuggestions.set([...this.knownNames].sort((a, b) => a.localeCompare(b)));
+      return;
+    }
+    const matches = this.knownNames.filter(n => nameKey(n).includes(inputKey));
+    matches.sort((a, b) => {
+      const aStarts = nameKey(a).startsWith(inputKey) ? 0 : 1;
+      const bStarts = nameKey(b).startsWith(inputKey) ? 0 : 1;
+      return aStarts - bStarts || a.localeCompare(b);
+    });
+    this.nameSuggestions.set(matches);
   }
 
   async save(): Promise<void> {
@@ -262,10 +365,12 @@ export class StockMovementDialogComponent implements OnInit {
           }
           const seg = this.segments().find(s => s.id === this.expenseSegmentId);
           const cat = this.expenseCategories().find(c => c.id === this.expenseCategoryId);
-          const now = new Date();
+          const txnDate = this.purchaseDate || new Date();
+          const isCustom = this.paidBy === 'other';
+          const paidByUser = isCustom ? null : this.users().find(u => u.uid === this.paidBy);
           linkedTransactionId = await this.transactionService.create({
             type: 'expense',
-            date: now,
+            date: txnDate,
             amount: this.totalCost,
             quantity: this.quantity,
             unit: SALE_UNITS.includes(this.data.item.unit) ? this.data.item.unit as SaleUnit : undefined,
@@ -277,13 +382,16 @@ export class StockMovementDialogComponent implements OnInit {
             description: `${this.data.item.name} purchase — ${this.quantity} ${this.data.item.unit}`
               + (supplier ? ` from ${supplier.name}` : '')
               + (this.note ? ` · ${this.note}` : ''),
-            paymentMethod: 'upi',
+            paymentMethod: this.paymentMethod,
             expensePaymentStatus: this.expensePaymentStatus,
+            expectedPaymentDate: this.expensePaymentStatus === 'pending' ? (this.expectedPaymentDate || undefined) : undefined,
+            paidBy: isCustom ? 'other' : (this.paidBy || undefined),
+            paidByName: isCustom ? normalizeName(this.customPaidByName) : paidByUser?.displayName,
             linkedSupplierId: supplier?.id,
             linkedSupplierName: supplier?.name,
             tags: ['consumable-purchase'],
-            month: getMonthString(now),
-            year: getYear(now),
+            month: getMonthString(txnDate),
+            year: getYear(txnDate),
           });
           this.tagService.addTags(['consumable-purchase']);
         }

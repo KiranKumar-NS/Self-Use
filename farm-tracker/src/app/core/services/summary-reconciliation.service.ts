@@ -15,7 +15,7 @@ import {
   orderBy,
   Timestamp,
 } from '@angular/fire/firestore';
-import { Transaction, pendingRemaining } from '../models/transaction.model';
+import { Transaction, pendingRemaining, settledPortion, personSummaryKey } from '../models/transaction.model';
 import { MonthlySummary, YearlySummary } from '../models/monthly-summary.model';
 import { Buyer } from '../models/buyer.model';
 import { Supplier } from '../models/supplier.model';
@@ -55,14 +55,9 @@ interface SummaryAccumulator {
 export class SummaryReconciliationService {
   private firestore = inject(Firestore);
 
-  /** Build a unique summary key per person (mirrors TransactionService.personSummaryKey). */
+  /** Build a unique summary key per person. Delegates to the shared model helper. */
   private personSummaryKey(paidBy: string | null | undefined, paidByName: string | null | undefined, fallbackUid: string): string {
-    if (paidBy === 'other' && paidByName) {
-      const normalized = paidByName.trim().replace(/\s+/g, ' ')
-        .split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-      return normalized.replace(/[.$/\[\]#]/g, '_');
-    }
-    return paidBy || fallbackUid;
+    return personSummaryKey(paidBy, paidByName, fallbackUid);
   }
 
   private createEmptyAccumulator(): SummaryAccumulator {
@@ -85,11 +80,15 @@ export class SummaryReconciliationService {
   private accumulateTransaction(acc: SummaryAccumulator, txn: Transaction): void {
     const personKey = this.personSummaryKey(txn.paidBy, txn.paidByName, txn.createdBy);
 
+    // Person maps hold settled cash only (skip zero so fully-pending txns
+    // don't seed ₹0 entries — matches the write-path omission)
+    const settled = settledPortion(txn);
+
     if (txn.type === 'expense') {
       acc.totalExpense += txn.amount;
       acc.expenseByCategory[txn.categoryName] = (acc.expenseByCategory[txn.categoryName] || 0) + txn.amount;
       acc.expenseByCategoryId[txn.category] = (acc.expenseByCategoryId[txn.category] || 0) + txn.amount;
-      acc.expenseByPerson[personKey] = (acc.expenseByPerson[personKey] || 0) + txn.amount;
+      if (settled !== 0) acc.expenseByPerson[personKey] = (acc.expenseByPerson[personKey] || 0) + settled;
 
       if ((txn.expensePaymentStatus || 'paid') === 'pending') {
         acc.pendingExpense += pendingRemaining(txn);
@@ -98,7 +97,7 @@ export class SummaryReconciliationService {
       acc.totalIncome += txn.amount;
       acc.incomeBySource[txn.categoryName] = (acc.incomeBySource[txn.categoryName] || 0) + txn.amount;
       acc.incomeBySourceId[txn.category] = (acc.incomeBySourceId[txn.category] || 0) + txn.amount;
-      acc.incomeByPerson[personKey] = (acc.incomeByPerson[personKey] || 0) + txn.amount;
+      if (settled !== 0) acc.incomeByPerson[personKey] = (acc.incomeByPerson[personKey] || 0) + settled;
 
       if ((txn.paymentStatus || 'received') === 'pending') {
         acc.pendingIncome += pendingRemaining(txn);

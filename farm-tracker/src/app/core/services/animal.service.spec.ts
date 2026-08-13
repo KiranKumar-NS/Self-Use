@@ -139,6 +139,18 @@ describe('AnimalService', () => {
       expect(setCall.breed).toBe('Jamunapari');
       expect(setCall.gender).toBe('male');
     });
+
+    it('should persist originInventoryEventId when provided', async () => {
+      await service.create({
+        segment: 'seg1', segmentName: 'Goats', trackingMode: 'individual',
+        batchSize: 1, origin: 'purchase', originDate: new Date('2026-01-15'),
+        originInventoryEventId: 'ev-123',
+      });
+
+      const batch = getBatch();
+      const setCall = batch.set.mock.calls[0][1];
+      expect(setCall.originInventoryEventId).toBe('ev-123');
+    });
   });
 
   // ──────────── attributeCost ────────────
@@ -361,6 +373,128 @@ describe('AnimalService', () => {
       const update = batch.update.mock.calls[0][1];
       expect(update.currentCount).toBe(7);
       expect(update.status).toBeUndefined();
+    });
+
+    it('should stamp deathCause and deathInventoryEventId when provided', async () => {
+      queueGetDoc({ currentCount: 1, status: 'active' });
+
+      await service.recordDeath('a1', new Date('2026-06-01'), 'sick', 1, 'disease', 'ev-9');
+
+      const batch = getBatch();
+      const update = batch.update.mock.calls[0][1];
+      expect(update.deathCause).toBe('disease');
+      expect(update.deathNote).toBe('sick');
+      expect(update.deathInventoryEventId).toBe('ev-9');
+    });
+
+    it('should omit deathInventoryEventId when absent', async () => {
+      queueGetDoc({ currentCount: 1, status: 'active' });
+
+      await service.recordDeath('a1', new Date('2026-06-01'));
+
+      const batch = getBatch();
+      const update = batch.update.mock.calls[0][1];
+      expect(update.deathInventoryEventId).toBeUndefined();
+    });
+  });
+
+  // ──────────── softDelete / hardDelete (origin event reversal) ────────────
+
+  describe('delete with stock reversal', () => {
+    function mockInventory(event: any) {
+      const inventory = {
+        getEventById: vi.fn().mockResolvedValue(event),
+        reverseEventInBatch: vi.fn(),
+      };
+      const segments = { clearCache: vi.fn() };
+      (service as any).inventoryService = inventory;
+      (service as any).segmentService = segments;
+      return { inventory, segments };
+    }
+
+    it('soft delete reverses the origin event for an active untouched animal', async () => {
+      queueGetDoc({ originInventoryEventId: 'ev1', status: 'active', currentCount: 5, batchSize: 5 });
+      const { inventory, segments } = mockInventory({ id: 'ev1', segment: 'goats', count: 5 });
+
+      const result = await service.softDelete('a1');
+
+      expect(result).toEqual({ stockReversed: true });
+      expect(inventory.getEventById).toHaveBeenCalledWith('ev1');
+      expect(inventory.reverseEventInBatch).toHaveBeenCalledWith(
+        expect.anything(), { id: 'ev1', segment: 'goats', count: 5 }, false,
+      );
+      const batch = getBatch();
+      expect(batch.update).toHaveBeenCalledWith(expect.anything(), { isDeleted: true });
+      expect(segments.clearCache).toHaveBeenCalled();
+    });
+
+    it('hard delete maps to hard event reversal and deletes the doc', async () => {
+      queueGetDoc({ originInventoryEventId: 'ev1', status: 'active', currentCount: 1, batchSize: 1 });
+      const { inventory } = mockInventory({ id: 'ev1', segment: 'goats', count: 1 });
+
+      const result = await service.hardDelete('a1');
+
+      expect(result.stockReversed).toBe(true);
+      expect(inventory.reverseEventInBatch).toHaveBeenCalledWith(expect.anything(), expect.anything(), true);
+      const batch = getBatch();
+      expect(batch.delete).toHaveBeenCalled();
+    });
+
+    it('skips reversal for legacy animals without an origin event id', async () => {
+      queueGetDoc({ status: 'active', currentCount: 1, batchSize: 1 });
+      const { inventory, segments } = mockInventory(null);
+
+      const result = await service.softDelete('a1');
+
+      expect(result).toEqual({ stockReversed: false, skippedReason: 'legacy' });
+      expect(inventory.getEventById).not.toHaveBeenCalled();
+      expect(inventory.reverseEventInBatch).not.toHaveBeenCalled();
+      expect(segments.clearCache).not.toHaveBeenCalled();
+      const batch = getBatch();
+      expect(batch.update).toHaveBeenCalledWith(expect.anything(), { isDeleted: true });
+    });
+
+    it('skips reversal for animals with recorded exits (partial batch)', async () => {
+      queueGetDoc({ originInventoryEventId: 'ev1', status: 'active', currentCount: 6, batchSize: 10 });
+      const { inventory } = mockInventory({ id: 'ev1', segment: 'goats', count: 10 });
+
+      const result = await service.softDelete('a1');
+
+      expect(result).toEqual({ stockReversed: false, skippedReason: 'has-exits' });
+      expect(inventory.getEventById).not.toHaveBeenCalled();
+    });
+
+    it('skips reversal for sold animals', async () => {
+      queueGetDoc({ originInventoryEventId: 'ev1', status: 'sold', currentCount: 0, batchSize: 1 });
+      const { inventory } = mockInventory({ id: 'ev1', segment: 'goats', count: 1 });
+
+      const result = await service.hardDelete('a1');
+
+      expect(result.skippedReason).toBe('has-exits');
+      expect(inventory.reverseEventInBatch).not.toHaveBeenCalled();
+    });
+
+    it('skips reversal when the origin event is missing or already deleted', async () => {
+      queueGetDoc({ originInventoryEventId: 'ev1', status: 'active', currentCount: 1, batchSize: 1 });
+      const { inventory } = mockInventory(null);
+
+      const result = await service.softDelete('a1');
+
+      expect(result).toEqual({ stockReversed: false, skippedReason: 'event-missing' });
+      expect(inventory.getEventById).toHaveBeenCalledWith('ev1');
+      expect(inventory.reverseEventInBatch).not.toHaveBeenCalled();
+    });
+
+    it('still deletes when the animal doc does not exist', async () => {
+      // no queued getDoc → exists() is false
+      const { inventory } = mockInventory(null);
+
+      const result = await service.softDelete('a1');
+
+      expect(result).toEqual({ stockReversed: false });
+      expect(inventory.getEventById).not.toHaveBeenCalled();
+      const batch = getBatch();
+      expect(batch.update).toHaveBeenCalledWith(expect.anything(), { isDeleted: true });
     });
   });
 

@@ -104,6 +104,36 @@ export function pendingRemaining(t: Transaction): number {
   return Math.max(0, t.amount - (t.amountPaid || 0));
 }
 
+/**
+ * Cash actually moved: amount minus outstanding pending balance.
+ * Full amount for settled (or legacy status-less) transactions; the paid/received
+ * portion for pending ones. Counterpart of pendingRemaining() — the two always
+ * sum to t.amount.
+ */
+export function settledPortion(t: Transaction): number {
+  return t.amount - pendingRemaining(t);
+}
+
+/**
+ * Summary bucket key for a payer in expenseByPerson/incomeByPerson.
+ * Custom "other" payers are keyed by their normalized display name
+ * (trimmed, whitespace-collapsed, title-cased, Firestore-field-path safe);
+ * registered users by uid. Single source of truth for every service that
+ * writes person-keyed summary increments, and for reconciliation.
+ */
+export function personSummaryKey(
+  paidBy: string | null | undefined,
+  paidByName: string | null | undefined,
+  fallbackUid: string,
+): string {
+  if (paidBy === 'other' && paidByName) {
+    const normalized = paidByName.trim().replace(/\s+/g, ' ')
+      .split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    return normalized.replace(/[.$/\[\]#]/g, '_');
+  }
+  return paidBy || fallbackUid;
+}
+
 export interface DistributionEntry {
   uid: string;        // user UID or 'reinvestment'
   name: string;       // display name or 'Reinvestment'

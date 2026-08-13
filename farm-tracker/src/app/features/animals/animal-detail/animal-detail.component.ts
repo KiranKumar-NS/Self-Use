@@ -7,8 +7,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { Animal } from '../../../core/models/animal.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
-import { ConfirmDialogComponent, ConfirmDialogData } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
-import { SaleDialogComponent } from '../sale-dialog/sale-dialog.component';
+import { InventoryEventDialogComponent, InventoryEventDialogData } from '../../stock/inventory-event-dialog/inventory-event-dialog.component';
 import { VaccinationDialogComponent } from '../vaccination-dialog/vaccination-dialog.component';
 import { MedicalDialogComponent } from '../medical-dialog/medical-dialog.component';
 import { WeightLogDialogComponent } from '../weight-log-dialog/weight-log-dialog.component';
@@ -393,10 +392,10 @@ export class AnimalDetailComponent implements OnInit {
   }
 
   openSaleDialog(): void {
-    const ref = this.dialog.open(SaleDialogComponent, {
+    const ref = this.dialog.open(InventoryEventDialogComponent, {
       width: '90vw',
       maxWidth: '500px',
-      data: { animal: this.animal() },
+      data: { mode: 'sale', animal: this.animal() } as InventoryEventDialogData,
     });
     ref.afterClosed().subscribe(async (result) => {
       if (result) {
@@ -406,28 +405,16 @@ export class AnimalDetailComponent implements OnInit {
     });
   }
 
-  async recordDeath(): Promise<void> {
-    const ref = this.dialog.open(ConfirmDialogComponent, {
-      data: {
-        title: 'Record Death',
-        message: `Mark "${this.animalService.getDisplayName(this.animal()!)}" as dead?`,
-        confirmText: 'Confirm',
-        showInput: true,
-        inputLabel: 'Cause of death',
-        inputPlaceholder: 'e.g. disease, accident, old age, unknown',
-      } as ConfirmDialogData,
+  recordDeath(): void {
+    const ref = this.dialog.open(InventoryEventDialogComponent, {
+      width: '90vw',
+      maxWidth: '500px',
+      data: { mode: 'death', animal: this.animal() } as InventoryEventDialogData,
     });
     ref.afterClosed().subscribe(async (result) => {
-      if (result?.confirmed) {
-        try {
-          const cause = result.inputValue || 'unknown';
-          await this.animalService.recordDeath(this.animalId, new Date(), cause, undefined, cause);
-          this.toast.success('Death recorded');
-          await this.loadAnimal();
-        } catch (err) {
-          console.error('Failed to record death', err);
-          this.toast.error(err instanceof Error ? err.message : 'Failed to record death');
-        }
+      if (result) {
+        this.toast.success('Death recorded');
+        await this.loadAnimal();
       }
     });
   }

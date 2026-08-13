@@ -18,6 +18,7 @@ import { Schedule, RepeatFrequency } from '../models/schedule.model';
 import { TransactionFormData } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 import { TransactionService } from './transaction.service';
+import { TagService } from './tag.service';
 import { TaskService } from './task.service';
 import { getMonthString, getYear } from '../utils/date.utils';
 
@@ -26,6 +27,7 @@ export class ScheduleService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
   private transactionService = inject(TransactionService);
+  private tagService = inject(TagService);
   private taskService = inject(TaskService);
 
   private get schedulesRef() {
@@ -255,6 +257,7 @@ export class ScheduleService {
       year: getYear(date),
     };
     await this.transactionService.create(formData);
+    this.tagService.addTags(formData.tags!);
   }
 
   private async createTaskFromReminder(schedule: Schedule, dueDate: Date): Promise<void> {

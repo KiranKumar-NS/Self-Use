@@ -176,6 +176,7 @@ export class HarvestService {
     quantity: number; unit: string; ratePerUnit: number;
     buyerId?: string; buyerName?: string; note?: string;
     paymentStatus?: IncomePaymentStatus;
+    expectedPaymentDate?: Date;
   }): Promise<void> {
     const harvest = await this.getById(harvestId);
     if (!harvest) throw new Error('Harvest not found');
@@ -199,6 +200,7 @@ export class HarvestService {
       description: `${harvest.cropName} sale from harvest`,
       paymentMethod: 'upi',
       paymentStatus: saleData.paymentStatus || 'received',
+      expectedPaymentDate: saleData.paymentStatus === 'pending' ? saleData.expectedPaymentDate : undefined,
       linkedHarvestId: harvestId,
       linkedHarvestName: this.displayName(harvest),
       tags: ['harvest-sale'],

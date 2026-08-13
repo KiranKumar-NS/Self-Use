@@ -45,6 +45,11 @@ function pendingRemaining(txn) {
   return Math.max(0, txn.amount - (txn.amountPaid || 0));
 }
 
+/** Mirrors settledPortion() in transaction.model.ts */
+function settledPortion(txn) {
+  return txn.amount - pendingRemaining(txn);
+}
+
 function emptyAcc() {
   return {
     totalExpense: 0, totalIncome: 0,
@@ -58,17 +63,19 @@ function emptyAcc() {
 
 function accumulate(acc, txn) {
   const personKey = personSummaryKey(txn.paidBy, txn.paidByName, txn.createdBy);
+  // Person maps hold settled cash only (skip zero — matches write-path omission)
+  const settled = settledPortion(txn);
   if (txn.type === 'expense') {
     acc.totalExpense += txn.amount;
     acc.expenseByCategory[txn.categoryName] = (acc.expenseByCategory[txn.categoryName] || 0) + txn.amount;
     acc.expenseByCategoryId[txn.category] = (acc.expenseByCategoryId[txn.category] || 0) + txn.amount;
-    acc.expenseByPerson[personKey] = (acc.expenseByPerson[personKey] || 0) + txn.amount;
+    if (settled !== 0) acc.expenseByPerson[personKey] = (acc.expenseByPerson[personKey] || 0) + settled;
     if ((txn.expensePaymentStatus || 'paid') === 'pending') acc.pendingExpense += pendingRemaining(txn);
   } else {
     acc.totalIncome += txn.amount;
     acc.incomeBySource[txn.categoryName] = (acc.incomeBySource[txn.categoryName] || 0) + txn.amount;
     acc.incomeBySourceId[txn.category] = (acc.incomeBySourceId[txn.category] || 0) + txn.amount;
-    acc.incomeByPerson[personKey] = (acc.incomeByPerson[personKey] || 0) + txn.amount;
+    if (settled !== 0) acc.incomeByPerson[personKey] = (acc.incomeByPerson[personKey] || 0) + settled;
     if ((txn.paymentStatus || 'received') === 'pending') acc.pendingIncome += pendingRemaining(txn);
   }
   if (Array.isArray(txn.distributions)) {

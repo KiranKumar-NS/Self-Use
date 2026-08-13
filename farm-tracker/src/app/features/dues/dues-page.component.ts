@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DuesService, PartyDues, dueAgeDays, isDueOverdue } from '../../core/services/dues.service';
 import { TransactionService } from '../../core/services/transaction.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -38,7 +38,7 @@ import { MatInputModule } from '@angular/material/input';
     @if (loading()) {
       <app-loading-spinner />
     } @else {
-      <mat-tab-group>
+      <mat-tab-group [selectedIndex]="selectedTab()">
         <mat-tab>
           <ng-template mat-tab-label>
             <mat-icon class="tab-icon income">call_received</mat-icon>
@@ -302,8 +302,10 @@ export class DuesPageComponent implements OnInit {
   private duesService = inject(DuesService);
   private transactionService = inject(TransactionService);
   private toast = inject(ToastService);
+  private route = inject(ActivatedRoute);
 
   loading = signal(true);
+  selectedTab = signal(0);
   receivables = signal<PartyDues[]>([]);
   payables = signal<PartyDues[]>([]);
   expandedKey = signal('');
@@ -315,6 +317,8 @@ export class DuesPageComponent implements OnInit {
   payablesTotal = computed(() => this.payables().reduce((sum, g) => sum + g.total, 0));
 
   async ngOnInit(): Promise<void> {
+    // Deep-link from dashboard tiles: /dues?tab=payables opens "To Pay"
+    if (this.route.snapshot.queryParamMap.get('tab') === 'payables') this.selectedTab.set(1);
     await this.load();
   }
 

@@ -4,11 +4,13 @@ import {
   collection,
   doc,
   getDocs,
+  getDoc,
   query,
   orderBy,
   where,
   limit,
   writeBatch,
+  WriteBatch,
   serverTimestamp,
   increment,
   arrayUnion,
@@ -77,26 +79,43 @@ export class InventoryService {
     return snapshot.docs.map(d => d.data() as InventoryEvent).filter(e => !e.isDeleted);
   }
 
+  async getEventById(eventId: string): Promise<InventoryEvent | null> {
+    const snap = await getDoc(doc(this.firestore, 'inventoryEvents', eventId));
+    if (!snap.exists()) return null;
+    const event = snap.data() as InventoryEvent;
+    return event.isDeleted ? null : event;
+  }
+
+  /**
+   * Appends the deletion (soft or hard) of an event plus the reversal of its stock
+   * delta to a caller-owned batch. Caller commits and clears the segment cache.
+   */
+  reverseEventInBatch(
+    batch: WriteBatch,
+    event: Pick<InventoryEvent, 'id' | 'segment' | 'count'>,
+    hard: boolean
+  ): void {
+    const eventRef = doc(this.firestore, 'inventoryEvents', event.id);
+    if (hard) {
+      batch.delete(eventRef);
+    } else {
+      batch.update(eventRef, { isDeleted: true });
+    }
+    batch.update(doc(this.firestore, 'segments', event.segment), {
+      currentStock: increment(-event.count),
+    });
+  }
+
   async deleteEvent(eventId: string, segment: string, countDelta: number): Promise<void> {
     const batch = writeBatch(this.firestore);
-    batch.delete(doc(this.firestore, 'inventoryEvents', eventId));
-    // Reverse the stock change
-    batch.update(doc(this.firestore, 'segments', segment), {
-      currentStock: increment(-countDelta),
-    });
+    this.reverseEventInBatch(batch, { id: eventId, segment, count: countDelta }, true);
     await batch.commit();
     this.segmentService.clearCache();
   }
 
   async softDeleteEvent(eventId: string, segment: string, countDelta: number): Promise<void> {
     const batch = writeBatch(this.firestore);
-    batch.update(doc(this.firestore, 'inventoryEvents', eventId), {
-      isDeleted: true,
-    });
-    // Reverse the stock change
-    batch.update(doc(this.firestore, 'segments', segment), {
-      currentStock: increment(-countDelta),
-    });
+    this.reverseEventInBatch(batch, { id: eventId, segment, count: countDelta }, false);
     await batch.commit();
     this.segmentService.clearCache();
   }

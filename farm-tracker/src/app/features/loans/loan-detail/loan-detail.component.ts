@@ -5,6 +5,7 @@ import { LoanService, LiveEMIEntry } from '../../../core/services/loan.service';
 import { UserService } from '../../../core/services/user.service';
 import { SegmentService } from '../../../core/services/segment.service';
 import { CategoryService } from '../../../core/services/category.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { safeLoad } from '../../../core/utils/async.utils';
 import { Loan, Repayment, LoanAdvance } from '../../../core/models/loan.model';
@@ -460,6 +461,14 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                     </mat-select>
                   </mat-form-field>
                   <mat-form-field appearance="outline">
+                    <mat-label>Paid By</mat-label>
+                    <mat-select [(ngModel)]="paymentPaidBy">
+                      @for (u of activeUsers(); track u.uid) {
+                        <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
                     <mat-label>Reference</mat-label>
                     <input matInput [(ngModel)]="interestPayRef" />
                   </mat-form-field>
@@ -488,6 +497,14 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                     <mat-select [(ngModel)]="paymentSegment">
                       @for (seg of allSegments(); track seg.id) {
                         <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Paid By</mat-label>
+                    <mat-select [(ngModel)]="paymentPaidBy">
+                      @for (u of activeUsers(); track u.uid) {
+                        <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
                       }
                     </mat-select>
                   </mat-form-field>
@@ -528,6 +545,14 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                 </mat-select>
               </mat-form-field>
               <mat-form-field appearance="outline">
+                <mat-label>Paid By</mat-label>
+                <mat-select [(ngModel)]="paymentPaidBy">
+                  @for (u of activeUsers(); track u.uid) {
+                    <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
                 <mat-label>Reference</mat-label>
                 <input matInput [(ngModel)]="partPayRef" />
               </mat-form-field>
@@ -562,6 +587,14 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                 <mat-select [(ngModel)]="paymentSegment">
                   @for (seg of allSegments(); track seg.id) {
                     <mat-option [value]="seg.id">{{ seg.icon }} {{ seg.name }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Paid By</mat-label>
+                <mat-select [(ngModel)]="paymentPaidBy">
+                  @for (u of activeUsers(); track u.uid) {
+                    <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
                   }
                 </mat-select>
               </mat-form-field>
@@ -632,6 +665,21 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                       <mat-select [(ngModel)]="utilCategory">
                         @for (cat of expenseCategories(); track cat.id) {
                           <mat-option [value]="cat.id">{{ cat.name }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline">
+                      <mat-label>Payment Method</mat-label>
+                      <mat-select [(ngModel)]="utilPaymentMethod">
+                        <mat-option value="cash">Cash</mat-option>
+                        <mat-option value="upi">UPI</mat-option>
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline">
+                      <mat-label>Paid By</mat-label>
+                      <mat-select [(ngModel)]="utilPaidBy">
+                        @for (u of activeUsers(); track u.uid) {
+                          <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
                         }
                       </mat-select>
                     </mat-form-field>
@@ -741,6 +789,13 @@ import { DatePipe, TitleCasePipe, DecimalPipe } from '@angular/common';
                             <mat-label>Date</mat-label>
                             <input matInput [matDatepicker]="sPicker" [(ngModel)]="settleDate" />
                             <mat-datepicker-toggle matIconSuffix [for]="sPicker" /><mat-datepicker #sPicker />
+                          </mat-form-field>
+                          <mat-form-field appearance="outline">
+                            <mat-label>Payment Method</mat-label>
+                            <mat-select [(ngModel)]="settlePaymentMethod">
+                              <mat-option value="cash">Cash</mat-option>
+                              <mat-option value="upi">UPI</mat-option>
+                            </mat-select>
                           </mat-form-field>
                           <mat-checkbox [(ngModel)]="settleReturn">Return the rest to holder</mat-checkbox>
                           <button mat-flat-button color="primary" (click)="confirmSettle(a)" [disabled]="savingSettle()">
@@ -991,6 +1046,7 @@ export class LoanDetailComponent implements OnInit {
   private userService = inject(UserService);
   private segmentService = inject(SegmentService);
   private categoryService = inject(CategoryService);
+  private authService = inject(AuthService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private dialog = inject(MatDialog);
@@ -1024,6 +1080,10 @@ export class LoanDetailComponent implements OnInit {
   private get paymentSegmentName(): string {
     return this.allSegments().find(s => s.id === this.paymentSegment)?.name || this.loan()?.segmentName || '';
   }
+  paymentPaidBy = '';   // uid of who actually paid; defaults to the current user
+  private get paymentPaidByName(): string | undefined {
+    return this.activeUsers().find(u => u.uid === this.paymentPaidBy)?.displayName;
+  }
 
   // EMI payment (set when clicking "Pay" on an EMI row)
   emiPayData: LiveEMIEntry | null = null;
@@ -1042,6 +1102,7 @@ export class LoanDetailComponent implements OnInit {
 
   // Utilization
   utilDesc = ''; utilAmount = 0; utilDate = new Date(); utilSegment = ''; utilCategory = '';
+  utilPaymentMethod: 'cash' | 'upi' = 'upi'; utilPaidBy = '';
   utilizationError = signal(''); savingUtil = signal(false);
 
   // Personal withdrawal
@@ -1062,6 +1123,7 @@ export class LoanDetailComponent implements OnInit {
   // Settle advance
   settlingAdvanceId = signal('');
   settleSpent = 0; settleDesc = ''; settleSegment = ''; settleCategory = ''; settleDate = new Date(); settleReturn = false;
+  settlePaymentMethod: 'cash' | 'upi' = 'cash';
   settleError = signal(''); savingSettle = signal(false);
   loanAdvances = computed(() => this.loan()?.advances ?? []);
   openAdvances = computed(() => this.loanAdvances().filter(a => a.status === 'open'));
@@ -1082,6 +1144,9 @@ export class LoanDetailComponent implements OnInit {
       this.allSegments.set(segments);
       this.expenseCategories.set(categories);
       this.repaymentPaidBy = this.activeUsers()[0]?.uid || '';
+      const currentUid = this.authService.currentUser()?.uid || '';
+      this.paymentPaidBy = currentUid;
+      this.utilPaidBy = currentUid;
     } catch (err) {
       console.error('Failed to load loan reference data', err);
       this.toast.error('Failed to load data. Check your connection and try again.');
@@ -1153,6 +1218,8 @@ export class LoanDetailComponent implements OnInit {
         principalPortion: emi.principal,
         interestPortion: emi.interest,
         date: new Date(),
+        paidByUid: this.paymentPaidBy || undefined,
+        paidByName: this.paymentPaidByName,
         segmentId: this.paymentSegment,
         segmentName: this.paymentSegmentName,
       });
@@ -1164,7 +1231,7 @@ export class LoanDetailComponent implements OnInit {
     this.formalError.set(''); this.savingFormal.set(true);
     try {
       const penaltyAmt = Math.round(emi.emiAmount * 0.02 * 100) / 100; // Default 2% penalty
-      await this.loanService.addPenaltyPayment(this.loanId, penaltyAmt, emi.emiNumber, new Date(), undefined, undefined, this.paymentSegment, this.paymentSegmentName);
+      await this.loanService.addPenaltyPayment(this.loanId, penaltyAmt, emi.emiNumber, new Date(), undefined, undefined, this.paymentSegment, this.paymentSegmentName, this.paymentPaidBy || undefined, this.paymentPaidByName);
       await this.loadData();
     } catch (err: any) { this.formalError.set(err.message); } finally { this.savingFormal.set(false); }
   }
@@ -1173,7 +1240,7 @@ export class LoanDetailComponent implements OnInit {
     if (this.partPayAmount <= 0) { this.formalError.set('Amount must be greater than 0'); return; }
     this.formalError.set(''); this.savingFormal.set(true);
     try {
-      await this.loanService.addPartPayment(this.loanId, this.partPayAmount, this.partPayDate, this.partPayRef, undefined, this.paymentSegment, this.paymentSegmentName);
+      await this.loanService.addPartPayment(this.loanId, this.partPayAmount, this.partPayDate, this.partPayRef, undefined, this.paymentSegment, this.paymentSegmentName, this.paymentPaidBy || undefined, this.paymentPaidByName);
       this.partPayAmount = 0; this.partPayRef = ''; this.showPartPayment = false;
       await this.loadData();
     } catch (err: any) { this.formalError.set(err.message); } finally { this.savingFormal.set(false); }
@@ -1183,7 +1250,7 @@ export class LoanDetailComponent implements OnInit {
     if (this.preCloseAmount <= 0) { this.formalError.set('Amount must be greater than 0'); return; }
     this.formalError.set(''); this.savingFormal.set(true);
     try {
-      await this.loanService.preCloseLoan(this.loanId, this.preCloseAmount, this.preCloseCharges, this.preCloseDate, undefined, undefined, this.paymentSegment, this.paymentSegmentName);
+      await this.loanService.preCloseLoan(this.loanId, this.preCloseAmount, this.preCloseCharges, this.preCloseDate, undefined, undefined, this.paymentSegment, this.paymentSegmentName, this.paymentPaidBy || undefined, this.paymentPaidByName);
       this.showPreClose = false;
       await this.loadData();
     } catch (err: any) { this.formalError.set(err.message); } finally { this.savingFormal.set(false); }
@@ -1193,7 +1260,7 @@ export class LoanDetailComponent implements OnInit {
     if (this.interestPayAmount <= 0) { this.formalError.set('Amount must be greater than 0'); return; }
     this.formalError.set(''); this.savingFormal.set(true);
     try {
-      await this.loanService.addInterestPayment(this.loanId, this.interestPayAmount, this.interestPayDate, this.interestPayRef, undefined, undefined, this.paymentSegment, this.paymentSegmentName);
+      await this.loanService.addInterestPayment(this.loanId, this.interestPayAmount, this.interestPayDate, this.interestPayRef, undefined, this.paymentPaidBy || undefined, this.paymentPaidByName, this.paymentSegment, this.paymentSegmentName);
       this.interestPayRef = ''; this.showInterestForm = false;
       await this.loadData();
     } catch (err: any) { this.formalError.set(err.message); } finally { this.savingFormal.set(false); }
@@ -1203,7 +1270,7 @@ export class LoanDetailComponent implements OnInit {
     if (this.closePrincipalAmount <= 0) { this.formalError.set('Amount must be greater than 0'); return; }
     this.formalError.set(''); this.savingFormal.set(true);
     try {
-      await this.loanService.closePrincipal(this.loanId, this.closePrincipalAmount, this.closePrincipalDate, this.closePrincipalRef, undefined, this.paymentSegment, this.paymentSegmentName);
+      await this.loanService.closePrincipal(this.loanId, this.closePrincipalAmount, this.closePrincipalDate, this.closePrincipalRef, undefined, this.paymentSegment, this.paymentSegmentName, this.paymentPaidBy || undefined, this.paymentPaidByName);
       this.showCloseForm = false;
       await this.loadData();
     } catch (err: any) { this.formalError.set(err.message); } finally { this.savingFormal.set(false); }
@@ -1219,6 +1286,9 @@ export class LoanDetailComponent implements OnInit {
         description: this.utilDesc, amount: this.utilAmount, date: this.utilDate,
         category: this.utilCategory, categoryName: cat?.name ?? 'Other',
         segment: this.utilSegment || this.loan()!.segment, segmentName: seg?.name ?? this.loan()!.segmentName,
+        paymentMethod: this.utilPaymentMethod,
+        paidBy: this.utilPaidBy || undefined,
+        paidByName: this.activeUsers().find(u => u.uid === this.utilPaidBy)?.displayName,
       });
       this.utilDesc = ''; this.utilAmount = 0;
       await this.loadData();
@@ -1303,6 +1373,7 @@ export class LoanDetailComponent implements OnInit {
           categoryName: cat?.name ?? 'Other',
           segment: this.settleSegment || this.loan()!.segment,
           segmentName: seg?.name ?? this.loan()!.segmentName,
+          paymentMethod: this.settlePaymentMethod,
         },
         this.settleReturn, this.settleDate,
       );

@@ -150,10 +150,17 @@
       "Bash(echo \"=== EXIT: $? ===\")",
       "Bash(node -e 'try{require.resolve\\(\"puppeteer\"\\);console.log\\(\"puppeteer OK\"\\)}catch\\(e\\){try{require.resolve\\(\"playwright\"\\);console.log\\(\"playwright OK\"\\)}catch\\(e2\\){try{require.resolve\\(\"jsdom\"\\);console.log\\(\"jsdom OK\"\\)}catch\\(e3\\){console.log\\(\"none: puppeteer/playwright/jsdom not installed\"\\)}}}')",
       "Bash(node \"C:/Users/Admin/AppData/Local/Temp/claude/d--kk-self-use-repo-farm-tracker/4f3b51a7-499d-4a89-bb59-0e7967b1671d/scratchpad/delete-masters.js\")",
-      "Bash(node scripts/_delete-masters-tmp.js)"
+      "Bash(node scripts/_delete-masters-tmp.js)",
+      "Bash(node \"C:/Users/Admin/AppData/Local/Temp/claude/d--kk-self-use-repo-farm-tracker-farm-tracker/b9aa57b2-cd76-4f78-ab4e-622025703827/scratchpad/strip-db.js\")",
+      "Bash(node \"C:/Users/Admin/AppData/Local/Temp/claude/d--kk-self-use-repo-farm-tracker-farm-tracker/b9aa57b2-cd76-4f78-ab4e-622025703827/scratchpad/validate.js\")",
+      "PowerShell(npm run test:run 2>&1)",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(\\(Get-Content \"d:\\\\kk\\\\self-use-repo\\\\farm-tracker\\\\docs\\\\manual-test-checklist.html\" | Measure-Object -Line\\).Lines)",
+      "PowerShell(npx ng build 2>$null)"
     ],
     "additionalDirectories": [
-      "D:\\kk\\self-use-repo\\farm-tracker\\dist"
+      "D:\\kk\\self-use-repo\\farm-tracker\\dist",
+      "C:\\Users\\Admin\\AppData\\Local\\Temp\\claude\\d--kk-self-use-repo-farm-tracker-farm-tracker\\b9aa57b2-cd76-4f78-ab4e-622025703827\\scratchpad"
     ]
   }
 }

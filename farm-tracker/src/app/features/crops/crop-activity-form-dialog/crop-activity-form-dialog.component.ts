@@ -22,6 +22,7 @@ import { TransactionService } from '../../../core/services/transaction.service';
 import { AppUser } from '../../../core/models/user.model';
 import { Timestamp } from '@angular/fire/firestore';
 import { ToastService } from '../../../core/services/toast.service';
+import { TagService } from '../../../core/services/tag.service';
 import { normalizeName, nameKey } from '../../../core/utils/name.utils';
 
 export interface CropActivityFormDialogData {
@@ -211,6 +212,7 @@ export class CropActivityFormDialogComponent implements OnInit {
   private userService = inject(UserService);
   private authService = inject(AuthService);
   private transactionService = inject(TransactionService);
+  private tagService = inject(TagService);
   private toast = inject(ToastService);
 
   saving = signal(false);
@@ -406,6 +408,7 @@ export class CropActivityFormDialogComponent implements OnInit {
       } else {
         await this.cropActivityService.create(formData, expenseMeta, skip);
       }
+      if (expenseMeta) this.tagService.addTags(['crop-activity']);
       this.dialogRef.close(true);
     } catch (err: any) {
       this.error.set(err.message || 'Failed to save');

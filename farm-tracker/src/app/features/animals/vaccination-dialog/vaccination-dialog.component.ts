@@ -101,6 +101,15 @@ export interface VaccinationDialogData {
             </mat-form-field>
           </div>
 
+          @if (expenseStatus === 'pending') {
+            <mat-form-field appearance="outline">
+              <mat-label>Expected Payment Date (optional)</mat-label>
+              <input matInput [matDatepicker]="expectedPicker" [(ngModel)]="expectedPaymentDate" />
+              <mat-datepicker-toggle matSuffix [for]="expectedPicker" />
+              <mat-datepicker #expectedPicker />
+            </mat-form-field>
+          }
+
           <div class="form-row">
             <mat-form-field appearance="outline">
               <mat-label>Paid By</mat-label>
@@ -172,6 +181,7 @@ export class VaccinationDialogComponent implements OnInit {
   users = signal<AppUser[]>([]);
   paymentMethod: PaymentMethod = 'cash';
   expenseStatus: ExpensePaymentStatus = 'paid';
+  expectedPaymentDate: Date | null = null;
   paidBy = '';                 // uid | 'other'
   customPaidByName = '';
   nameSuggestions = signal<string[]>([]);
@@ -259,6 +269,7 @@ export class VaccinationDialogComponent implements OnInit {
           description,
           paymentMethod: this.paymentMethod,
           expensePaymentStatus: this.expenseStatus,
+          expectedPaymentDate: this.expenseStatus === 'pending' ? (this.expectedPaymentDate || undefined) : undefined,
           paidBy: resolvedPaidBy,
           paidByName: resolvedPaidByName,
           linkedAnimalIds: [animal.id],

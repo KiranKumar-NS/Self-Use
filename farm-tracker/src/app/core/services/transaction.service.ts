@@ -17,7 +17,7 @@ import {
   Timestamp,
   DocumentSnapshot,
 } from '@angular/fire/firestore';
-import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatus, ExpensePaymentStatus, pendingRemaining } from '../models/transaction.model';
+import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatus, ExpensePaymentStatus, pendingRemaining, settledPortion, personSummaryKey } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 import { SummaryService } from './summary.service';
 import { BuyerService } from './buyer.service';
@@ -69,15 +69,9 @@ export class TransactionService {
     }
   }
 
-  /** Build a unique summary key per person. Custom "other" names get normalized and sanitized. */
+  /** Build a unique summary key per person. Delegates to the shared model helper. */
   private personSummaryKey(paidBy: string | null | undefined, paidByName: string | null | undefined, fallbackUid: string): string {
-    if (paidBy === 'other' && paidByName) {
-      // Normalize: trim, collapse whitespace, title-case, then sanitize for Firestore field paths
-      const normalized = paidByName.trim().replace(/\s+/g, ' ')
-        .split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-      return normalized.replace(/[.$/\[\]#]/g, '_');
-    }
-    return paidBy || fallbackUid;
+    return personSummaryKey(paidBy, paidByName, fallbackUid);
   }
 
   /**
@@ -102,12 +96,13 @@ export class TransactionService {
       updatedAt: serverTimestamp(),
     };
 
-    // Reverse per-person
+    // Reverse per-person (settled cash only — pending portion never entered the map)
     const personKey = this.personSummaryKey(txn.paidBy, txn.paidByName, txn.createdBy);
     const personField = txn.type === 'expense'
       ? `expenseByPerson.${personKey}`
       : `incomeByPerson.${personKey}`;
-    fields[personField] = increment(-txn.amount);
+    const settled = settledPortion(txn);
+    if (settled !== 0) fields[personField] = increment(-settled);
 
     // Reverse pending income (net of partial payments already received)
     if (txn.type === 'income' && (txn.paymentStatus || 'received') === 'pending') {
@@ -156,12 +151,6 @@ export class TransactionService {
       updatedAt: serverTimestamp(),
     };
 
-    const personKey = this.personSummaryKey(data.paidBy, data.paidByName, userUid);
-    const personField = data.type === 'expense'
-      ? `expenseByPerson.${personKey}`
-      : `incomeByPerson.${personKey}`;
-    fields[personField] = increment(data.amount);
-
     // Pending counters — on updates the caller passes the remaining amount
     // (net of partial payments carried through the edit)
     const pendingInc = pendingOverride
@@ -172,6 +161,15 @@ export class TransactionService {
       : (data.type === 'expense' && (data.expensePaymentStatus || 'paid') === 'pending' ? data.amount : 0);
     if (pendingInc !== 0) fields['pendingIncome'] = increment(pendingInc);
     if (pendingExp !== 0) fields['pendingExpense'] = increment(pendingExp);
+
+    // Per-person maps hold settled cash only; the pending portion joins the map
+    // when it is actually paid/received (markAsPaid/markAsReceived/partial payment)
+    const personKey = this.personSummaryKey(data.paidBy, data.paidByName, userUid);
+    const personField = data.type === 'expense'
+      ? `expenseByPerson.${personKey}`
+      : `incomeByPerson.${personKey}`;
+    const personSettled = data.amount - pendingInc - pendingExp;
+    if (personSettled !== 0) fields[personField] = increment(personSettled);
 
     return fields;
   }
@@ -334,6 +332,9 @@ export class TransactionService {
       const oldPendingExp = oldData.type === 'expense' ? pendingRemaining(oldData) : 0;
       const newPendingInc = data.type === 'income' && effectivePayStatus === 'pending' ? data.amount - keepReceived : 0;
       const newPendingExp = data.type === 'expense' && effectiveExpPayStatus === 'pending' ? data.amount - keepPaid : 0;
+      // Person maps hold settled cash only — an edit moves just the settled portions
+      const oldSettled = settledPortion(oldData);
+      const newSettled = data.amount - newPendingInc - newPendingExp;
       const newBuyerId = data.type === 'income' ? (data.linkedBuyerId || null) : null;
       const newSupplierId = data.type === 'expense' ? (data.linkedSupplierId || null) : null;
       if ((oldData.linkedBuyerId || null) !== newBuyerId) {
@@ -429,10 +430,10 @@ export class TransactionService {
         const newPersonField = data.type === 'expense' ? `expenseByPerson.${newPersonKey}` : `incomeByPerson.${newPersonKey}`;
 
         if (oldPersonField === newPersonField) {
-          combined[oldPersonField] = increment(data.amount - oldData.amount);
+          if (newSettled !== oldSettled) combined[oldPersonField] = increment(newSettled - oldSettled);
         } else {
-          combined[oldPersonField] = increment(-oldData.amount);
-          combined[newPersonField] = increment(data.amount);
+          if (oldSettled !== 0) combined[oldPersonField] = increment(-oldSettled);
+          if (newSettled !== 0) combined[newPersonField] = increment(newSettled);
         }
 
         // Pending income/expense (deltas net of partial payments, computed above)
@@ -516,10 +517,10 @@ export class TransactionService {
         const newPersonField = data.type === 'expense' ? `expenseByPerson.${newPersonKey}` : `incomeByPerson.${newPersonKey}`;
 
         if (oldPersonField === newPersonField) {
-          combined[oldPersonField] = increment(data.amount - oldData.amount);
+          if (newSettled !== oldSettled) combined[oldPersonField] = increment(newSettled - oldSettled);
         } else {
-          combined[oldPersonField] = increment(-oldData.amount);
-          combined[newPersonField] = increment(data.amount);
+          if (oldSettled !== 0) combined[oldPersonField] = increment(-oldSettled);
+          if (newSettled !== 0) combined[newPersonField] = increment(newSettled);
         }
 
         if (oldPendingInc !== 0 || newPendingInc !== 0) {
@@ -844,10 +845,16 @@ export class TransactionService {
         }),
       });
 
-      // Decrement remaining pendingIncome (net of partials) in monthly + yearly summaries
+      // Decrement remaining pendingIncome (net of partials) and move the settled
+      // cash into incomeByPerson in monthly + yearly summaries
       const summaryId = `${oldData.month}-${oldData.segment}`;
       const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
-      const pendingUpdate = { pendingIncome: increment(-remaining), updatedAt: serverTimestamp() };
+      const personKey = this.personSummaryKey(oldData.paidBy, oldData.paidByName, oldData.createdBy);
+      const pendingUpdate = {
+        pendingIncome: increment(-remaining),
+        [`incomeByPerson.${personKey}`]: increment(remaining),
+        updatedAt: serverTimestamp(),
+      };
       transaction.set(summaryRef, {
         ...pendingUpdate,
         month: oldData.month,
@@ -890,7 +897,12 @@ export class TransactionService {
 
       const summaryId = `${oldData.month}-${oldData.segment}`;
       const summaryRef = doc(this.firestore, 'monthlySummaries', summaryId);
-      const pendingUpdate = { pendingExpense: increment(-remaining), updatedAt: serverTimestamp() };
+      const personKey = this.personSummaryKey(oldData.paidBy, oldData.paidByName, oldData.createdBy);
+      const pendingUpdate = {
+        pendingExpense: increment(-remaining),
+        [`expenseByPerson.${personKey}`]: increment(remaining),
+        updatedAt: serverTimestamp(),
+      };
       transaction.set(summaryRef, {
         ...pendingUpdate,
         month: oldData.month,
@@ -955,7 +967,13 @@ export class TransactionService {
       transaction.update(txnRef, txnUpdates);
 
       const pendingField = isIncome ? 'pendingIncome' : 'pendingExpense';
-      const pendingUpdate = { [pendingField]: increment(-amount), updatedAt: serverTimestamp() };
+      const personKey = this.personSummaryKey(oldData.paidBy, oldData.paidByName, oldData.createdBy);
+      const personField = isIncome ? `incomeByPerson.${personKey}` : `expenseByPerson.${personKey}`;
+      const pendingUpdate = {
+        [pendingField]: increment(-amount),
+        [personField]: increment(amount),
+        updatedAt: serverTimestamp(),
+      };
       const summaryRef = doc(this.firestore, 'monthlySummaries', `${oldData.month}-${oldData.segment}`);
       transaction.set(summaryRef, {
         ...pendingUpdate,

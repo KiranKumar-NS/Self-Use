@@ -15,6 +15,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'seeds', name: 'Seeds', type: 'expense', isActive: true },
   { id: 'labor', name: 'Labor', type: 'expense', isActive: true },
   { id: 'transport', name: 'Transport', type: 'expense', isActive: true },
+  { id: 'animal-purchase', name: 'Animal Purchase', type: 'expense', isActive: true },
   { id: 'maintenance', name: 'Maintenance', type: 'expense', isActive: true },
   { id: 'loan-repayment', name: 'Loan Repayment', type: 'expense', isActive: true },
   { id: 'other-expense', name: 'Other', type: 'expense', isActive: true },

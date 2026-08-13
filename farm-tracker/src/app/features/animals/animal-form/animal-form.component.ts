@@ -3,7 +3,6 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AnimalService } from '../../../core/services/animal.service';
 import { SegmentService } from '../../../core/services/segment.service';
-import { InventoryService } from '../../../core/services/inventory.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { Segment } from '../../../core/models/segment.model';
 import { TrackingMode } from '../../../core/models/animal.model';
@@ -16,7 +15,6 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatIconModule } from '@angular/material/icon';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
-import { getMonthString, getYear } from '../../../core/utils/date.utils';
 import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
 
 @Component({
@@ -30,7 +28,7 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
   ],
   template: `
     <div class="page-header">
-      <h1>{{ isEdit() ? 'Edit' : 'Register' }} Animal</h1>
+      <h1>Edit Animal</h1>
     </div>
 
     <mat-card class="form-card">
@@ -52,11 +50,11 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
           </mat-form-field>
         </div>
 
-        <!-- Tracking Mode -->
+        <!-- Tracking Mode (fixed at registration; update() ignores it) -->
         <div class="form-row">
           <div class="radio-group">
             <label class="field-label">Tracking Mode</label>
-            <mat-radio-group [(ngModel)]="trackingMode" name="trackingMode">
+            <mat-radio-group [(ngModel)]="trackingMode" name="trackingMode" [disabled]="true">
               <mat-radio-button value="individual">Individual</mat-radio-button>
               <mat-radio-button value="batch">Batch</mat-radio-button>
             </mat-radio-group>
@@ -165,7 +163,7 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
         <div class="form-actions">
           <button mat-button type="button" (click)="cancel()">Cancel</button>
           <button mat-flat-button color="primary" type="submit" [disabled]="saving()">
-            {{ saving() ? 'Saving...' : (isEdit() ? 'Update' : 'Register') }}
+            {{ saving() ? 'Saving...' : 'Update' }}
           </button>
         </div>
       </form>
@@ -188,12 +186,10 @@ import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
 export class AnimalFormComponent implements OnInit, HasUnsavedChanges {
   private animalService = inject(AnimalService);
   private segmentService = inject(SegmentService);
-  private inventoryService = inject(InventoryService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private toast = inject(ToastService);
 
-  isEdit = signal(false);
   error = signal('');
   saving = signal(false);
   private saved = false;
@@ -218,12 +214,17 @@ export class AnimalFormComponent implements OnInit, HasUnsavedChanges {
   private allBreeds = signal<string[]>([]);
 
   async ngOnInit(): Promise<void> {
+    // This form is edit-only; registration happens via the stock page's
+    // unified inventory-event dialog.
+    this.editId = this.route.snapshot.params['id'];
+    if (!this.editId) {
+      this.router.navigate(['/stock']);
+      return;
+    }
     try {
       this.allSegments.set(await this.segmentService.getAll());
 
-      this.editId = this.route.snapshot.params['id'];
-      if (this.editId) {
-        this.isEdit.set(true);
+      {
         const animal = await this.animalService.getById(this.editId);
         if (animal) {
           this.segment.set(animal.segment);
@@ -296,26 +297,8 @@ export class AnimalFormComponent implements OnInit, HasUnsavedChanges {
         note: this.note().trim() || undefined,
       };
 
-      if (this.isEdit()) {
-        await this.animalService.update(this.editId, formData);
-      } else {
-        const animalId = await this.animalService.create(formData);
-
-        // Create inventory event to keep stock counts in sync
-        const count = this.trackingMode() === 'batch' ? this.batchSize() : 1;
-        await this.inventoryService.recordEvent({
-          segment: this.segment(),
-          segmentName: seg?.name || this.segment(),
-          eventType: this.origin() === 'purchase' ? 'purchase' : 'birth',
-          count,
-          breed: this.breed().trim() || undefined,
-          note: `Registered: ${this.name().trim() || this.tag().trim() || this.batchLabel().trim() || formData.segmentName}`,
-          date: this.originDate(),
-          month: getMonthString(this.originDate()),
-          year: getYear(this.originDate()),
-        });
-      }
-      this.toast.success(this.isEdit() ? 'Animal updated' : 'Animal created');
+      await this.animalService.update(this.editId, formData);
+      this.toast.success('Animal updated');
       this.saved = true;
       this.router.navigate(['/stock']);
     } catch (err: any) {
@@ -326,9 +309,7 @@ export class AnimalFormComponent implements OnInit, HasUnsavedChanges {
   }
 
   hasUnsavedChanges(): boolean {
-    if (this.saved) return false;
-    if (this.isEdit()) return true;
-    return this.segment() !== '' || this.tag().trim() !== '' || this.name().trim() !== '';
+    return !this.saved;
   }
 
   cancel(): void {

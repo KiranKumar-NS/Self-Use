@@ -10,6 +10,7 @@ import {
   arrayUnion,
 } from '@angular/fire/firestore';
 import { Loan, LoanFormData, Repayment, InterestFrequency } from '../models/loan.model';
+import { personSummaryKey } from '../models/transaction.model';
 import { AuthService } from './auth.service';
 import { getMonthString, getYear } from '../utils/date.utils';
 import { appendTimelineCapped } from '../utils/timeline.utils';
@@ -111,7 +112,7 @@ export class LoanPaymentsService {
 
       // Update monthly summary
       const summaryRef = doc(this.firestore, 'monthlySummaries', `${month}-${expSegment}`);
-      const personKey = data.paidByUid ?? user.uid;
+      const personKey = personSummaryKey(data.paidByUid, payer, user.uid);
       const summaryData = {
         totalExpense: increment(data.amount),
         netProfit: increment(-data.amount),
@@ -198,6 +199,7 @@ export class LoanPaymentsService {
       }
 
       const payer = paidByName ?? user.displayName;
+      const personKey = personSummaryKey(paidByUid, payer, user.uid);
       const month = getMonthString(date);
       const year = getYear(date);
       const sourceName = loan.loanSourceName ?? loan.personName;
@@ -255,7 +257,7 @@ export class LoanPaymentsService {
         netProfit: increment(-amount),
         [`expenseByCategory.loan-repayment`]: increment(amount),
         [`expenseByCategoryId.loan-repayment`]: increment(amount),
-        [`expenseByPerson.${paidByUid ?? user.uid}`]: increment(amount),
+        [`expenseByPerson.${personKey}`]: increment(amount),
         month, year, segment: expSeg, updatedAt: serverTimestamp(),
       }, { merge: true });
       transaction.set(doc(this.firestore, 'yearlySummaries', `${year}-${expSeg}`), {
@@ -263,7 +265,7 @@ export class LoanPaymentsService {
         netProfit: increment(-amount),
         [`expenseByCategory.loan-repayment`]: increment(amount),
         [`expenseByCategoryId.loan-repayment`]: increment(amount),
-        [`expenseByPerson.${paidByUid ?? user.uid}`]: increment(amount),
+        [`expenseByPerson.${personKey}`]: increment(amount),
         year, segment: expSeg, updatedAt: serverTimestamp(),
       }, { merge: true });
 
@@ -296,6 +298,8 @@ export class LoanPaymentsService {
     note?: string,
     segmentId?: string,
     segmentName?: string,
+    paidByUid?: string,
+    paidByName?: string,
   ): Promise<void> {
     const user = this.authService.requireUser();
 
@@ -318,6 +322,9 @@ export class LoanPaymentsService {
       const excess = amount - outstanding;
       const expSeg = segmentId || loan.segment;
       const expSegName = segmentName || loan.segmentName;
+      const payerUid = paidByUid ?? user.uid;
+      const payer = paidByName ?? user.displayName;
+      const personKey = personSummaryKey(paidByUid, payer, user.uid);
 
       // Create repayment doc
       const repRef = doc(collection(this.firestore, `loans/${loanId}/repayments`));
@@ -326,8 +333,8 @@ export class LoanPaymentsService {
         date: Timestamp.fromDate(date),
         amount,
         note: note ?? `Principal closure - ${sourceName}`,
-        paidBy: user.uid,
-        paidByName: user.displayName,
+        paidBy: payerUid,
+        paidByName: payer,
         recordedBy: user.uid,
         recordedByName: user.displayName,
         createdAt: serverTimestamp(),
@@ -351,8 +358,8 @@ export class LoanPaymentsService {
         segmentName: expSegName,
         description: `Principal closure - ${sourceName}`,
         paymentMethod: 'upi',
-        paidBy: user.uid,
-        paidByName: user.displayName,
+        paidBy: payerUid,
+        paidByName: payer,
         createdBy: user.uid,
         createdByName: user.displayName,
         createdAt: serverTimestamp(),
@@ -370,7 +377,7 @@ export class LoanPaymentsService {
         netProfit: increment(-amount),
         [`expenseByCategory.loan-repayment`]: increment(amount),
         [`expenseByCategoryId.loan-repayment`]: increment(amount),
-        [`expenseByPerson.${user.uid}`]: increment(amount),
+        [`expenseByPerson.${personKey}`]: increment(amount),
         month, year, segment: expSeg, updatedAt: serverTimestamp(),
       }, { merge: true });
       transaction.set(doc(this.firestore, 'yearlySummaries', `${year}-${expSeg}`), {
@@ -378,7 +385,7 @@ export class LoanPaymentsService {
         netProfit: increment(-amount),
         [`expenseByCategory.loan-repayment`]: increment(amount),
         [`expenseByCategoryId.loan-repayment`]: increment(amount),
-        [`expenseByPerson.${user.uid}`]: increment(amount),
+        [`expenseByPerson.${personKey}`]: increment(amount),
         year, segment: expSeg, updatedAt: serverTimestamp(),
       }, { merge: true });
 
@@ -414,6 +421,8 @@ export class LoanPaymentsService {
     note?: string,
     segmentId?: string,
     segmentName?: string,
+    paidByUid?: string,
+    paidByName?: string,
   ): Promise<void> {
     const user = this.authService.requireUser();
 
@@ -435,6 +444,9 @@ export class LoanPaymentsService {
       const sourceName = loan.loanSourceName ?? loan.personName;
       const expSeg = segmentId || loan.segment;
       const expSegName = segmentName || loan.segmentName;
+      const payerUid = paidByUid ?? user.uid;
+      const payer = paidByName ?? user.displayName;
+      const personKey = personSummaryKey(paidByUid, payer, user.uid);
 
       // Create repayment doc
       const repRef = doc(collection(this.firestore, `loans/${loanId}/repayments`));
@@ -443,8 +455,8 @@ export class LoanPaymentsService {
         date: Timestamp.fromDate(date),
         amount,
         note: note ?? `Part-payment - ${sourceName}`,
-        paidBy: user.uid,
-        paidByName: user.displayName,
+        paidBy: payerUid,
+        paidByName: payer,
         recordedBy: user.uid,
         recordedByName: user.displayName,
         createdAt: serverTimestamp(),
@@ -467,8 +479,8 @@ export class LoanPaymentsService {
         segmentName: expSegName,
         description: `Part-payment - ${sourceName}`,
         paymentMethod: 'upi',
-        paidBy: user.uid,
-        paidByName: user.displayName,
+        paidBy: payerUid,
+        paidByName: payer,
         createdBy: user.uid,
         createdByName: user.displayName,
         createdAt: serverTimestamp(),
@@ -486,7 +498,7 @@ export class LoanPaymentsService {
         netProfit: increment(-amount),
         [`expenseByCategory.loan-repayment`]: increment(amount),
         [`expenseByCategoryId.loan-repayment`]: increment(amount),
-        [`expenseByPerson.${user.uid}`]: increment(amount),
+        [`expenseByPerson.${personKey}`]: increment(amount),
         month, year, segment: expSeg, updatedAt: serverTimestamp(),
       }, { merge: true });
       transaction.set(doc(this.firestore, 'yearlySummaries', `${year}-${expSeg}`), {
@@ -494,7 +506,7 @@ export class LoanPaymentsService {
         netProfit: increment(-amount),
         [`expenseByCategory.loan-repayment`]: increment(amount),
         [`expenseByCategoryId.loan-repayment`]: increment(amount),
-        [`expenseByPerson.${user.uid}`]: increment(amount),
+        [`expenseByPerson.${personKey}`]: increment(amount),
         year, segment: expSeg, updatedAt: serverTimestamp(),
       }, { merge: true });
 
@@ -535,6 +547,8 @@ export class LoanPaymentsService {
     note?: string,
     segmentId?: string,
     segmentName?: string,
+    paidByUid?: string,
+    paidByName?: string,
   ): Promise<void> {
     const user = this.authService.requireUser();
 
@@ -552,6 +566,9 @@ export class LoanPaymentsService {
       const sourceName = loan.loanSourceName ?? loan.personName;
       const expSeg = segmentId || loan.segment;
       const expSegName = segmentName || loan.segmentName;
+      const payerUid = paidByUid ?? user.uid;
+      const payer = paidByName ?? user.displayName;
+      const personKey = personSummaryKey(paidByUid, payer, user.uid);
 
       // Create repayment doc
       const repRef = doc(collection(this.firestore, `loans/${loanId}/repayments`));
@@ -560,8 +577,8 @@ export class LoanPaymentsService {
         date: Timestamp.fromDate(date),
         amount: penaltyAmount,
         note: note ?? `Late penalty for EMI #${forEMINumber}`,
-        paidBy: user.uid,
-        paidByName: user.displayName,
+        paidBy: payerUid,
+        paidByName: payer,
         recordedBy: user.uid,
         recordedByName: user.displayName,
         createdAt: serverTimestamp(),
@@ -583,8 +600,8 @@ export class LoanPaymentsService {
         segmentName: expSegName,
         description: `Late penalty EMI #${forEMINumber} - ${sourceName}`,
         paymentMethod: 'upi',
-        paidBy: user.uid,
-        paidByName: user.displayName,
+        paidBy: payerUid,
+        paidByName: payer,
         createdBy: user.uid,
         createdByName: user.displayName,
         createdAt: serverTimestamp(),
@@ -602,7 +619,7 @@ export class LoanPaymentsService {
         netProfit: increment(-penaltyAmount),
         [`expenseByCategory.loan-repayment`]: increment(penaltyAmount),
         [`expenseByCategoryId.loan-repayment`]: increment(penaltyAmount),
-        [`expenseByPerson.${user.uid}`]: increment(penaltyAmount),
+        [`expenseByPerson.${personKey}`]: increment(penaltyAmount),
         month, year, segment: expSeg, updatedAt: serverTimestamp(),
       }, { merge: true });
       transaction.set(doc(this.firestore, 'yearlySummaries', `${year}-${expSeg}`), {
@@ -610,7 +627,7 @@ export class LoanPaymentsService {
         netProfit: increment(-penaltyAmount),
         [`expenseByCategory.loan-repayment`]: increment(penaltyAmount),
         [`expenseByCategoryId.loan-repayment`]: increment(penaltyAmount),
-        [`expenseByPerson.${user.uid}`]: increment(penaltyAmount),
+        [`expenseByPerson.${personKey}`]: increment(penaltyAmount),
         year, segment: expSeg, updatedAt: serverTimestamp(),
       }, { merge: true });
 
@@ -701,6 +718,8 @@ export class LoanPaymentsService {
     note?: string,
     segmentId?: string,
     segmentName?: string,
+    paidByUid?: string,
+    paidByName?: string,
   ): Promise<void> {
     const user = this.authService.requireUser();
 
@@ -719,6 +738,9 @@ export class LoanPaymentsService {
       const sourceName = loan.loanSourceName ?? loan.personName;
       const expSeg = segmentId || loan.segment;
       const expSegName = segmentName || loan.segmentName;
+      const payerUid = paidByUid ?? user.uid;
+      const payer = paidByName ?? user.displayName;
+      const personKey = personSummaryKey(paidByUid, payer, user.uid);
 
       // Create repayment doc
       const repRef = doc(collection(this.firestore, `loans/${loanId}/repayments`));
@@ -727,8 +749,8 @@ export class LoanPaymentsService {
         date: Timestamp.fromDate(date),
         amount: totalPayment,
         note: note ?? `Pre-closure - ${sourceName}`,
-        paidBy: user.uid,
-        paidByName: user.displayName,
+        paidBy: payerUid,
+        paidByName: payer,
         recordedBy: user.uid,
         recordedByName: user.displayName,
         createdAt: serverTimestamp(),
@@ -752,8 +774,8 @@ export class LoanPaymentsService {
         segmentName: expSegName,
         description: `Pre-closure - ${sourceName}${charges > 0 ? ` (charges: ₹${charges.toLocaleString('en-IN')})` : ''}`,
         paymentMethod: 'upi',
-        paidBy: user.uid,
-        paidByName: user.displayName,
+        paidBy: payerUid,
+        paidByName: payer,
         createdBy: user.uid,
         createdByName: user.displayName,
         createdAt: serverTimestamp(),
@@ -771,7 +793,7 @@ export class LoanPaymentsService {
         netProfit: increment(-totalPayment),
         [`expenseByCategory.loan-repayment`]: increment(totalPayment),
         [`expenseByCategoryId.loan-repayment`]: increment(totalPayment),
-        [`expenseByPerson.${user.uid}`]: increment(totalPayment),
+        [`expenseByPerson.${personKey}`]: increment(totalPayment),
         month, year, segment: expSeg, updatedAt: serverTimestamp(),
       }, { merge: true });
       transaction.set(doc(this.firestore, 'yearlySummaries', `${year}-${expSeg}`), {
@@ -779,7 +801,7 @@ export class LoanPaymentsService {
         netProfit: increment(-totalPayment),
         [`expenseByCategory.loan-repayment`]: increment(totalPayment),
         [`expenseByCategoryId.loan-repayment`]: increment(totalPayment),
-        [`expenseByPerson.${user.uid}`]: increment(totalPayment),
+        [`expenseByPerson.${personKey}`]: increment(totalPayment),
         year, segment: expSeg, updatedAt: serverTimestamp(),
       }, { merge: true });
 
