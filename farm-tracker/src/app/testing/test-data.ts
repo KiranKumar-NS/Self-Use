@@ -3,6 +3,7 @@
  */
 import { createMockTimestamp } from './firebase-mocks';
 
+// Legacy individual-mode shape — existing docs only; new records are always batch (see createTestBatchAnimal)
 export function createTestAnimal(overrides: Record<string, any> = {}) {
   return {
     id: 'animal-1',

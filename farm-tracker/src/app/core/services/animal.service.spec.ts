@@ -82,10 +82,10 @@ describe('AnimalService', () => {
   // ──────────── create ────────────
 
   describe('create', () => {
-    it('should set purchasePricePerHead equal to purchasePrice for individual', async () => {
+    it('should set purchasePricePerHead equal to purchasePrice for a 1-head batch', async () => {
       await service.create({
-        segment: 'seg1', segmentName: 'Goats', trackingMode: 'individual',
-        batchSize: 1, origin: 'purchase', originDate: new Date('2026-01-15'),
+        segment: 'seg1', segmentName: 'Goats', trackingMode: 'batch',
+        batchSize: 1, batchLabel: 'Lakshmi', origin: 'purchase', originDate: new Date('2026-01-15'),
         purchasePrice: 5000,
       });
 
@@ -113,10 +113,10 @@ describe('AnimalService', () => {
       expect(setCall.totalInvested).toBe(25000);
     });
 
-    it('should handle zero purchase price', async () => {
+    it('should handle zero purchase price (birth)', async () => {
       await service.create({
-        segment: 'seg1', segmentName: 'Goats', trackingMode: 'individual',
-        batchSize: 1, origin: 'birth', originDate: new Date('2026-01-15'),
+        segment: 'seg1', segmentName: 'Goats', trackingMode: 'batch',
+        batchSize: 1, batchLabel: 'Goats Jan-2026', origin: 'birth', originDate: new Date('2026-01-15'),
       });
 
       const batch = getBatch();
@@ -125,7 +125,7 @@ describe('AnimalService', () => {
       expect(setCall.totalInvested).toBe(0);
     });
 
-    it('should set optional fields only when provided', async () => {
+    it('should set optional fields only when provided (legacy individual mode still accepted)', async () => {
       await service.create({
         segment: 'seg1', segmentName: 'Goats', trackingMode: 'individual',
         batchSize: 1, origin: 'purchase', originDate: new Date('2026-01-15'),
@@ -142,8 +142,8 @@ describe('AnimalService', () => {
 
     it('should persist originInventoryEventId when provided', async () => {
       await service.create({
-        segment: 'seg1', segmentName: 'Goats', trackingMode: 'individual',
-        batchSize: 1, origin: 'purchase', originDate: new Date('2026-01-15'),
+        segment: 'seg1', segmentName: 'Goats', trackingMode: 'batch',
+        batchSize: 3, batchLabel: 'Goats Jan-2026', origin: 'purchase', originDate: new Date('2026-01-15'),
         originInventoryEventId: 'ev-123',
       });
 

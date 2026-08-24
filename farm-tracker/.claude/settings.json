@@ -156,7 +156,11 @@
       "PowerShell(npm run test:run 2>&1)",
       "PowerShell(npm run build 2>&1)",
       "PowerShell(\\(Get-Content \"d:\\\\kk\\\\self-use-repo\\\\farm-tracker\\\\docs\\\\manual-test-checklist.html\" | Measure-Object -Line\\).Lines)",
-      "PowerShell(npx ng build 2>$null)"
+      "PowerShell(npx ng build 2>$null)",
+      "Bash(node scripts/reconcile-summaries.js)",
+      "Bash(node scripts/reconcile-summaries.js --apply)",
+      "Bash(node run-ani17.js)",
+      "Bash(node run-har.js)"
     ],
     "additionalDirectories": [
       "D:\\kk\\self-use-repo\\farm-tracker\\dist",

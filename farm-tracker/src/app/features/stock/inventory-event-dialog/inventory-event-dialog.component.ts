@@ -8,7 +8,6 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatRadioModule } from '@angular/material/radio';
 
 import { InventoryService } from '../../../core/services/inventory.service';
 import { SegmentService } from '../../../core/services/segment.service';
@@ -20,7 +19,7 @@ import { UserService } from '../../../core/services/user.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { TagService } from '../../../core/services/tag.service';
 import { Segment } from '../../../core/models/segment.model';
-import { Animal, TrackingMode } from '../../../core/models/animal.model';
+import { Animal } from '../../../core/models/animal.model';
 import { Buyer } from '../../../core/models/buyer.model';
 import { Category } from '../../../core/models/category.model';
 import { AppUser } from '../../../core/models/user.model';
@@ -29,10 +28,9 @@ import { InventoryEvent, InventoryEventType } from '../../../core/models/invento
 import { ANIMAL_EVENT_TYPES } from '../../../core/models/segment.model';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
 import { normalizeName, nameKey } from '../../../core/utils/name.utils';
-import { defaultTrackingModeForSegment, resolveTrackingMode } from '../../../core/utils/tracking-mode.utils';
 import { ToastService } from '../../../core/services/toast.service';
 
-export type InventoryEventDialogMode = 'event' | 'register' | 'sale' | 'death';
+export type InventoryEventDialogMode = 'event' | 'sale' | 'death';
 
 export interface InventoryEventDialogData {
   event?: InventoryEvent;             // if provided, edit mode
@@ -48,7 +46,7 @@ export interface InventoryEventDialogData {
   imports: [
     FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule,
     MatInputModule, MatSelectModule, MatDatepickerModule, MatAutocompleteModule,
-    MatCheckboxModule, MatRadioModule,
+    MatCheckboxModule,
   ],
   template: `
     <h2 mat-dialog-title>{{ dialogTitle() }}</h2>
@@ -85,7 +83,7 @@ export interface InventoryEventDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>Count</mat-label>
-          <input matInput type="number" [(ngModel)]="count" (ngModelChange)="onCountChange()"
+          <input matInput type="number" [(ngModel)]="count"
             [min]="eventType() === 'adjustment' ? null : 1"
             [max]="countMax()" [disabled]="isCountLocked()" step="1" required />
         </mat-form-field>
@@ -230,131 +228,89 @@ export interface InventoryEventDialogData {
           </mat-form-field>
         }
 
-        <!-- Auto-create animal record (purchase/birth only, not edit mode) -->
+        <!-- Purchase/birth always creates a batch animal record -->
         @if (!isEdit() && (eventType() === 'purchase' || eventType() === 'birth')) {
-          @if (mode !== 'register') {
-            <div class="full-width animal-record-section">
-              <mat-checkbox [(ngModel)]="createAnimalRecord">
-                Also create animal record
-              </mat-checkbox>
-              <span class="hint">{{ trackingMode() === 'batch' ? 'Creates a batch record' : 'Creates an individual record' }}</span>
-            </div>
+          @if (eventType() === 'purchase') {
+            <mat-form-field appearance="outline">
+              <mat-label>Purchase Price (total)</mat-label>
+              <input matInput type="number" [(ngModel)]="purchasePrice" min="0" />
+            </mat-form-field>
           }
 
-          @if (createAnimalRecord) {
-            <div class="full-width radio-section">
-              <label class="field-label">Tracking Mode</label>
-              <mat-radio-group [(ngModel)]="trackingMode" (change)="onTrackingModeChange()">
-                <mat-radio-button value="individual" [disabled]="count() > 1">Individual</mat-radio-button>
-                <mat-radio-button value="batch">Batch</mat-radio-button>
-              </mat-radio-group>
-              @if (count() > 1) {
-                <span class="hint">Count above 1 is tracked as a batch</span>
-              }
+          <mat-form-field appearance="outline">
+            <mat-label>Batch Label</mat-label>
+            <input matInput [(ngModel)]="batchLabel" [placeholder]="suggestedBatchLabel()" />
+          </mat-form-field>
+
+          @if (eventType() === 'purchase') {
+            <div class="full-width animal-record-section">
+              <mat-checkbox [(ngModel)]="createPurchaseExpense" [disabled]="!purchasePrice || purchasePrice <= 0">
+                Also record as expense transaction
+                @if (purchasePrice && purchasePrice > 0) {
+                  (₹{{ purchasePrice.toLocaleString('en-IN') }})
+                } @else {
+                  (enter a purchase price)
+                }
+              </mat-checkbox>
             </div>
 
-            @if (eventType() === 'purchase') {
+            @if (createPurchaseExpense && purchasePrice && purchasePrice > 0) {
               <mat-form-field appearance="outline">
-                <mat-label>Purchase Price (total)</mat-label>
-                <input matInput type="number" [(ngModel)]="purchasePrice" min="0" />
-              </mat-form-field>
-            }
-
-            @if (trackingMode() === 'batch') {
-              <mat-form-field appearance="outline">
-                <mat-label>Batch Label</mat-label>
-                <input matInput [(ngModel)]="batchLabel" [placeholder]="suggestedBatchLabel()" />
-              </mat-form-field>
-            } @else {
-              <mat-form-field appearance="outline">
-                <mat-label>Tag / ID (optional)</mat-label>
-                <input matInput [(ngModel)]="animalTag" />
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Name (optional)</mat-label>
-                <input matInput [(ngModel)]="animalName" />
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Gender (optional)</mat-label>
-                <mat-select [(ngModel)]="gender">
-                  <mat-option value="">-</mat-option>
-                  <mat-option value="male">Male</mat-option>
-                  <mat-option value="female">Female</mat-option>
-                  <mat-option value="unknown">Unknown</mat-option>
+                <mat-label>Expense Category</mat-label>
+                <mat-select [(ngModel)]="expenseCategoryId">
+                  @for (cat of expenseCategories(); track cat.id) {
+                    <mat-option [value]="cat.id">{{ cat.name }}</mat-option>
+                  }
                 </mat-select>
               </mat-form-field>
-            }
 
-            @if (eventType() === 'purchase') {
-              <div class="full-width animal-record-section">
-                <mat-checkbox [(ngModel)]="createPurchaseExpense" [disabled]="!purchasePrice || purchasePrice <= 0">
-                  Also record as expense transaction
-                  @if (purchasePrice && purchasePrice > 0) {
-                    (₹{{ purchasePrice.toLocaleString('en-IN') }})
-                  } @else {
-                    (enter a purchase price)
+              <mat-form-field appearance="outline">
+                <mat-label>Payment</mat-label>
+                <mat-select [(ngModel)]="paymentMethod">
+                  <mat-option value="cash">Cash</mat-option>
+                  <mat-option value="upi">UPI</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Status</mat-label>
+                <mat-select [(ngModel)]="expenseStatus">
+                  <mat-option value="paid">Paid</mat-option>
+                  <mat-option value="pending">Pending</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              @if (expenseStatus === 'pending') {
+                <mat-form-field appearance="outline">
+                  <mat-label>Expected Payment Date (optional)</mat-label>
+                  <input matInput [matDatepicker]="expectedPicker" [(ngModel)]="expectedPaymentDate" />
+                  <mat-datepicker-toggle matIconSuffix [for]="expectedPicker" />
+                  <mat-datepicker #expectedPicker />
+                </mat-form-field>
+              }
+
+              <mat-form-field appearance="outline">
+                <mat-label>Paid By</mat-label>
+                <mat-select [(ngModel)]="paidBy" (selectionChange)="onPaidByChange()">
+                  @for (u of users(); track u.uid) {
+                    <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
                   }
-                </mat-checkbox>
-              </div>
+                  <mat-option value="other">Other (type name)</mat-option>
+                </mat-select>
+              </mat-form-field>
 
-              @if (createPurchaseExpense && purchasePrice && purchasePrice > 0) {
+              @if (paidBy === 'other') {
                 <mat-form-field appearance="outline">
-                  <mat-label>Expense Category</mat-label>
-                  <mat-select [(ngModel)]="expenseCategoryId">
-                    @for (cat of expenseCategories(); track cat.id) {
-                      <mat-option [value]="cat.id">{{ cat.name }}</mat-option>
+                  <mat-label>Enter Name</mat-label>
+                  <input matInput [(ngModel)]="customPaidByName" required placeholder="e.g. Raju"
+                         (ngModelChange)="filterNameSuggestions()" (focus)="filterNameSuggestions()"
+                         [matAutocomplete]="nameAuto" />
+                  <mat-autocomplete #nameAuto="matAutocomplete">
+                    @for (n of nameSuggestions(); track n) {
+                      <mat-option [value]="n">{{ n }}</mat-option>
                     }
-                  </mat-select>
+                  </mat-autocomplete>
                 </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>Payment</mat-label>
-                  <mat-select [(ngModel)]="paymentMethod">
-                    <mat-option value="cash">Cash</mat-option>
-                    <mat-option value="upi">UPI</mat-option>
-                  </mat-select>
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>Status</mat-label>
-                  <mat-select [(ngModel)]="expenseStatus">
-                    <mat-option value="paid">Paid</mat-option>
-                    <mat-option value="pending">Pending</mat-option>
-                  </mat-select>
-                </mat-form-field>
-
-                @if (expenseStatus === 'pending') {
-                  <mat-form-field appearance="outline">
-                    <mat-label>Expected Payment Date (optional)</mat-label>
-                    <input matInput [matDatepicker]="expectedPicker" [(ngModel)]="expectedPaymentDate" />
-                    <mat-datepicker-toggle matIconSuffix [for]="expectedPicker" />
-                    <mat-datepicker #expectedPicker />
-                  </mat-form-field>
-                }
-
-                <mat-form-field appearance="outline">
-                  <mat-label>Paid By</mat-label>
-                  <mat-select [(ngModel)]="paidBy" (selectionChange)="onPaidByChange()">
-                    @for (u of users(); track u.uid) {
-                      <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
-                    }
-                    <mat-option value="other">Other (type name)</mat-option>
-                  </mat-select>
-                </mat-form-field>
-
-                @if (paidBy === 'other') {
-                  <mat-form-field appearance="outline">
-                    <mat-label>Enter Name</mat-label>
-                    <input matInput [(ngModel)]="customPaidByName" required placeholder="e.g. Raju"
-                           (ngModelChange)="filterNameSuggestions()" (focus)="filterNameSuggestions()"
-                           [matAutocomplete]="nameAuto" />
-                    <mat-autocomplete #nameAuto="matAutocomplete">
-                      @for (n of nameSuggestions(); track n) {
-                        <mat-option [value]="n">{{ n }}</mat-option>
-                      }
-                    </mat-autocomplete>
-                  </mat-form-field>
-                }
               }
             }
           }
@@ -379,10 +335,6 @@ export interface InventoryEventDialogData {
     .animal-info { margin-bottom: 16px; font-size: 0.95rem; }
     .batch-note { color: var(--color-text-secondary); margin-left: 4px; }
     .animal-record-section { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
-    .animal-record-section .hint, .radio-section .hint { font-size: 0.75rem; color: var(--color-text-muted); }
-    .radio-section { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; flex-wrap: wrap; }
-    .radio-section .field-label { font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600; }
-    mat-radio-group { display: flex; gap: 1rem; }
   `],
 })
 export class InventoryEventDialogComponent implements OnInit {
@@ -421,13 +373,8 @@ export class InventoryEventDialogComponent implements OnInit {
   salePrice: number | null = null;
   estimatedValue: number | null = null;
   deathCause = '';
-  createAnimalRecord = true;
-  trackingMode = signal<TrackingMode>('individual');
-  gender: '' | 'male' | 'female' | 'unknown' = '';
   purchasePrice: number | null = null;
   batchLabel = '';
-  animalTag = '';
-  animalName = '';
   eventTypeOptions = ANIMAL_EVENT_TYPES;
   private allBreeds = signal<string[]>([]);
 
@@ -450,11 +397,6 @@ export class InventoryEventDialogComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.mode = this.data?.mode || 'event';
-    if (this.mode === 'register') {
-      this.eventTypeOptions = ANIMAL_EVENT_TYPES.filter(et => et.value === 'purchase' || et.value === 'birth');
-      this.eventType.set('purchase');
-      this.createAnimalRecord = true;
-    }
 
     try {
       const [segs, buyers] = await Promise.all([this.segmentService.getAll(), this.buyerService.getAll()]);
@@ -517,7 +459,6 @@ export class InventoryEventDialogComponent implements OnInit {
 
   dialogTitle(): string {
     switch (this.mode) {
-      case 'register': return 'Register Animal';
       case 'sale': return 'Record Sale';
       case 'death': return 'Record Death';
       default: return this.isEdit() ? 'Edit Inventory Event' : 'Record Inventory Event';
@@ -527,7 +468,6 @@ export class InventoryEventDialogComponent implements OnInit {
   saveLabel(): string {
     if (this.isEdit()) return 'Update';
     switch (this.mode) {
-      case 'register': return 'Register';
       case 'sale': return 'Record Sale';
       case 'death': return 'Record Death';
       default: return 'Record Event';
@@ -559,19 +499,6 @@ export class InventoryEventDialogComponent implements OnInit {
     if (this.segment()) {
       this.loadBreeds(this.segment());
       this.loadAnimals(this.segment());
-      this.trackingMode.set(resolveTrackingMode(this.segment(), this.count()));
-    }
-  }
-
-  onCountChange(): void {
-    if (this.count() > 1 && this.trackingMode() === 'individual') {
-      this.trackingMode.set('batch');
-    }
-  }
-
-  onTrackingModeChange(): void {
-    if (this.trackingMode() === 'individual' && this.count() > 1) {
-      this.count.set(1);
     }
   }
 
@@ -638,8 +565,7 @@ export class InventoryEventDialogComponent implements OnInit {
       if (this.paidBy === 'other' && !this.customPaidByName.trim()) return true;
       if (this.buyerId === '__new__' && !this.newBuyerName.trim()) return true;
     }
-    if ((et === 'purchase' || et === 'birth') && this.createAnimalRecord
-      && et === 'purchase' && this.createPurchaseExpense && !!this.purchasePrice && this.purchasePrice > 0
+    if (et === 'purchase' && this.createPurchaseExpense && !!this.purchasePrice && this.purchasePrice > 0
       && this.paidBy === 'other' && !this.customPaidByName.trim()) return true;
     return false;
   }
@@ -725,22 +651,16 @@ export class InventoryEventDialogComponent implements OnInit {
         // 2. Inventory event + stock update
         const eventId = await this.inventoryService.recordEvent(formData);
 
-        // 3. Auto-create animal record for purchase/birth
-        if (this.createAnimalRecord && (this.eventType() === 'purchase' || this.eventType() === 'birth')) {
-          const isBatch = this.trackingMode() === 'batch';
-          const animalLabel = isBatch
-            ? (this.batchLabel.trim() || this.suggestedBatchLabel())
-            : (this.animalName.trim() || this.animalTag.trim() || segmentName);
+        // 3. Purchase/birth always creates a batch animal record
+        if (this.eventType() === 'purchase' || this.eventType() === 'birth') {
+          const animalLabel = this.batchLabel.trim() || this.suggestedBatchLabel();
           const animalId = await this.animalService.create({
             segment: this.segment(),
             segmentName,
-            trackingMode: this.trackingMode(),
+            trackingMode: 'batch',
             batchSize: this.count(),
-            batchLabel: isBatch ? (this.batchLabel.trim() || this.suggestedBatchLabel()) : undefined,
-            tag: !isBatch ? this.animalTag.trim() || undefined : undefined,
-            name: !isBatch ? this.animalName.trim() || undefined : undefined,
+            batchLabel: animalLabel,
             breed: this.breed().trim() || undefined,
-            gender: !isBatch ? (this.gender || undefined) : undefined,
             origin: this.eventType() as 'purchase' | 'birth',
             originDate: this.date(),
             purchasePrice: this.eventType() === 'purchase' ? (this.purchasePrice || 0) : undefined,
