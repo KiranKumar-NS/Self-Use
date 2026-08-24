@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import {
   Firestore, collection, doc, getDocs, getDoc, setDoc, updateDoc,
-  query, orderBy, where, limit, writeBatch, serverTimestamp, Timestamp, increment,
+  query, orderBy, where, limit, writeBatch, serverTimestamp, Timestamp, increment, runTransaction,
 } from '@angular/fire/firestore';
 import { Supplier } from '../models/supplier.model';
 import { AuthService } from './auth.service';
@@ -67,31 +67,40 @@ export class SupplierService {
     return docSnap.exists() ? (docSnap.data() as Supplier) : null;
   }
 
-  async updateStats(supplierId: string, amount: number, date: Date, segmentId?: string): Promise<void> {
-    const updates: Record<string, any> = {
-      totalOrders: increment(1),
-      totalAmountPaid: increment(amount),
-      lastOrderDate: Timestamp.fromDate(date),
-    };
-    if (segmentId) {
-      updates[`ordersBySegment.${segmentId}`] = increment(1);
-      updates[`amountBySegment.${segmentId}`] = increment(amount);
-    }
-    await updateDoc(doc(this.firestore, 'suppliers', supplierId), updates);
+  /**
+   * Keep supplier order counters in sync with expense transactions. Deltas may be
+   * negative so an edit or delete reverses cleanly — mirrors BuyerService.updateStats,
+   * and one runTransaction keeps the average consistent with the totals it derives from.
+   */
+  async updateStats(supplierId: string, amountDelta: number, countDelta: number, pendingDelta: number, date: Date | null, segmentId?: string): Promise<void> {
+    const supplierRef = doc(this.firestore, 'suppliers', supplierId);
 
-    // Recalculate average
-    const supplier = await this.getById(supplierId);
-    if (supplier && supplier.totalOrders > 0) {
-      await updateDoc(doc(this.firestore, 'suppliers', supplierId), {
-        averageRate: Math.round((supplier.totalAmountPaid / supplier.totalOrders) * 100) / 100,
-      });
-    }
-  }
+    await runTransaction(this.firestore, async (transaction) => {
+      const snap = await transaction.get(supplierRef);
+      if (!snap.exists()) return;
 
-  async updatePendingAmount(supplierId: string, delta: number): Promise<void> {
-    await updateDoc(doc(this.firestore, 'suppliers', supplierId), {
-      pendingAmount: increment(delta),
+      const supplier = snap.data() as Supplier;
+      const newTotalAmount = (supplier.totalAmountPaid || 0) + amountDelta;
+      const newTotalCount = (supplier.totalOrders || 0) + countDelta;
+
+      const updates: Record<string, any> = {
+        totalOrders: increment(countDelta),
+        totalAmountPaid: increment(amountDelta),
+        averageRate: newTotalCount > 0 ? Math.round((newTotalAmount / newTotalCount) * 100) / 100 : 0,
+      };
+      if (pendingDelta !== 0) updates['pendingAmount'] = increment(pendingDelta);
+      if (date && (!supplier.lastOrderDate || supplier.lastOrderDate.toMillis() < date.getTime())) {
+        updates['lastOrderDate'] = Timestamp.fromDate(date);
+      }
+      if (segmentId) {
+        updates[`ordersBySegment.${segmentId}`] = increment(countDelta);
+        updates[`amountBySegment.${segmentId}`] = increment(amountDelta);
+      }
+
+      transaction.update(supplierRef, updates);
     });
+
+    this.clearCache();
   }
 
   async softDelete(id: string): Promise<void> {

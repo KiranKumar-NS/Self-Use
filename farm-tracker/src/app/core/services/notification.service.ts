@@ -5,6 +5,7 @@ import { SegmentService } from './segment.service';
 import { SummaryService } from './summary.service';
 import { ScheduleService } from './schedule.service';
 import { DuesService, PartyDues } from './dues.service';
+import { InventoryItemService } from './inventory-item.service';
 import { AppNotification } from '../models/notification.model';
 import { getMonthString } from '../utils/date.utils';
 
@@ -16,6 +17,7 @@ export class NotificationService {
   private summaryService = inject(SummaryService);
   private scheduleService = inject(ScheduleService);
   private duesService = inject(DuesService);
+  private inventoryItemService = inject(InventoryItemService);
 
   notifications = signal<AppNotification[]>([]);
   unreadCount = computed(() => this.notifications().length);
@@ -220,6 +222,29 @@ export class NotificationService {
       this.pushDuesAlerts(items, payables, 'due_payable', 'to pay to');
     } catch (err) {
       console.error('Notification: failed to load dues:', err);
+    }
+
+    // 6. Consumables at or below their minimum stock level
+    try {
+      for (const item of await this.inventoryItemService.getLowStockItems()) {
+        const id = `low_stock_${item.id}`;
+        if (this.dismissedIds.has(id)) continue;
+        const unit = item.unit ? ` ${item.unit}` : '';
+        const out = item.currentStock <= 0;
+        items.push({
+          id,
+          type: 'low_stock',
+          title: out ? `Out of stock: ${item.name}` : `Low stock: ${item.name}`,
+          message: out
+            ? `None left (minimum ${item.minimumStock}${unit})`
+            : `${item.currentStock}${unit} left, at or below the ${item.minimumStock}${unit} minimum`,
+          severity: out ? 'error' : 'warning',
+          link: `/consumables`,
+          createdAt: now,
+        });
+      }
+    } catch (err) {
+      console.error('Notification: failed to load low stock items:', err);
     }
 
     this.notifications.set(items);

@@ -21,8 +21,15 @@ import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatu
 import { AuthService } from './auth.service';
 import { SummaryService } from './summary.service';
 import { BuyerService } from './buyer.service';
+import { SupplierService } from './supplier.service';
 import { AnimalService } from './animal.service';
 import { appendTimelineCapped } from '../utils/timeline.utils';
+
+/** Summary maps are keyed by category id. Firestore rejects an empty map key and fails the
+ *  whole write, so a legacy transaction saved with a blank category must land in a bucket
+ *  rather than break every update that touches its month. Mirrors the same fallback in
+ *  SummaryReconciliationService. */
+const catKey = (category: string | null | undefined): string => category || 'uncategorized';
 
 @Injectable({ providedIn: 'root' })
 export class TransactionService {
@@ -30,6 +37,7 @@ export class TransactionService {
   private authService = inject(AuthService);
   private summaryService = inject(SummaryService);
   private buyerService = inject(BuyerService);
+  private supplierService = inject(SupplierService);
   private animalService = inject(AnimalService);
 
   /**
@@ -50,6 +58,27 @@ export class TransactionService {
       await this.buyerService.updateStats(buyerId, amountDelta, countDelta, date, segment);
     } catch (err) {
       console.error('Failed to update buyer stats', err);
+    }
+  }
+
+  /**
+   * The supplier-side mirror of adjustBuyerStats, for expense transactions.
+   * Without this, SupplierService.updateStats had no callers at all and supplier
+   * Total Orders / Total Paid never moved until someone ran the reconciler.
+   */
+  private async adjustSupplierStats(
+    supplierId: string | null | undefined,
+    amountDelta: number,
+    countDelta: number,
+    pendingDelta: number,
+    date: Date | null,
+    segment: string,
+  ): Promise<void> {
+    if (!supplierId) return;
+    try {
+      await this.supplierService.updateStats(supplierId, amountDelta, countDelta, pendingDelta, date, segment);
+    } catch (err) {
+      console.error('Failed to update supplier stats', err);
     }
   }
 
@@ -82,11 +111,11 @@ export class TransactionService {
     const incField = txn.type === 'expense' ? 'totalExpense' : 'totalIncome';
     const profitDelta = txn.type === 'income' ? -txn.amount : txn.amount;
     const catField = txn.type === 'expense'
-      ? `expenseByCategory.${txn.category}`
-      : `incomeBySource.${txn.category}`;
+      ? `expenseByCategory.${catKey(txn.category)}`
+      : `incomeBySource.${catKey(txn.category)}`;
     const catIdField = txn.type === 'expense'
-      ? `expenseByCategoryId.${txn.category}`
-      : `incomeBySourceId.${txn.category}`;
+      ? `expenseByCategoryId.${catKey(txn.category)}`
+      : `incomeBySourceId.${catKey(txn.category)}`;
 
     const fields: Record<string, any> = {
       [incField]: increment(-txn.amount),
@@ -137,11 +166,11 @@ export class TransactionService {
     const incField = data.type === 'expense' ? 'totalExpense' : 'totalIncome';
     const profitDelta = data.type === 'income' ? data.amount : -data.amount;
     const catField = data.type === 'expense'
-      ? `expenseByCategory.${data.category}`
-      : `incomeBySource.${data.category}`;
+      ? `expenseByCategory.${catKey(data.category)}`
+      : `incomeBySource.${catKey(data.category)}`;
     const catIdField = data.type === 'expense'
-      ? `expenseByCategoryId.${data.category}`
-      : `incomeBySourceId.${data.category}`;
+      ? `expenseByCategoryId.${catKey(data.category)}`
+      : `incomeBySourceId.${catKey(data.category)}`;
 
     const fields: Record<string, any> = {
       [incField]: increment(data.amount),
@@ -278,6 +307,10 @@ export class TransactionService {
     if (data.type === 'income' && data.linkedBuyerId) {
       await this.adjustBuyerStats(data.linkedBuyerId, data.amount, data.quantity || 1, data.date, data.segment);
     }
+    if (data.type === 'expense' && data.linkedSupplierId) {
+      const pending = (data.expensePaymentStatus || 'paid') === 'pending' ? data.amount : 0;
+      await this.adjustSupplierStats(data.linkedSupplierId, data.amount, 1, pending, data.date, data.segment);
+    }
     return txnRef.id;
   }
 
@@ -408,10 +441,10 @@ export class TransactionService {
         combined['netProfit'] = increment(oldProfitDelta + newProfitDelta);
 
         // Category fields
-        const oldCatField = oldData.type === 'expense' ? `expenseByCategory.${oldData.category}` : `incomeBySource.${oldData.category}`;
-        const newCatField = data.type === 'expense' ? `expenseByCategory.${data.category}` : `incomeBySource.${data.category}`;
-        const oldCatIdField = oldData.type === 'expense' ? `expenseByCategoryId.${oldData.category}` : `incomeBySourceId.${oldData.category}`;
-        const newCatIdField = data.type === 'expense' ? `expenseByCategoryId.${data.category}` : `incomeBySourceId.${data.category}`;
+        const oldCatField = oldData.type === 'expense' ? `expenseByCategory.${catKey(oldData.category)}` : `incomeBySource.${catKey(oldData.category)}`;
+        const newCatField = data.type === 'expense' ? `expenseByCategory.${catKey(data.category)}` : `incomeBySource.${catKey(data.category)}`;
+        const oldCatIdField = oldData.type === 'expense' ? `expenseByCategoryId.${catKey(oldData.category)}` : `incomeBySourceId.${catKey(oldData.category)}`;
+        const newCatIdField = data.type === 'expense' ? `expenseByCategoryId.${catKey(data.category)}` : `incomeBySourceId.${catKey(data.category)}`;
 
         if (oldCatField === newCatField) {
           combined[oldCatField] = increment(data.amount - oldData.amount);
@@ -496,10 +529,10 @@ export class TransactionService {
           (data.type === 'income' ? data.amount : -data.amount)
         );
 
-        const oldCatField = oldData.type === 'expense' ? `expenseByCategory.${oldData.category}` : `incomeBySource.${oldData.category}`;
-        const newCatField = data.type === 'expense' ? `expenseByCategory.${data.category}` : `incomeBySource.${data.category}`;
-        const oldCatIdField = oldData.type === 'expense' ? `expenseByCategoryId.${oldData.category}` : `incomeBySourceId.${oldData.category}`;
-        const newCatIdField = data.type === 'expense' ? `expenseByCategoryId.${data.category}` : `incomeBySourceId.${data.category}`;
+        const oldCatField = oldData.type === 'expense' ? `expenseByCategory.${catKey(oldData.category)}` : `incomeBySource.${catKey(oldData.category)}`;
+        const newCatField = data.type === 'expense' ? `expenseByCategory.${catKey(data.category)}` : `incomeBySource.${catKey(data.category)}`;
+        const oldCatIdField = oldData.type === 'expense' ? `expenseByCategoryId.${catKey(oldData.category)}` : `incomeBySourceId.${catKey(oldData.category)}`;
+        const newCatIdField = data.type === 'expense' ? `expenseByCategoryId.${catKey(data.category)}` : `incomeBySourceId.${catKey(data.category)}`;
 
         if (oldCatField === newCatField) {
           combined[oldCatField] = increment(data.amount - oldData.amount);
@@ -621,6 +654,27 @@ export class TransactionService {
           await this.adjustBuyerStats(newBuyerId, data.amount, newUnits, data.date, data.segment);
         }
       }
+
+      // Supplier counters count ONE order per transaction and skip loan-funded expenses,
+      // matching reconcileCounterparties so the two can never disagree. Form-created
+      // transactions never carry linkedLoanId (loan.service writes those docs itself and
+      // the form blocks editing them), so only the captured old doc needs the guard.
+      const oldSupplierId = (capturedOld.type === 'expense' && !capturedOld.linkedLoanId) ? (capturedOld.linkedSupplierId || null) : null;
+      const newSupplierId2 = data.type === 'expense' ? (data.linkedSupplierId || null) : null;
+      const oldPending = pendingRemaining(capturedOld);
+      const newPending = (data.expensePaymentStatus || 'paid') === 'pending' ? data.amount : 0;
+      const supplierUnchanged = oldSupplierId === newSupplierId2
+        && capturedOld.amount === data.amount
+        && oldPending === newPending
+        && capturedOld.segment === data.segment;
+      if (!supplierUnchanged) {
+        if (oldSupplierId) {
+          await this.adjustSupplierStats(oldSupplierId, -capturedOld.amount, -1, -oldPending, null, capturedOld.segment);
+        }
+        if (newSupplierId2) {
+          await this.adjustSupplierStats(newSupplierId2, data.amount, 1, newPending, data.date, data.segment);
+        }
+      }
     }
   }
 
@@ -675,6 +729,9 @@ export class TransactionService {
     if (capturedOld?.type === 'income' && capturedOld.linkedBuyerId) {
       await this.adjustBuyerStats(capturedOld.linkedBuyerId, -capturedOld.amount, -(capturedOld.quantity || 1), null, capturedOld.segment);
     }
+    if (capturedOld?.type === 'expense' && capturedOld.linkedSupplierId && !capturedOld.linkedLoanId) {
+      await this.adjustSupplierStats(capturedOld.linkedSupplierId, -capturedOld.amount, -1, -pendingRemaining(capturedOld), null, capturedOld.segment);
+    }
     await this.reverseAnimalCosts(capturedOld, id);
   }
 
@@ -719,6 +776,9 @@ export class TransactionService {
 
     if (capturedOld?.type === 'income' && capturedOld.linkedBuyerId) {
       await this.adjustBuyerStats(capturedOld.linkedBuyerId, -capturedOld.amount, -(capturedOld.quantity || 1), null, capturedOld.segment);
+    }
+    if (capturedOld?.type === 'expense' && capturedOld.linkedSupplierId && !capturedOld.linkedLoanId) {
+      await this.adjustSupplierStats(capturedOld.linkedSupplierId, -capturedOld.amount, -1, -pendingRemaining(capturedOld), null, capturedOld.segment);
     }
     await this.reverseAnimalCosts(capturedOld, id);
   }

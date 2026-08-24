@@ -20,6 +20,11 @@ import { MonthlySummary, YearlySummary } from '../models/monthly-summary.model';
 import { Buyer } from '../models/buyer.model';
 import { Supplier } from '../models/supplier.model';
 
+/** Fallback bucket for transactions with a blank category or payer. Firestore rejects an
+ *  empty map key and fails the whole batch, so nothing may key a map off '' . */
+const UNCATEGORIZED = 'uncategorized';
+const UNCATEGORIZED_LABEL = 'Uncategorized';
+
 export interface ReconciliationReport {
   totalTransactions: number;
   monthlySummariesWritten: number;
@@ -78,7 +83,12 @@ export class SummaryReconciliationService {
   }
 
   private accumulateTransaction(acc: SummaryAccumulator, txn: Transaction): void {
-    const personKey = this.personSummaryKey(txn.paidBy, txn.paidByName, txn.createdBy);
+    const personKey = this.personSummaryKey(txn.paidBy, txn.paidByName, txn.createdBy) || UNCATEGORIZED;
+    // Firestore rejects an empty map key and fails the WHOLE batch, so one malformed
+    // legacy transaction (e.g. a pre-validation save with category: '') must not be able
+    // to take down reconciliation for every segment.
+    const catId = txn.category || UNCATEGORIZED;
+    const catName = txn.categoryName || UNCATEGORIZED_LABEL;
 
     // Person maps hold settled cash only (skip zero so fully-pending txns
     // don't seed ₹0 entries — matches the write-path omission)
@@ -86,8 +96,8 @@ export class SummaryReconciliationService {
 
     if (txn.type === 'expense') {
       acc.totalExpense += txn.amount;
-      acc.expenseByCategory[txn.categoryName] = (acc.expenseByCategory[txn.categoryName] || 0) + txn.amount;
-      acc.expenseByCategoryId[txn.category] = (acc.expenseByCategoryId[txn.category] || 0) + txn.amount;
+      acc.expenseByCategory[catName] = (acc.expenseByCategory[catName] || 0) + txn.amount;
+      acc.expenseByCategoryId[catId] = (acc.expenseByCategoryId[catId] || 0) + txn.amount;
       if (settled !== 0) acc.expenseByPerson[personKey] = (acc.expenseByPerson[personKey] || 0) + settled;
 
       if ((txn.expensePaymentStatus || 'paid') === 'pending') {
@@ -95,8 +105,8 @@ export class SummaryReconciliationService {
       }
     } else {
       acc.totalIncome += txn.amount;
-      acc.incomeBySource[txn.categoryName] = (acc.incomeBySource[txn.categoryName] || 0) + txn.amount;
-      acc.incomeBySourceId[txn.category] = (acc.incomeBySourceId[txn.category] || 0) + txn.amount;
+      acc.incomeBySource[catName] = (acc.incomeBySource[catName] || 0) + txn.amount;
+      acc.incomeBySourceId[catId] = (acc.incomeBySourceId[catId] || 0) + txn.amount;
       if (settled !== 0) acc.incomeByPerson[personKey] = (acc.incomeByPerson[personKey] || 0) + settled;
 
       if ((txn.paymentStatus || 'received') === 'pending') {

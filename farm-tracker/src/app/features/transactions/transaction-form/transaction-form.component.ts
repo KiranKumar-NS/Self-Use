@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, NgForm } from '@angular/forms';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { CategoryService } from '../../../core/services/category.service';
@@ -38,6 +38,14 @@ import { TagService } from '../../../core/services/tag.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
 
+/** Control name -> the label shown in the form, for the "required fields" message. */
+const FIELD_LABELS: Record<string, string> = {
+  amount: 'Amount', segment: 'Segment', category: 'Category', date: 'Date',
+  quantity: 'Quantity', ratePerUnit: 'Rate', unit: 'Unit', paidBy: 'Paid By',
+  customPaidByName: 'Name', newBuyerName: 'Customer name', newSupplierName: 'Supplier name',
+  expectedPaymentDate: 'Expected payment date',
+};
+
 @Component({
   selector: 'app-transaction-form',
   standalone: true,
@@ -58,7 +66,7 @@ import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
         <div class="error-message">{{ error() }}</div>
       }
 
-      <form (ngSubmit)="save()">
+      <form #txnForm="ngForm" (ngSubmit)="save(txnForm)">
         <div class="form-row">
           <mat-radio-group [(ngModel)]="type" name="type" (change)="onTypeChange()">
             <mat-radio-button value="expense">Expense</mat-radio-button>
@@ -444,7 +452,14 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   linkedSaleTransactionId = '';
   saleOptions = signal<{ id: string; label: string }[]>([]);
   filteredCategories = signal<Category[]>([]);
-  filteredSegments = signal<Segment[]>([]);
+  /** Derived, not snapshotted: auth.service live-watches the user's own profile doc, so an
+   *  admin changing their assigned segments must re-filter this list without a reload. */
+  filteredSegments = computed<Segment[]>(() => {
+    const segments = this.allSegments();
+    if (this.authService.isAdmin()) return segments;
+    const assigned = this.authService.assignedSegments();
+    return segments.filter((s) => assigned.includes(s.id));
+  });
 
   nameSuggestions = signal<string[]>([]);
   private knownNames: string[] = [];
@@ -503,11 +518,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
       )];
     } catch {}
 
-    // Filter segments by user access
-    const accessibleSegments = this.authService.isAdmin()
-      ? segments
-      : segments.filter((s) => this.authService.assignedSegments().includes(s.id));
-    this.filteredSegments.set(accessibleSegments);
+    // filteredSegments is a computed over allSegments + the live auth profile
     this.onTypeChange();
 
     // Check if editing
@@ -749,8 +760,26 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
     }
   }
 
-  async save(): Promise<void> {
+  async save(form?: NgForm): Promise<void> {
     this.error.set('');
+
+    // The `required` markers on Segment/Category/Amount only render errors once a control
+    // is touched, and nothing used to stop an invalid submit — a transaction could be saved
+    // with an empty category, which then breaks summary reconciliation (empty Firestore map key).
+    if (form && form.invalid) {
+      form.control.markAllAsTouched();
+      const missing = Object.entries(form.controls)
+        .filter(([, c]) => c.invalid)
+        .map(([name]) => FIELD_LABELS[name] ?? name);
+      this.error.set(
+        missing.length
+          ? `Please fill in the required field${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}.`
+          : 'Please correct the highlighted fields before saving.'
+      );
+      this.cdr.detectChanges();
+      return;
+    }
+
     this.saving.set(true);
 
     try {

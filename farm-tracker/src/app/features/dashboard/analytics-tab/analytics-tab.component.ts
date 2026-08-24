@@ -22,6 +22,21 @@ import { ChartConfiguration } from 'chart.js';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+/** Running per-person tally used by both the initial load and the filtered recompute. */
+interface PersonTally {
+  expensesPaid: number;
+  incomeReceived: number;
+  holding: number;
+  loanHolds: number;
+  loanHoldsDetails: { loanId: string; label: string; amount: number }[];
+  loanOwes: number;
+  loanOwesDetails: { loanId: string; label: string; amount: number }[];
+  /** Spend drawn from a loan in this person's custody — farm money, not their own capital. */
+  loanFundedSpend: number;
+  /** Spend drawn from undistributed income they were holding. */
+  spentFromHeldCash: number;
+}
+
 @Component({
   selector: 'app-analytics-tab',
   standalone: true,
@@ -151,6 +166,12 @@ import { MatIconModule } from '@angular/material/icon';
                 <span class="invest-label">Expenses paid</span>
                 <span class="invest-value expense">{{ p.expensesPaid | currencyInr }}</span>
               </div>
+              @if (p.fundedFromFarmCash > 0) {
+                <div class="invest-row">
+                  <span class="invest-label">…funded from farm cash</span>
+                  <span class="invest-value income">-{{ p.fundedFromFarmCash | currencyInr }}</span>
+                </div>
+              }
               <div class="invest-row">
                 <span class="invest-label">Income received</span>
                 <span class="invest-value income">-{{ p.incomeReceived | currencyInr }}</span>
@@ -393,6 +414,9 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     loanHoldsDetails: { loanId: string; label: string; amount: number }[];
     loanOwes: number;
     loanOwesDetails: { loanId: string; label: string; amount: number }[];
+    loanFundedSpend: number;
+    spentFromHeldCash: number;
+    fundedFromFarmCash: number;
     net: number;
     cashInHand: number;
   }[]>([]);
@@ -528,15 +552,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   }
 
   private async buildInvestmentSummary(expenseTxns: Transaction[]): Promise<void> {
-    const personMap: Record<string, {
-      expensesPaid: number;
-      incomeReceived: number;
-      holding: number;
-      loanHolds: number;
-      loanHoldsDetails: { loanId: string; label: string; amount: number }[];
-      loanOwes: number;
-      loanOwesDetails: { loanId: string; label: string; amount: number }[];
-    }> = {};
+    const personMap: Record<string, PersonTally> = {};
 
     // Build UID→name lookup (cache for reuse in applyFilters)
     if (Object.keys(this.cachedUidToName).length === 0) {
@@ -554,13 +570,17 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     };
 
     const ensurePerson = (name: string) => {
-      if (!personMap[name]) personMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0, loanHolds: 0, loanHoldsDetails: [], loanOwes: 0, loanOwesDetails: [] };
+      if (!personMap[name]) personMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0, loanHolds: 0, loanHoldsDetails: [], loanOwes: 0, loanOwesDetails: [], loanFundedSpend: 0, spentFromHeldCash: 0 };
     };
 
     for (const txn of expenseTxns) {
       const name = resolveKey(txn.paidBy, txn.paidByName || txn.createdByName);
       ensurePerson(name);
-      personMap[name].expensesPaid += settledPortion(txn);
+      const settled = settledPortion(txn);
+      personMap[name].expensesPaid += settled;
+      // Spending drawn from a loan this person holds is farm money, not their own capital.
+      // (loanHolds already nets this out of custody via utilizationRemaining.)
+      if (txn.linkedLoanId) personMap[name].loanFundedSpend += settled;
     }
 
     try {
@@ -666,19 +686,32 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     } catch {}
 
     const summary = Object.entries(personMap)
-      .map(([name, data]) => ({
-        name,
-        ...data,
-        net: data.expensesPaid - data.incomeReceived,
-        // Actual cash this person is holding right now: undistributed income + unused loan funds
-        // in their custody. Loan Owes is a receivable (money to return), so it's excluded here.
-        cashInHand: data.holding + data.loanHolds,
-      }))
+      .map(([name, data]) => {
+        // Spending someone funds out of farm cash they are already holding is not an
+        // investment by them, and it must also draw that cash down. Loan-funded spend is
+        // already netted out of loanHolds, so only the income-custody part reduces holding.
+        const ownSpendBeforeHeld = Math.max(0, data.expensesPaid - data.loanFundedSpend);
+        const spentFromHeldCash = Math.min(ownSpendBeforeHeld, data.holding);
+        const holdingLeft = data.holding - spentFromHeldCash;
+        const fundedFromFarmCash = data.loanFundedSpend + spentFromHeldCash;
+        return {
+          name,
+          ...data,
+          spentFromHeldCash,
+          fundedFromFarmCash,
+          // Own money actually put in, net of anything funded from farm cash in custody.
+          net: data.expensesPaid - fundedFromFarmCash - data.incomeReceived,
+          holding: holdingLeft,
+          // Cash this person holds right now: undistributed income they have not spent,
+          // plus unused loan funds in their custody. Loan Owes is a receivable, so excluded.
+          cashInHand: holdingLeft + data.loanHolds,
+        };
+      })
       .sort((a, b) => b.net - a.net);
 
     this.investmentSummary.set(summary);
     this.maxInvestment.set(summary.length > 0 ? Math.max(...summary.map(s => s.net)) : 0);
-    this.totalUndistributed.set(Object.values(personMap).reduce((s, p) => s + p.holding, 0));
+    this.totalUndistributed.set(summary.reduce((s, p) => s + p.holding, 0));
   }
 
   goToDues(tab: 'receivables' | 'payables' = 'receivables'): void {
@@ -807,19 +840,17 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       if (uid && uid !== 'other' && uidToName2[uid]) return uidToName2[uid];
       return normalizeName(name || 'Unknown');
     };
-    const investMap: Record<string, {
-      expensesPaid: number; incomeReceived: number; holding: number;
-      loanHolds: number; loanHoldsDetails: { loanId: string; label: string; amount: number }[];
-      loanOwes: number; loanOwesDetails: { loanId: string; label: string; amount: number }[];
-    }> = {};
+    const investMap: Record<string, PersonTally> = {};
     const ensurePerson2 = (name: string) => {
-      if (!investMap[name]) investMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0, loanHolds: 0, loanHoldsDetails: [], loanOwes: 0, loanOwesDetails: [] };
+      if (!investMap[name]) investMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0, loanHolds: 0, loanHoldsDetails: [], loanOwes: 0, loanOwesDetails: [], loanFundedSpend: 0, spentFromHeldCash: 0 };
     };
     let distributedTotal = 0;
     for (const t of txns) {
       const name = resolveKey2(t.paidBy, t.paidByName || t.createdByName);
       ensurePerson2(name);
-      investMap[name].expensesPaid += settledPortion(t);
+      const settled = settledPortion(t);
+      investMap[name].expensesPaid += settled;
+      if (t.linkedLoanId) investMap[name].loanFundedSpend += settled;
     }
     for (const t of incomeForRange) {
       const totalAllocated = (t.distributions || []).reduce((s, d) => s + d.amount, 0);
@@ -878,11 +909,25 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       summaryEntries = summaryEntries.filter(([name]) => name === this.filterPaidBy);
     }
     const summary = summaryEntries
-      .map(([name, data]) => ({ name, ...data, net: data.expensesPaid - data.incomeReceived, cashInHand: data.holding + data.loanHolds }))
+      .map(([name, data]) => {
+        const ownSpendBeforeHeld = Math.max(0, data.expensesPaid - data.loanFundedSpend);
+        const spentFromHeldCash = Math.min(ownSpendBeforeHeld, data.holding);
+        const holdingLeft = data.holding - spentFromHeldCash;
+        const fundedFromFarmCash = data.loanFundedSpend + spentFromHeldCash;
+        return {
+          name,
+          ...data,
+          spentFromHeldCash,
+          fundedFromFarmCash,
+          net: data.expensesPaid - fundedFromFarmCash - data.incomeReceived,
+          holding: holdingLeft,
+          cashInHand: holdingLeft + data.loanHolds,
+        };
+      })
       .sort((a, b) => b.net - a.net);
     this.investmentSummary.set(summary);
     this.maxInvestment.set(summary.length > 0 ? Math.max(...summary.map(s => s.net)) : 0);
-    this.totalUndistributed.set(Object.values(investMap).reduce((s, p) => s + p.holding, 0));
+    this.totalUndistributed.set(summary.reduce((s, p) => s + p.holding, 0));
   }
 
   private get rangeLabel(): string {
