@@ -24,6 +24,8 @@ Summary cards (income/expense/profit), stock widget, budget vs actual (monthly m
 
 **Analytics Tab:** Advanced analytics with person/segment/tag filters. Stat tiles are **cash-basis**: Total Expense/Income/Net Profit count settled money only; unsettled amounts surface as separate clickable tiles — "Pending (To Receive)" (pending income → `/dues?tab=receivables`) and "Credit (To Pay)" (pending credit expenses → `/dues?tab=payables`) — both net of partial payments via `pendingRemaining()`. Person investment summary with net investment, expense vs income breakdown (settled cash only via `settledPortion()`), income undistributed amounts, loan holds in custody with per-loan detail. Tag productivity analysis when tag filter is active. Charts: expense by person (bar), expense by category (doughnut), expense by segment (doughnut), monthly expense trend (bar) — all settled-cash amounts.
 
+**Person cards — farm cash vs own money:** Spending someone funded from farm cash they were already holding (undistributed income in their custody, or a loan advance/hold) is **not** their own investment. `spentFromHeldCash = min(expensesPaid − loanFundedSpend, holding)` draws the held balance down, `net = expensesPaid − (loanFundedSpend + spentFromHeldCash) − incomeReceived`, and `cashInHand = holdingLeft + loanHolds`. The card shows the netted-out portion on its own "…funded from farm cash" line, so a manager who spends the float is not credited as having invested in the farm. Same computation in both the dashboard and analytics person summaries.
+
 **Date Range:** Monthly selection or custom period. Default: All Time view. Shared date range filter across all pages with year/month selection.
 
 ### Transactions `/transactions`
@@ -74,12 +76,14 @@ Expense & income CRUD with pagination, sorting, filtering. Fields: amount, date,
 - Balance transfer: link replaced-by/replaces loans
 - Government subsidy: subsidyDetails, effectiveRate
 - Utilization tracking: total, remaining
-- Loan holder: heldByUid/Name
+- Loan holder: heldByUid/Name — **required** on formal loans; holder, source and segments stay editable after creation (sanctioned amount and disbursement date lock once saved)
 - Multi-segment: segments[], segmentNames[]
 - Part-payment and penalty tracking
 - Next payment due date with alerts
-- Closure: fully_paid, pre_closed, balance_transfer, renewed
+- Closure: fully_paid, pre_closed, balance_transfer, renewed — closing zeroes any remaining unused-in-hand
 - **Payment segment override:** All payment forms (EMI, interest, part-payment, penalty, pre-close, close principal) include an "Expense Segment" dropdown defaulting to loan's primary segment, overridable by user. Ensures multi-segment loans attribute expenses to the correct segment.
+
+**Cash Advances (float / imprest)** — `LoanAdvance` in `loan.model.ts`, stored as `advances[]` on the loan doc. Unused loan cash handed to a person to hold for a business purpose. It is **custody, not personal debt**: the person holds `amount − spent − returned` until they either spend it (settled as a business expense) or return it to the holder. Fields: `id, personUid?, personName, amount, spent, returned, date, note?, status (open|settled)`. Managed from the loan detail page's **Advances** tab (give + settle). Derived figures (`LoanDetailComponent`): `advancedOut() = Σ (amount − spent − returned)` over open advances, `holderAvailable() = utilizationRemaining − advancedOut()` — shown as "In hand (holder) · Advanced out to people". Open advances feed the dashboard person cards as loan custody, so settling promptly keeps `cashInHand` honest.
 
 **Repayment Subcollection** `loans/{id}/repayments/{id}`: Individual payments with principal/interest split, EMI number, scheduled due date, payment reference, pre-closure flag, penalty amount.
 
@@ -99,9 +103,11 @@ Unified page (merged Animals + Inventory) with stock summary cards at top and tw
 
 **Sale:** The unified dialog in sale mode creates income transaction (opt-out checkbox; buyer stats flow through TransactionService via linkedBuyerId) + inventory event + updates the animal (saleTransactionId, saleInventoryEventId). Fields: salePrice, salePricePerHead, buyerId/Name (with inline "+ Add New Buyer"), received by, payment method, received/pending, saleDate.
 
-**Vaccination History:** Embedded array on Animal. Fields: vaccineName, date, dosage, administeredBy, nextDueDate, batchNumber, cost. Add via dialog from animal detail page.
+**Vaccination History:** Embedded array on Animal. Fields: vaccineName, date, dosage, administeredBy, nextDueDate, batchNumber, cost, linkedTransactionId. Add via dialog from animal detail page.
 
-**Medical Records:** Embedded array on Animal. Fields: type (treatment/checkup/surgery/emergency), date, disease, symptoms, medicine, dosage, doctor, temperature, weight, cost. Add via dialog from animal detail page.
+**Medical Records:** Embedded array on Animal. Fields: type (treatment/checkup/surgery/emergency), date, disease, symptoms, medicine, dosage, doctor, temperature, weight, cost, linkedTransactionId. Add via dialog from animal detail page.
+
+**Health-cost → expense linking:** Entering a `cost` on the vaccination or medical dialog creates an expense transaction in the animal's segment (category fixed to **Medicine**) with `linkedAnimalIds: [animal.id]`, then calls `AnimalService.attributeCost(..., 'equal')` so the amount lands in `costEntries` / `totalInvested`; the new transaction id is stored as `linkedTransactionId` on the health entry. Both dialogs capture who paid (family member or "Other" + autocompleted name), payment method, and paid/pending status with an optional expected payment date.
 
 **Weight History:** Embedded array on Animal. Fields: date, weight (kg), remarks. Weight chart (Chart.js line graph) on animal detail page. Add via dialog.
 
@@ -159,6 +165,8 @@ Track consumable stock items: feed, medicine, fertilizer, seeds, fuel, diesel, p
 Supplier management (mirrors Buyer model). Fields: name, phone, location, gstNumber, itemCategories[], note.
 
 **Denormalized Stats:** totalOrders, totalAmountPaid, pendingAmount, averageRate, lastOrderDate, ordersBySegment, amountBySegment. Auto-updated on purchase operations.
+
+**Counter sync:** `TransactionService` calls `updateStats()` / `updatePendingAmount()` with signed deltas on expense create, update (including supplier re-link and paid/pending flips) and delete — one order per transaction, matching the reconciler's semantics. Before Aug 2026 these methods had no callers and counters only moved when the reconciler ran.
 
 **Pending Amount:** Track unpaid invoices per supplier via `updatePendingAmount(delta)`.
 

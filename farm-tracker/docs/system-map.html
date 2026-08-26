@@ -168,19 +168,19 @@
 <div class="wrap">
 
 <header class="masthead">
-  <p class="eyebrow">farm-tracker-tn70 · Angular PWA · Firebase · analyzed 17 Jul 2026</p>
+  <p class="eyebrow">farm-tracker-tn70 · Angular PWA · Firebase · analyzed 17 Jul 2026 · refreshed 24 Aug 2026</p>
   <h1>Farm Tracker — System Map &amp; Gap Analysis</h1>
   <p class="lede">
     Every rupee in this system becomes a <strong>Transaction</strong>, and everything else — dues,
     harvest profit, loan books, dashboards, backups — is built around that one collection. This page
-    maps the full flow in five diagrams, then lists the missing cases found in the code and how the
+    maps the full flow in six diagrams, then lists the missing cases found in the code and how the
     current architecture supports what's planned next.
   </p>
   <div class="stats">
     <div class="stat"><div class="num">30+</div><div class="lbl">Routes / pages</div></div>
     <div class="stat"><div class="num">19</div><div class="lbl">Firestore collections</div></div>
     <div class="stat"><div class="num">~30</div><div class="lbl">Core services</div></div>
-    <div class="stat"><div class="num">12</div><div class="lbl">Gaps identified</div></div>
+    <div class="stat"><div class="num">5</div><div class="lbl">Gaps still open</div></div>
     <div class="stat"><div class="num">6 PM</div><div class="lbl">Daily backup (IST)</div></div>
   </div>
 </header>
@@ -269,7 +269,7 @@ flowchart TB
     TXN["Transactions<br/>list · form · detail"]
     DUES["Dues<br/>To Receive / To Pay"]
     LOANS["Owe &amp; Lent<br/>simple + formal loans"]
-    STOCK["Stock<br/>animals · log · mortality · analytics"]
+    STOCK["Stock (unified)<br/>Animals tab · Stock Log tab<br/>· mortality · analytics"]
     HARV["Harvests<br/>yields · sales · costs"]
     BUY["Buyers"]
     SUPP["Suppliers"]
@@ -279,16 +279,19 @@ flowchart TB
     USERS["Users"]
     SETUP["Data Setup<br/>segments · categories · budgets"]
   end
-  DASH -->|"pending income card"| DUES
+  DASH -->|"Pending (To Receive) tile"| DUES
+  DASH -->|"Credit (To Pay) tile<br/>?tab=payables"| DUES
   DASH -->|"loan widget"| LOANS
   DASH -->|"recent txns"| TXN
   DUES -->|"party name"| BUY
   DUES -->|"row"| TXN
-  DUES -->|"mark received / paid"| TXN
-  HARV -->|"Add Expense<br/>?harvestId= prefill"| TXN
+  DUES -->|"mark received / paid<br/>+ partial payments"| TXN
+  HARV -->|"harvestCost → auto expense"| TXN
   HARV -->|"record sale → income txn"| TXN
-  STOCK -->|"sale / cost attribution"| TXN
-  LOANS -->|"EMI / utilization<br/>auto-creates txn"| TXN
+  STOCK -->|"Record Event dialog:<br/>purchase expense · sale income"| TXN
+  STOCK -->|"vaccination / medical cost<br/>→ attributed expense"| TXN
+  MORE -->|"crop activity cost<br/>→ auto expense (skippable)"| TXN
+  LOANS -->|"EMI / utilization / advances<br/>auto-creates txn"| TXN
     </pre>
   </div>
 </section>
@@ -319,12 +322,15 @@ erDiagram
   SUPPLIER |o--o{ TRANSACTION : "linkedSupplierId (expense)"
   HARVEST |o--o{ TRANSACTION : "linkedHarvestId (costs + sales)"
   LOAN |o--o{ TRANSACTION : "linkedLoanId (auto-created)"
-  ANIMAL }o--o{ TRANSACTION : "linkedAnimalIds + cost split"
+  ANIMAL }o--o{ TRANSACTION : "linkedAnimalIds + cost split (purchase, health, feed)"
   MONTHLY_SUMMARY ||--o{ TRANSACTION : "aggregates {month}-{segment}"
   YEARLY_SUMMARY ||--o{ TRANSACTION : "aggregates {year}-{segment}"
   LOAN ||--o{ REPAYMENT : "subcollection"
+  LOAN ||--o{ LOAN_ADVANCE : "advances[] (embedded custody)"
   LOAN |o--o{ LOAN : "personal withdrawal (parentFormalLoanId)"
   HARVEST |o--|| CROP_ACTIVITY : "linkedCropActivityId"
+  HARVEST |o--o| TRANSACTION : "harvestCost → linkedTransactionId"
+  CROP_ACTIVITY |o--o| TRANSACTION : "cost → linkedTransactionId"
   ANIMAL }o--|| SEGMENT : "belongs to"
   INVENTORY_EVENT }o--|| SEGMENT : "mutates currentStock"
   BREEDING_RECORD }o--o{ ANIMAL : "dam / sire → offspring"
@@ -337,8 +343,17 @@ erDiagram
     summaries are <em>denormalized counters</em> (fast dashboard, needs reconciliation);
     dues are <em>live queries</em> (<code>dues.service.ts:40,55</code> — always correct, no drift).
     Harvest profit mixes both: revenue denormalized on the harvest doc, costs queried live via
-    <code>linkedHarvestId</code>. Buyer/Supplier stats are a third, weaker case — counters with
-    <em>no</em> reconciliation tool (see gap G4).
+    <code>linkedHarvestId</code>. Buyer/Supplier stats are a third case — counters, now kept in step
+    on every create/update/delete by <code>transaction.service.ts</code> <em>and</em> re-derivable by
+    the reconciler (gap G4).
+  </div>
+  <div class="callout">
+    <strong>Cost entry has been pulled into the source documents.</strong> A crop activity, a harvest,
+    an animal purchase and a vaccination each create their own expense transaction and remember its id
+    in <code>linkedTransactionId</code> — edit the cost and the expense follows, clear it and the
+    expense is reversed. Crop activities can also opt out entirely
+    (<code>expenseSkipped</code>) when the material came from stock that was already paid for, which is
+    the one case where double-counting was possible.
   </div>
 </section>
 
@@ -347,33 +362,56 @@ erDiagram
   <p class="eyebrow">4 · One rupee's journey</p>
   <h2>Money flow</h2>
   <p class="intro">
-    Four entry points create transactions. Every write atomically increments both summary docs;
-    pending amounts split off into Dues and rejoin the totals only when marked received/paid.
+    Six entry points create transactions — most of them are now cost fields on the record that caused
+    the spend, not manual entries. Every write atomically increments both summary docs; pending
+    amounts split off into Dues and rejoin the <em>cash</em> totals only when marked received/paid.
   </p>
   <div class="panel">
     <pre class="mermaid">
 flowchart LR
   subgraph IN["Money enters"]
     F1["Transaction form<br/>(manual entry)"]
-    F2["Harvest sale dialog<br/>(income + buyer stats)"]
+    F2["Harvest dialogs<br/>sale income · harvestCost expense"]
     F3["Loan engine<br/>EMI · utilization · deductions"]
     F4["Recurring schedule<br/>(processed on app open)"]
+    F5["Stock Record Event<br/>purchase expense · sale income"]
+    F6["Crop activity + animal health<br/>cost → attributed expense"]
   end
   TXN[("transactions<br/>collection")]
   F1 --> TXN
-  F2 --> TXN
+  F2 -->|"linkedHarvestId"| TXN
   F3 -->|"linkedLoanId"| TXN
   F4 --> TXN
+  F5 -->|"linkedAnimalIds"| TXN
+  F6 -->|"linkedTransactionId<br/>(skippable on crop activity)"| TXN
   TXN ==>|"atomic increment()<br/>same batch / runTransaction"| MS[("monthlySummaries<br/>{month}-{segment}")]
   TXN ==> YS[("yearlySummaries<br/>{year}-{segment}")]
-  TXN -->|"paymentStatus = pending"| DUES["Dues page<br/>live query, grouped by party"]
+  TXN -->|"status = pending<br/>(net of partial payments)"| DUES["Dues page<br/>live query, grouped by party"]
   DUES -->|"mark received / paid"| TXN
-  MS --> DASH["Dashboard analytics<br/>income − pendingIncome = received"]
+  MS --> DASH["Dashboard analytics<br/>cash-basis tiles + Pending / Credit"]
   YS --> DASH
   TXN -->|"loaded txns"| CHARTS["Charts · person investment<br/>· tag / category breakdowns"]
   MS -.->|"drift?"| RECON["summary-reconciliation.service<br/>(admin repair)"]
   RECON -.-> MS
     </pre>
+  </div>
+  <div class="panel">
+    <pre class="mermaid">
+flowchart LR
+  BANK["Formal loan<br/>sanctioned − deductions"] -->|"net disbursed"| HOLD["Held By (holder)<br/>utilizationRemaining"]
+  HOLD -->|"give advance<br/>advances[] status=open"| PERSON["Person holds a float<br/>amount − spent − returned"]
+  PERSON -->|"settle: spent"| TXN[("expense transaction")]
+  PERSON -->|"settle: returned"| HOLD
+  HOLD -->|"utilisation spend"| TXN
+  PERSON -.->|"open balance"| CARD["Dashboard person card<br/>Cash in Hand · funded from farm cash"]
+  HOLD -.->|"in hand (holder)"| CARD
+    </pre>
+  </div>
+  <div class="callout">
+    <strong>Custody is not investment.</strong> Loan cash sitting with a person, and undistributed
+    income they are holding, both show as <em>Cash in Hand</em>. When they spend it, the dashboard
+    marks that portion "…funded from farm cash" and keeps it out of their own net investment — so the
+    person who handles the money is not mistaken for the person who funded the farm.
   </div>
 </section>
 
@@ -415,9 +453,9 @@ flowchart LR
 <!-- ══════════════════ 6. GAPS ══════════════════ -->
 <section id="gaps">
   <p class="eyebrow">6 · What's missing</p>
-  <h2>Gap analysis — 12 missing cases (7 fixed on 17 Jul 2026)</h2>
+  <h2>Gap analysis — 12 missing cases (7 fixed, 5 open)</h2>
   <p class="intro">
-    Found by reading the code, not guessing. Each gap cites the file that proves it. <span class="chip done">Fixed</span> = resolved and deployed on 17 Jul 2026; G3 and G6–G9 were deliberately deferred.
+    Found by reading the code, not guessing. Each gap cites the file that proves it. <span class="chip done">Fixed</span> = resolved and deployed (17–20 Jul 2026, with supplier counters wired live in the Aug 2026 QA round); G3 and G6–G9 were deliberately deferred and are still open.
     <span class="chip high">High</span> = loses or hides money data today ·
     <span class="chip med">Medium</span> = risk grows over time ·
     <span class="chip low">Low</span> = quality of life.
@@ -449,7 +487,7 @@ flowchart LR
         <tr>
           <td class="nowrap">G4</td><td><span class="chip done">Fixed</span></td>
           <td><strong>Buyer / Supplier counters can drift and have no repair tool.</strong> Summaries got a reconciliation service; counterparty stats didn't.</td>
-          <td><code>totalPurchases</code>, <code>amountBySegment</code> etc. are incremented on writes but never re-derived. Edits/deletes of old transactions slowly corrupt them.</td>
+          <td><code>totalPurchases</code>, <code>amountBySegment</code> etc. are incremented on writes but never re-derived. Edits/deletes of old transactions slowly corrupt them. <em>Aug 2026:</em> supplier counters were also found to have <em>no</em> live callers at all — <code>transaction.service.ts</code> now adjusts them with signed deltas on create/update/delete.</td>
           <td><span class="path">buyer.service.ts</span> / <span class="path">supplier.service.ts</span> — <code>updateStats()</code></td>
         </tr>
         <tr>
@@ -511,30 +549,35 @@ flowchart LR
   <h2>Future roadmap — what the architecture already supports</h2>
   <p class="intro">
     The Transaction-hub design means most future features are "one more link field + one more
-    service" rather than a rewrite. Two features are already planned; the gaps above suggest four more.
+    service" rather than a rewrite. Three of the features listed here have since shipped; the
+    remaining gaps suggest what is next.
   </p>
   <div class="cards">
     <div class="card">
-      <h3><span class="chip plan">Planned</span> Loan disbursement suite</h3>
-      <p>Formal loans with EMI, deductions, utilization, balance transfer and personal holdings — the design already exists.</p>
+      <h3><span class="chip done">Shipped</span> Loan disbursement suite</h3>
+      <p>Formal loans with EMI, deductions, utilization, balance transfer and personal holdings — plus cash advances that were not in the original design.</p>
       <ul>
-        <li>Engine is largely built: <span class="path">loan-math.ts</span> (unit-tested EMI schedules), utilization + child-loan links already in the model.</li>
-        <li>Remember G6: any new subcollection must be added to the backup script.</li>
+        <li>Built on <span class="path">loan-math.ts</span> (unit-tested EMI schedules), with utilization + child-loan links in the model.</li>
+        <li><strong>Advances</strong> (<code>advances[]</code>, Jul 2026) hand unused loan cash to a person as a float: custody, settled later as spent or returned. Holder custody = <code>utilizationRemaining − Σ open advances</code>.</li>
+        <li><code>heldBy</code> is mandatory; holder/source/segments stay editable, and closure zeroes unused-in-hand.</li>
+        <li>Embedded array, not a subcollection — so G6 (backup blind spot) does not bite here.</li>
       </ul>
     </div>
     <div class="card">
-      <h3><span class="chip plan">Planned</span> Per-animal cost tracking</h3>
-      <p>Individual animal P&amp;L, buyer management, profit-per-animal analysis.</p>
+      <h3><span class="chip done">Shipped</span> Animal cost tracking</h3>
+      <p>Per-batch P&amp;L, buyer management, mortality analysis — arrived alongside the Animals + Inventory merge.</p>
       <ul>
-        <li>Hooks exist: <code>costEntries</code>, cost attribution by days-active, <code>saleTransactionId</code>, mortality loss estimates.</li>
-        <li>Missing piece is the analysis layer — <span class="path">animal-analytics</span> can grow into it.</li>
+        <li>Every stock-count change flows through one <span class="path">inventory-event-dialog</span> (event / sale / death modes), so parallel entry paths can no longer double-count.</li>
+        <li>Purchases, vaccinations and medical records attribute their cost to the batch via <code>costEntries</code> → <code>totalInvested</code> → profit on sale.</li>
+        <li>New records are batches (a batch of 1 is valid); individual records remain readable and sellable as legacy.</li>
       </ul>
     </div>
     <div class="card">
-      <h3><span class="chip high">From G1+G2</span> Dues, done properly</h3>
-      <p>Partial payments, expected-payment dates, aging buckets (30/60/90 days), dues in the notification bell.</p>
+      <h3><span class="chip done">Shipped</span> Dues, done properly</h3>
+      <p>Partial payments, expected-payment dates, aging, and dues in the notification bell — plus dashboard tiles that link straight into each tab.</p>
       <ul>
-        <li>Add <code>amountReceived</code> + <code>expectedDate</code> to Transaction; the live-query design of <span class="path">dues.service.ts</span> absorbs this without counter migration.</li>
+        <li><code>amountReceived</code>/<code>amountPaid</code> + <code>expectedPaymentDate</code> on Transaction; <span class="path">dues.service.ts</span> stayed a live query, so no counter migration was needed.</li>
+        <li>Stat tiles turned cash-basis at the same time: profit counts settled money, and everything unsettled shows as Pending (To Receive) / Credit (To Pay).</li>
       </ul>
     </div>
     <div class="card">
@@ -545,26 +588,30 @@ flowchart LR
       </ul>
     </div>
     <div class="card">
-      <h3><span class="chip med">From G4+G12</span> One reconciliation night</h3>
-      <p>Run the summary reconciliation on prod, then extend the same pattern to buyer/supplier stats.</p>
+      <h3><span class="chip med">From G4+G12</span> Keep the counters honest</h3>
+      <p>The prod reconciliation run happened (17 Jul 2026, 18 summary docs corrected) and buyer/supplier stats now update live. What is left is making it routine.</p>
       <ul>
-        <li><span class="path">summary-reconciliation.service.ts</span> is the template: re-derive from raw transactions, report drift, rewrite.</li>
+        <li><span class="path">summary-reconciliation.service.ts</span> is the template: re-derive from raw transactions, report drift, rewrite. Blank category keys now fall into an uncategorized bucket instead of failing the whole batch.</li>
+        <li>Worth scheduling rather than remembering — see the server-side layer card.</li>
       </ul>
     </div>
     <div class="card">
-      <h3><span class="chip med">From G5+G8</span> Close the paper trail</h3>
-      <p>Link stock movements to their expense transactions; attach receipt photos via Firebase Storage.</p>
+      <h3><span class="chip med">From G8</span> Close the paper trail</h3>
+      <p>Consumable stock movements now carry their expense link (G5); receipt photos via Firebase Storage are still missing.</p>
       <ul>
-        <li>Same pattern as harvest costs: a <code>linkedTransactionId</code> on <code>StockMovement</code> + a live query.</li>
+        <li>Bills and weighment slips remain on paper — Storage is not wired into <span class="path">app.config.ts</span> at all.</li>
+        <li>The link pattern to copy is already everywhere: <code>linkedTransactionId</code> on the source doc + a live query.</li>
       </ul>
     </div>
   </div>
 </section>
 
 <footer>
-  Generated from code exploration of <code>d:\kk\self-use-repo\farm-tracker</code> on 17 Jul 2026.
+  Generated from code exploration of <code>d:\kk\self-use-repo\farm-tracker</code> on 17 Jul 2026;
+  refreshed 24 Aug 2026 against the Stock merge, dues tiles, loan advances and auto-linked costs.
   Diagram claims spot-checked against <span class="path">dues.service.ts</span>,
-  <span class="path">transaction.service.ts</span> and <span class="path">backup-script/Code.gs</span>.
+  <span class="path">transaction.service.ts</span>, <span class="path">loan-detail.component.ts</span>
+  and <span class="path">backup-script/Code.gs</span>.
 </footer>
 
 </div>
