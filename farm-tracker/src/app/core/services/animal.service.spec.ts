@@ -31,6 +31,7 @@ vi.mock('@angular/fire/firestore', () => {
     orderBy: vi.fn(),
     where: vi.fn(),
     limit: vi.fn(),
+    updateDoc: vi.fn().mockResolvedValue(undefined),
     writeBatch: vi.fn(() => batchMethods),
     serverTimestamp: vi.fn(() => 'SERVER_TS'),
     Timestamp: {
@@ -57,7 +58,7 @@ vi.mock('@angular/core', async () => {
 });
 
 import { AnimalService } from './animal.service';
-import { writeBatch } from '@angular/fire/firestore';
+import { writeBatch, updateDoc } from '@angular/fire/firestore';
 
 describe('AnimalService', () => {
   let service: AnimalService;
@@ -534,6 +535,93 @@ describe('AnimalService', () => {
         trackingMode: 'batch',
         segmentName: 'Goats', batchSize: 10, id: 'abc123def',
       } as any)).toBe('Batch of 10 Goats');
+    });
+  });
+
+  // ──────────── editing an event's Count propagates to the batch ────────────
+
+  describe('setOriginCount', () => {
+    function lastUpdate() {
+      return (updateDoc as any).mock.calls.slice(-1)[0][1];
+    }
+
+    it('should resize an untouched batch', async () => {
+      queueGetDoc({ batchSize: 10, currentCount: 10, status: 'active' });
+      await service.setOriginCount('a1', 12);
+      expect(lastUpdate()).toMatchObject({ batchSize: 12, currentCount: 12 });
+    });
+
+    it('should keep already-exited heads when resizing', async () => {
+      // 10 bought, 3 sold → 7 left. Correcting the purchase to 12 leaves 9 in hand.
+      queueGetDoc({ batchSize: 10, currentCount: 7, status: 'active' });
+      await service.setOriginCount('a1', 12);
+      expect(lastUpdate()).toMatchObject({ batchSize: 12, currentCount: 9 });
+    });
+
+    it('should refuse to shrink below the heads that already left', async () => {
+      queueGetDoc({ batchSize: 10, currentCount: 4, status: 'active' });
+      await expect(service.setOriginCount('a1', 5)).rejects.toThrow(/already been sold or died/);
+    });
+
+    it('should reactivate a fully-exited batch that regains heads', async () => {
+      queueGetDoc({ batchSize: 5, currentCount: 0, status: 'sold' });
+      await service.setOriginCount('a1', 8);
+      expect(lastUpdate()).toMatchObject({ batchSize: 8, currentCount: 3, status: 'active' });
+    });
+  });
+
+  describe('adjustExitCount', () => {
+    function lastUpdate() {
+      return (updateDoc as any).mock.calls.slice(-1)[0][1];
+    }
+
+    it('should draw the batch down when more heads are sold', async () => {
+      queueGetDoc({ batchSize: 10, currentCount: 8, status: 'active' });
+      await service.adjustExitCount('a1', 3, 'sale', new Date('2026-05-15'));
+      expect(lastUpdate()).toMatchObject({ currentCount: 5 });
+    });
+
+    it('should mark the batch sold when the last head leaves', async () => {
+      queueGetDoc({ batchSize: 10, currentCount: 2, status: 'active' });
+      await service.adjustExitCount('a1', 2, 'sale', new Date('2026-05-15'));
+      expect(lastUpdate()).toMatchObject({ currentCount: 0, status: 'sold', exitType: 'sale' });
+    });
+
+    it('should reactivate a sold batch when the count is corrected downwards', async () => {
+      queueGetDoc({ batchSize: 10, currentCount: 0, status: 'sold' });
+      await service.adjustExitCount('a1', -4, 'sale', new Date('2026-05-15'));
+      expect(lastUpdate()).toMatchObject({ currentCount: 4, status: 'active', exitType: null });
+    });
+
+    it('should refuse to exit more heads than remain', async () => {
+      queueGetDoc({ batchSize: 10, currentCount: 2, status: 'active' });
+      await expect(service.adjustExitCount('a1', 5, 'death', new Date())).rejects.toThrow(/Only 2 head remain/);
+    });
+
+    it('should refuse to push the batch above its original size', async () => {
+      queueGetDoc({ batchSize: 10, currentCount: 10, status: 'active' });
+      await expect(service.adjustExitCount('a1', -2, 'sale', new Date())).rejects.toThrow(/only ever held 10/);
+    });
+
+    it('should do nothing when the count is unchanged', async () => {
+      await service.adjustExitCount('a1', 0, 'sale', new Date());
+      expect((updateDoc as any)).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setSaleAmount', () => {
+    it('should recompute profit from the new sale price', async () => {
+      queueGetDoc({ status: 'sold', totalInvested: 50000 });
+      await service.setSaleAmount('a1', 78000, 6);
+      expect((updateDoc as any).mock.calls.slice(-1)[0][1]).toMatchObject({
+        salePrice: 78000, salePricePerHead: 13000, profit: 28000, profitMargin: 56,
+      });
+    });
+
+    it('should leave a partially-sold batch alone (it has no single sale price)', async () => {
+      queueGetDoc({ status: 'active', totalInvested: 50000 });
+      await service.setSaleAmount('a1', 78000, 6);
+      expect((updateDoc as any)).not.toHaveBeenCalled();
     });
   });
 });

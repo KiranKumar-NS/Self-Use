@@ -117,6 +117,115 @@ export class AnimalService {
     await batch.commit();
   }
 
+  /**
+   * Find the animal an inventory event created or affected, for events recorded before
+   * `linkedAnimalIds` was stamped on them. Tries the three back-links an animal keeps
+   * (origin / sale / death) in turn. `isDeleted` is filtered in memory so this needs no
+   * composite index.
+   */
+  async getByEventLink(eventId: string): Promise<Animal | null> {
+    const fields = ['originInventoryEventId', 'saleInventoryEventId', 'deathInventoryEventId'];
+    for (const field of fields) {
+      const snapshot = await getDocs(query(
+        collection(this.firestore, 'animals'),
+        where(field, '==', eventId),
+        limit(5),
+      ));
+      const match = snapshot.docs.map(d => d.data() as Animal).find(a => !a.isDeleted);
+      if (match) return match;
+    }
+    return null;
+  }
+
+  /**
+   * Resize the batch a purchase/birth event created, when that event's Count is edited.
+   * Heads that already left (sold or dead) are preserved: batchSize moves to the new
+   * count and currentCount keeps the same number of exits. Refuses to shrink below what
+   * has already left, since that would imply selling animals that never existed.
+   */
+  async setOriginCount(animalId: string, newCount: number): Promise<void> {
+    const animalRef = doc(this.firestore, 'animals', animalId);
+    const snap = await getDoc(animalRef);
+    if (!snap.exists()) return;
+    const animal = snap.data() as Animal;
+
+    const exits = Math.max(0, animal.batchSize - animal.currentCount);
+    if (newCount < exits) {
+      throw new Error(
+        `Cannot reduce to ${newCount} — ${exits} of this batch ${exits === 1 ? 'has' : 'have'} already been sold or died.`,
+      );
+    }
+    const remaining = newCount - exits;
+    const updates: Record<string, any> = {
+      batchSize: newCount,
+      currentCount: remaining,
+    };
+    // A batch that regains heads is active again; one drained to zero takes the
+    // status of however its heads left.
+    if (remaining > 0 && animal.status !== 'active') updates['status'] = 'active';
+    await updateDoc(animalRef, updates);
+  }
+
+  /**
+   * Move an animal's remaining count when a sale/death event's Count is edited.
+   * `delta` is the change in heads that LEFT (+2 = two more sold, -1 = one fewer).
+   * Flips status between active and sold/dead as the count crosses zero.
+   */
+  async adjustExitCount(animalId: string, delta: number, exitType: 'sale' | 'death', date: Date): Promise<void> {
+    if (!delta) return;
+    const animalRef = doc(this.firestore, 'animals', animalId);
+    const snap = await getDoc(animalRef);
+    if (!snap.exists()) return;
+    const animal = snap.data() as Animal;
+
+    const newCount = animal.currentCount - delta;
+    if (newCount < 0) {
+      throw new Error(`Only ${animal.currentCount} head remain in this batch — cannot record ${delta} more.`);
+    }
+    if (newCount > animal.batchSize) {
+      throw new Error(`This batch only ever held ${animal.batchSize} head.`);
+    }
+    const updates: Record<string, any> = { currentCount: newCount };
+    if (newCount <= 0) {
+      updates['status'] = exitType === 'sale' ? 'sold' : 'dead';
+      updates['exitDate'] = Timestamp.fromDate(date);
+      updates['exitType'] = exitType;
+    } else if (animal.status !== 'active') {
+      // Some heads came back into the batch — it is no longer fully exited.
+      updates['status'] = 'active';
+      updates['exitDate'] = null;
+      updates['exitType'] = null;
+    }
+    await updateDoc(animalRef, updates);
+  }
+
+  /** Keep the animal's death cause in step when its death event is edited. */
+  async setDeathCause(animalId: string, deathCause: string): Promise<void> {
+    await updateDoc(doc(this.firestore, 'animals', animalId), { deathCause: deathCause || null });
+  }
+
+  /**
+   * Rewrite the sale amount on an already-sold animal when its sale event is edited.
+   * Mirrors the profit math in recordSale so the two paths can never disagree.
+   */
+  async setSaleAmount(animalId: string, salePrice: number, countSold: number): Promise<void> {
+    const animalRef = doc(this.firestore, 'animals', animalId);
+    const snap = await getDoc(animalRef);
+    if (!snap.exists()) return;
+    const animal = snap.data() as Animal;
+    if (animal.status !== 'sold') return; // partial sale — the batch has no single sale price
+
+    const updates: Record<string, any> = {
+      salePrice,
+      salePricePerHead: countSold > 1 ? Math.round((salePrice / countSold) * 100) / 100 : salePrice,
+      profit: salePrice - animal.totalInvested,
+      profitMargin: animal.totalInvested > 0
+        ? Math.round(((salePrice - animal.totalInvested) / animal.totalInvested) * 10000) / 100
+        : 0,
+    };
+    await updateDoc(animalRef, updates);
+  }
+
   async getAll(filters: { segment?: string; status?: string; breed?: string } = {}, pageSize = 200): Promise<Animal[]> {
     const constraints: any[] = [where('isDeleted', '==', false)];
     if (filters.segment) constraints.push(where('segment', '==', filters.segment));

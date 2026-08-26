@@ -23,8 +23,8 @@ import { Animal } from '../../../core/models/animal.model';
 import { Buyer } from '../../../core/models/buyer.model';
 import { Category } from '../../../core/models/category.model';
 import { AppUser } from '../../../core/models/user.model';
-import { PaymentMethod, ExpensePaymentStatus, IncomePaymentStatus, SaleUnit } from '../../../core/models/transaction.model';
-import { InventoryEvent, InventoryEventType } from '../../../core/models/inventory.model';
+import { PaymentMethod, ExpensePaymentStatus, IncomePaymentStatus, SaleUnit, Transaction } from '../../../core/models/transaction.model';
+import { InventoryEvent, InventoryEventType, InventoryEventFormData } from '../../../core/models/inventory.model';
 import { ANIMAL_EVENT_TYPES } from '../../../core/models/segment.model';
 import { getMonthString, getYear } from '../../../core/utils/date.utils';
 import { normalizeName, nameKey } from '../../../core/utils/name.utils';
@@ -228,6 +228,98 @@ export interface InventoryEventDialogData {
           </mat-form-field>
         }
 
+        <!-- Editing: amount + payment of the transaction this event created -->
+        @if (isEdit() && eventType() === 'purchase' && editAnimal()) {
+          <mat-form-field appearance="outline">
+            <mat-label>Purchase Price (total)</mat-label>
+            <input matInput type="number" [(ngModel)]="purchasePrice" min="0" />
+          </mat-form-field>
+        }
+
+        @if (isEdit() && (eventType() === 'purchase' || eventType() === 'sale')) {
+          @if (editTxn(); as txn) {
+            <div class="full-width linked-txn-note">
+              Updates the linked {{ txn.type === 'income' ? 'income' : 'expense' }} transaction
+              <strong>{{ txn.description }}</strong> — no new transaction is created.
+            </div>
+
+            @if (eventType() === 'purchase') {
+              <mat-form-field appearance="outline">
+                <mat-label>Expense Category</mat-label>
+                <mat-select [(ngModel)]="expenseCategoryId">
+                  @for (cat of expenseCategories(); track cat.id) {
+                    <mat-option [value]="cat.id">{{ cat.name }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            }
+
+            <mat-form-field appearance="outline">
+              <mat-label>Payment</mat-label>
+              <mat-select [(ngModel)]="paymentMethod">
+                <mat-option value="cash">Cash</mat-option>
+                <mat-option value="upi">UPI</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            @if (eventType() === 'purchase') {
+              <mat-form-field appearance="outline">
+                <mat-label>Status</mat-label>
+                <mat-select [(ngModel)]="expenseStatus">
+                  <mat-option value="paid">Paid</mat-option>
+                  <mat-option value="pending">Pending</mat-option>
+                </mat-select>
+              </mat-form-field>
+            } @else {
+              <mat-form-field appearance="outline">
+                <mat-label>Status</mat-label>
+                <mat-select [(ngModel)]="incomeStatus">
+                  <mat-option value="received">Received</mat-option>
+                  <mat-option value="pending">Pending</mat-option>
+                </mat-select>
+              </mat-form-field>
+            }
+
+            @if (eventType() === 'purchase' ? expenseStatus === 'pending' : incomeStatus === 'pending') {
+              <mat-form-field appearance="outline">
+                <mat-label>Expected Payment Date (optional)</mat-label>
+                <input matInput [matDatepicker]="editExpectedPicker" [(ngModel)]="expectedPaymentDate" />
+                <mat-datepicker-toggle matIconSuffix [for]="editExpectedPicker" />
+                <mat-datepicker #editExpectedPicker />
+              </mat-form-field>
+            }
+
+            <mat-form-field appearance="outline">
+              <mat-label>{{ eventType() === 'purchase' ? 'Paid By' : 'Received By' }}</mat-label>
+              <mat-select [(ngModel)]="paidBy" (selectionChange)="onPaidByChange()">
+                @for (u of users(); track u.uid) {
+                  <mat-option [value]="u.uid">{{ u.displayName }}</mat-option>
+                }
+                <mat-option value="other">Other (type name)</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            @if (paidBy === 'other') {
+              <mat-form-field appearance="outline">
+                <mat-label>Enter Name</mat-label>
+                <input matInput [(ngModel)]="customPaidByName" required placeholder="e.g. Raju"
+                       (ngModelChange)="filterNameSuggestions()" (focus)="filterNameSuggestions()"
+                       [matAutocomplete]="editNameAuto" />
+                <mat-autocomplete #editNameAuto="matAutocomplete">
+                  @for (n of nameSuggestions(); track n) {
+                    <mat-option [value]="n">{{ n }}</mat-option>
+                  }
+                </mat-autocomplete>
+              </mat-form-field>
+            }
+          } @else {
+            <div class="full-width linked-txn-note muted">
+              No transaction is linked to this event — record or correct the amount from the
+              Transactions page. Editing here updates the stock count only.
+            </div>
+          }
+        }
+
         <!-- Purchase/birth always creates a batch animal record -->
         @if (!isEdit() && (eventType() === 'purchase' || eventType() === 'birth')) {
           @if (eventType() === 'purchase') {
@@ -335,6 +427,8 @@ export interface InventoryEventDialogData {
     .animal-info { margin-bottom: 16px; font-size: 0.95rem; }
     .batch-note { color: var(--color-text-secondary); margin-left: 4px; }
     .animal-record-section { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
+    .linked-txn-note { font-size: 0.82rem; color: var(--color-text-secondary); margin: 4px 0 8px; line-height: 1.45; }
+    .linked-txn-note.muted { color: var(--color-text-muted); }
   `],
 })
 export class InventoryEventDialogComponent implements OnInit {
@@ -377,6 +471,11 @@ export class InventoryEventDialogComponent implements OnInit {
   batchLabel = '';
   eventTypeOptions = ANIMAL_EVENT_TYPES;
   private allBreeds = signal<string[]>([]);
+
+  // Edit mode: what this event already created, so an update never duplicates it
+  editAnimal = signal<Animal | null>(null);
+  editTxn = signal<Transaction | null>(null);
+  private originalCount = 0;
 
   // Income transaction (sale) — opt-out via checkbox, mirrors the purchase expense
   createIncomeTxn = true;
@@ -450,10 +549,56 @@ export class InventoryEventDialogComponent implements OnInit {
       this.segment.set(ev.segment);
       this.eventType.set(ev.eventType);
       this.count.set(ev.eventType === 'adjustment' ? ev.count : Math.abs(ev.count));
+      this.originalCount = Math.abs(ev.count);
       this.breed.set(ev.breed || '');
       this.date.set(ev.date.toDate());
       this.note.set(ev.note);
+      this.estimatedValue = ev.estimatedValue ?? null;
+      this.deathCause = ev.deathCause || '';
       this.loadBreeds(ev.segment);
+      await this.loadEditLinks(ev);
+    }
+  }
+
+  /**
+   * Resolve what this event created — the batch record and the purchase/sale transaction —
+   * so an edit can update them in place. Events recorded before the back-link existed fall
+   * back to the animal's own links; anything still unresolved leaves the money fields hidden
+   * rather than guessing.
+   */
+  private async loadEditLinks(ev: InventoryEvent): Promise<void> {
+    try {
+      let animal: Animal | null = null;
+      const linkedId = ev.linkedAnimalIds?.[0];
+      if (linkedId) animal = await this.animalService.getById(linkedId);
+      if (!animal) animal = await this.animalService.getByEventLink(ev.id);
+      this.editAnimal.set(animal);
+      if (animal) this.deathCause ||= animal.deathCause || '';
+
+      const txnId = ev.linkedTransactionId
+        || (ev.eventType === 'purchase' ? animal?.purchaseTransactionId : undefined)
+        || (ev.eventType === 'sale' ? animal?.saleTransactionId : undefined);
+      if (!txnId) return;
+
+      const txn = await this.transactionService.getById(txnId);
+      if (!txn || txn.isDeleted) return;
+      this.editTxn.set(txn);
+
+      // Mirror the transaction into the form controls it shares with the create path
+      if (ev.eventType === 'purchase') {
+        this.purchasePrice = txn.amount;
+        this.expenseCategoryId = txn.category;
+        this.expenseStatus = txn.expensePaymentStatus || 'paid';
+      } else {
+        this.salePrice = txn.amount;
+        this.incomeStatus = txn.paymentStatus || 'received';
+      }
+      this.paymentMethod = txn.paymentMethod || 'cash';
+      this.paidBy = txn.paidBy || '';
+      this.customPaidByName = txn.paidBy === 'other' ? (txn.paidByName || '') : '';
+      this.expectedPaymentDate = txn.expectedPaymentDate?.toDate?.() || null;
+    } catch (err) {
+      console.error('Failed to load linked records for this event', err);
     }
   }
 
@@ -558,7 +703,11 @@ export class InventoryEventDialogComponent implements OnInit {
 
   saveDisabled(): boolean {
     if (this.saving() || !this.segment() || !this.eventType() || !this.count()) return true;
-    if (this.isEdit()) return false;
+    if (this.isEdit()) {
+      // The linked transaction is being rewritten, so it needs a payer just like on create
+      if (this.editTxn() && this.paidBy === 'other' && !this.customPaidByName.trim()) return true;
+      return false;
+    }
     const et = this.eventType();
     if (this.mode === 'sale' && (!this.salePrice || this.salePrice <= 0)) return true;
     if (et === 'sale' && this.createIncomeTxn && !!this.salePrice && this.salePrice > 0) {
@@ -568,6 +717,91 @@ export class InventoryEventDialogComponent implements OnInit {
     if (et === 'purchase' && this.createPurchaseExpense && !!this.purchasePrice && this.purchasePrice > 0
       && this.paidBy === 'other' && !this.customPaidByName.trim()) return true;
     return false;
+  }
+
+  /**
+   * Update an existing event and everything it produced, IN PLACE — the batch's head
+   * count and price, and the linked transaction's amount. Nothing is ever created here:
+   * an edit that could create a second animal or a duplicate expense is exactly the
+   * double-entry the single-dialog design exists to prevent.
+   *
+   * Order matters: the animal writes validate and throw first (a batch that already sold
+   * heads refuses to shrink), so a rejected edit leaves the event and transaction untouched.
+   */
+  private async saveEdit(formData: InventoryEventFormData, segmentName: string): Promise<void> {
+    const ev = this.data.event!;
+    const animal = this.editAnimal();
+    const txn = this.editTxn();
+    const newCount = Math.abs(this.count());
+    const countChanged = this.eventType() !== 'adjustment' && newCount !== this.originalCount;
+
+    // 1. Propagate the head count to the batch record
+    if (countChanged && animal) {
+      if (ev.eventType === 'purchase' || ev.eventType === 'birth') {
+        await this.animalService.setOriginCount(animal.id, newCount);
+      } else if (ev.eventType === 'sale' || ev.eventType === 'death') {
+        await this.animalService.adjustExitCount(
+          animal.id, newCount - this.originalCount,
+          ev.eventType === 'sale' ? 'sale' : 'death', this.date(),
+        );
+      }
+    }
+
+    // 2. Money — the batch's own price/sale figures, then the linked transaction
+    if (animal && ev.eventType === 'purchase' && this.purchasePrice != null
+      && this.purchasePrice !== (animal.purchasePrice ?? 0)) {
+      await this.animalService.update(animal.id, { purchasePrice: this.purchasePrice });
+    }
+    if (animal && ev.eventType === 'sale' && this.salePrice != null) {
+      await this.animalService.setSaleAmount(animal.id, this.salePrice, newCount);
+    }
+    if (animal && ev.eventType === 'death' && this.deathCause.trim() !== (animal.deathCause || '')) {
+      await this.animalService.setDeathCause(animal.id, this.deathCause.trim());
+    }
+
+    if (txn) {
+      const isPurchase = ev.eventType === 'purchase';
+      const amount = (isPurchase ? this.purchasePrice : this.salePrice) ?? txn.amount;
+      const isCustom = this.paidBy === 'other';
+      const paidByUser = isCustom ? null : this.users().find(u => u.uid === this.paidBy);
+      const cat = this.expenseCategories().find(c => c.id === this.expenseCategoryId);
+      const pendingStatus = isPurchase ? this.expenseStatus === 'pending' : this.incomeStatus === 'pending';
+      // Keep the head count in the description honest when Count is corrected
+      const label = animal ? this.animalService.getDisplayName(animal) : segmentName;
+      const description = isPurchase
+        ? `Purchase of ${label} — ${newCount} head`
+        : `Sale of ${label}${txn.linkedBuyerName ? ' to ' + txn.linkedBuyerName : ''}`;
+
+      await this.transactionService.update(txn.id, {
+        type: txn.type,
+        date: this.date(),
+        amount,
+        quantity: newCount,
+        unit: 'head' as SaleUnit,
+        ratePerUnit: newCount > 0 ? Math.round((amount / newCount) * 100) / 100 : amount,
+        category: isPurchase ? this.expenseCategoryId : txn.category,
+        categoryName: isPurchase ? (cat?.name || txn.categoryName) : txn.categoryName,
+        segment: this.segment(),
+        segmentName,
+        description,
+        paymentMethod: this.paymentMethod,
+        paymentStatus: txn.type === 'income' ? this.incomeStatus : undefined,
+        expensePaymentStatus: txn.type === 'expense' ? this.expenseStatus : undefined,
+        expectedPaymentDate: pendingStatus ? (this.expectedPaymentDate || undefined) : undefined,
+        paidBy: isCustom ? 'other' : (this.paidBy || undefined),
+        paidByName: isCustom ? normalizeName(this.customPaidByName) : paidByUser?.displayName,
+        linkedAnimalIds: txn.linkedAnimalIds,
+        linkedAnimalNames: txn.linkedAnimalNames,
+        linkedBuyerId: txn.linkedBuyerId,
+        linkedBuyerName: txn.linkedBuyerName,
+        tags: txn.tags,
+        month: getMonthString(this.date()),
+        year: getYear(this.date()),
+      });
+    }
+
+    // 3. The event itself (and the segment stock delta) last
+    await this.inventoryService.updateEvent(ev.id, ev, formData);
   }
 
   async save(): Promise<void> {
@@ -611,10 +845,11 @@ export class InventoryEventDialogComponent implements OnInit {
         month: getMonthString(this.date()),
         year: getYear(this.date()),
         estimatedValue: this.eventType() === 'death' && this.estimatedValue ? this.estimatedValue : undefined,
+        deathCause: this.eventType() === 'death' ? (this.deathCause.trim() || undefined) : undefined,
       };
 
       if (this.isEdit() && this.data.event) {
-        await this.inventoryService.updateEvent(this.data.event.id, this.data.event, formData);
+        await this.saveEdit(formData, segmentName);
       } else {
         // 1. Income transaction for the sale (opt-out via checkbox).
         //    Buyer stats flow through TransactionService (linkedBuyerId).
@@ -653,6 +888,7 @@ export class InventoryEventDialogComponent implements OnInit {
 
         // 3. Purchase/birth always creates a batch animal record
         if (this.eventType() === 'purchase' || this.eventType() === 'birth') {
+          let purchaseTxnId: string | undefined;
           const animalLabel = this.batchLabel.trim() || this.suggestedBatchLabel();
           const animalId = await this.animalService.create({
             segment: this.segment(),
@@ -698,7 +934,12 @@ export class InventoryEventDialogComponent implements OnInit {
             });
             this.tagService.addTags(['animal-purchase']);
             await this.animalService.setPurchaseTransaction(animalId, txnId);
+            purchaseTxnId = txnId;
           }
+
+          // Back-link the event to what it produced so a later edit can update both
+          // in place instead of creating duplicates.
+          await this.inventoryService.setLinks(eventId, { animalId, transactionId: purchaseTxnId });
         }
 
         // 4. Update linked animal on sale/death
@@ -719,6 +960,13 @@ export class InventoryEventDialogComponent implements OnInit {
               this.deathCause.trim() || undefined, eventId,
             );
           }
+          await this.inventoryService.setLinks(eventId, {
+            animalId: linkedAnimal.id,
+            transactionId: saleTxnId,
+          });
+        } else if (saleTxnId) {
+          // Sale recorded straight against the segment, with no batch linked
+          await this.inventoryService.setLinks(eventId, { transactionId: saleTxnId });
         }
       }
       this.dialogRef.close(true);

@@ -95,6 +95,13 @@ Unified page (merged Animals + Inventory) with stock summary cards at top and tw
 
 **Auto Animal Record Creation:** Recording a purchase/birth event ALWAYS creates a **batch** animal record (no checkbox, no tracking-mode choice): batchSize = event count (a 1-head batch is valid), breed, purchase price, and a batch label (auto-suggested "Segment Mon-Year" fallback when left blank). A purchase can also auto-create the linked expense transaction (who-paid, category, paid/pending). Deleting an active animal with no recorded exits also reverses its origin inventory event so the stock count stays correct (skipped for legacy animals or ones with recorded sales/deaths).
 
+**Editing an event (update in place, never create):** Creating an event stamps `linkedAnimalIds` + `linkedTransactionId` onto the event doc (`InventoryService.setLinks()`), so reopening it can reach the batch and the transaction it produced. On edit the dialog loads both, prefills the amount and payment fields from the transaction, and on save:
+- **Count** propagates — `AnimalService.setOriginCount()` resizes a purchase/birth batch (keeping heads that already left, refusing to shrink below them), `adjustExitCount()` moves a sale/death batch's `currentCount` and flips `status` as it crosses zero. The transaction's `quantity`/`ratePerUnit` follow.
+- **Amount** propagates — `TransactionService.update()` rewrites the linked transaction (which carries the summary deltas, dues, and buyer/supplier counters), plus `animal.purchasePrice` via `AnimalService.update()` or `setSaleAmount()` for a fully-sold batch.
+- The animal writes run **first** so a rejected edit (e.g. shrinking below sold heads) leaves the event and transaction untouched.
+- The transaction's `description` is regenerated from the new count/label, so "Purchase of X — 4 head" does not survive a correction to 6. Changing a sale's amount clears any income `distributions` on it — `TransactionService.update()`'s existing rule (a split is no longer valid at a different amount), identical to editing from the Transactions page.
+- Nothing is ever created on an edit — no second animal record, no duplicate expense. Events recorded before Aug 2026 have no back-link; the dialog falls back to `AnimalService.getByEventLink()` (queries `originInventoryEventId`/`saleInventoryEventId`/`deathInventoryEventId`, filters `isDeleted` in memory so no composite index is needed) and, failing that, hides the money fields and points at the Transactions page.
+
 **Batch Animals:** batchLabel, batchSize, currentCount. Origin: birth (with breed info) or purchase (with price). Status: active → sold/dead with exit tracking.
 
 **Individual Animals (legacy):** tag/ID, name, breed, gender (male/female/unknown). New individual records are no longer created — existing docs remain fully viewable, editable via `/stock/:id/edit`, and sellable/death-recordable (count locked to 1).
@@ -184,7 +191,7 @@ Unified scheduling engine for recurring transactions and scheduled reminders. Sh
 
 ### Inventory Events
 
-Birth/death/purchase/sale/adjustment events. Count: positive (add) or negative (remove). Auto-updates segment.currentStock atomically via batch writes. Breed tracking. Estimated value for mortality/loss analysis. Linked to animals via linkedAnimalIds.
+Birth/death/purchase/sale/adjustment events. Count: positive (add) or negative (remove). Auto-updates segment.currentStock atomically via batch writes. Breed tracking. Estimated value for mortality/loss analysis. Linked to animals via linkedAnimalIds and to its money via linkedTransactionId (see **Editing an event** under Stock).
 
 ### Buyers `/buyers`
 
@@ -297,7 +304,7 @@ id, name, phone?, location?, note?, totalPurchases, totalAmountPaid, averageRate
 id, name, phone?, location?, gstNumber?, itemCategories?[], totalOrders, totalAmountPaid, pendingAmount, averageRate?, lastOrderDate?, ordersBySegment? {segmentId: count}, amountBySegment? {segmentId: amount}, note?, createdBy, createdByName, createdAt, isDeleted
 
 ### `inventoryEvents/{id}`
-id, segment, segmentName, eventType (`birth|death|purchase|sale|adjustment`), count (+add/-remove), breed?, note, date, createdBy, createdByName, createdAt, month, year, isDeleted?, linkedAnimalIds[]?, estimatedValue?
+id, segment, segmentName, eventType (`birth|death|purchase|sale|adjustment`), count (+add/-remove), breed?, note, date, createdBy, createdByName, createdAt, month, year, isDeleted?, linkedAnimalIds[]? (the batch this event created or drew from), linkedTransactionId? (the purchase expense / sale income it created), estimatedValue?, deathCause?
 
 ### `inventoryItems/{id}`
 id, name, category (`feed|medicine|fertilizer|seeds|fuel|diesel|packaging|tools|other`), unit, currentStock, minimumStock?, segments[], segmentNames[], movements [{id, date, type (`opening|purchase|used|adjustment|wastage`), quantity (+/-), unitCost?, totalCost?, linkedTransactionId?, supplierId?, supplierName?, note?, recordedBy, recordedByName}], totalPurchased, totalUsed, totalWastage, totalSpent, lastPurchaseRate?, averagePurchaseRate?, note?, createdBy, createdByName, createdAt, isDeleted

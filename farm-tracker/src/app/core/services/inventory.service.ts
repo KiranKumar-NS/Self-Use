@@ -11,6 +11,7 @@ import {
   limit,
   writeBatch,
   WriteBatch,
+  updateDoc,
   serverTimestamp,
   increment,
   arrayUnion,
@@ -56,6 +57,9 @@ export class InventoryService {
       year: data.year,
     };
     if (data.estimatedValue) eventDoc['estimatedValue'] = data.estimatedValue;
+    if (data.deathCause) eventDoc['deathCause'] = data.deathCause;
+    if (data.linkedAnimalIds?.length) eventDoc['linkedAnimalIds'] = data.linkedAnimalIds;
+    if (data.linkedTransactionId) eventDoc['linkedTransactionId'] = data.linkedTransactionId;
     batch.set(eventRef, eventDoc);
 
     // Update segment's currentStock + add breed if new
@@ -67,6 +71,20 @@ export class InventoryService {
     await batch.commit();
     this.segmentService.clearCache();
     return eventRef.id;
+  }
+
+  /**
+   * Stamp the animal / transaction an event created onto the event itself.
+   * Called right after recordEvent() because the batch record and its expense are
+   * created afterwards — without this back-link, editing the event later has no way
+   * to find what it produced (see the fallback in InventoryEventDialogComponent).
+   */
+  async setLinks(eventId: string, links: { animalId?: string; transactionId?: string }): Promise<void> {
+    const updates: Record<string, any> = {};
+    if (links.animalId) updates['linkedAnimalIds'] = [links.animalId];
+    if (links.transactionId) updates['linkedTransactionId'] = links.transactionId;
+    if (!Object.keys(updates).length) return;
+    await updateDoc(doc(this.firestore, 'inventoryEvents', eventId), updates);
   }
 
   async getEvents(segmentId?: string, pageSize = 50): Promise<InventoryEvent[]> {
@@ -143,6 +161,9 @@ export class InventoryService {
       year: data.year,
       estimatedValue: data.estimatedValue || null,
     };
+    // Only death events carry a cause; leave the field alone for every other type
+    // so an edit can never blank a value the form never showed.
+    if (data.eventType === 'death') updateData['deathCause'] = data.deathCause || null;
     batch.update(doc(this.firestore, 'inventoryEvents', eventId), updateData);
 
     // Reverse old stock, apply new

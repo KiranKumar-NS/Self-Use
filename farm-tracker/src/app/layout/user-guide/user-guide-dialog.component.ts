@@ -602,6 +602,7 @@ export class UserGuideDialogComponent implements OnInit {
         { action: 'Track health', detail: 'Open a batch → add vaccination (with next-due date), medical record, or weight log. Entering a cost creates a Medicine expense attributed to that batch — just pick who paid, Cash/UPI and paid/pending' },
         { action: 'Sell', detail: 'From the batch detail page → the same dialog in sale mode: buyer (or "+ Add New Buyer"), price, Received By, received/pending. Creates the income transaction and updates the count' },
         { action: 'Record death', detail: 'Same dialog in death mode: cause and estimated value → decrements stock and feeds the mortality dashboard' },
+        { action: 'Fix a mistake', detail: 'Stock Log tab → edit the event. Changing the count or the amount updates the batch and its linked expense/income in place — it never creates a second one' },
         { action: 'View analytics & mortality', detail: 'The Analytics link shows ROI and cost breakdown per batch; the Mortality link shows death rate, causes and estimated loss' },
       ],
       example: {
@@ -621,6 +622,7 @@ export class UserGuideDialogComponent implements OnInit {
       consequences: [
         { skip: 'Don\'t enter the purchase price', result: 'No expense is created and the batch looks free — profit shows the entire sale amount, which is misleading' },
         { skip: 'Record stock changes somewhere else', result: 'There is nowhere else — every count change is a Record Event. Editing a batch never touches the count, so numbers can\'t drift' },
+        { skip: 'Re-record an event instead of editing it', result: 'You get the stock counted twice and two expenses for one purchase. Edit the original event — it corrects the batch and the money together' },
         { skip: 'Don\'t record vaccinations', result: 'No vaccination reminders — you may miss booster dates, risking animal health and potential disease outbreak' },
         { skip: 'Don\'t log weight', result: 'No growth chart — you can\'t spot underperforming batches or identify which feed works best' },
         { skip: 'Don\'t link buyer during sale', result: 'Buyer\'s purchase history doesn\'t update — can\'t see total business with that buyer' },
