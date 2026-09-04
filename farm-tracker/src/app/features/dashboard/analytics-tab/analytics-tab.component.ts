@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, inject, signal, Input, OnChanges, SimpleChanges, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, computed, Input, OnChanges, SimpleChanges, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { Transaction, pendingRemaining, settledPortion } from '../../../core/models/transaction.model';
+import { MonthlySummary } from '../../../core/models/monthly-summary.model';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { LoanService } from '../../../core/services/loan.service';
 import { Loan } from '../../../core/models/loan.model';
@@ -236,15 +237,26 @@ interface PersonTally {
         </mat-card>
       </div>
 
-      <!-- Segment Cards -->
-      <h3 class="section-title">Segments</h3>
+      <!-- Segment Cards: profit per segment from summaries when unfiltered,
+           filtered expense totals when a person/tag/segment chip is active -->
+      <h3 class="section-title">{{ hasFilters() ? 'Segments' : 'Profit by Segment' }}</h3>
       <div class="summary-grid">
-        @for (seg of segmentTotals(); track seg.name) {
-          <mat-card class="stat-card">
-            <span class="stat-label">{{ seg.name }}</span>
-            <span class="stat-value">{{ seg.total | currencyInr }}</span>
-            <span class="stat-count">{{ seg.count }} txns</span>
-          </mat-card>
+        @if (hasFilters()) {
+          @for (seg of segmentTotals(); track seg.name) {
+            <mat-card class="stat-card">
+              <span class="stat-label">{{ seg.name }}</span>
+              <span class="stat-value">{{ seg.total | currencyInr }}</span>
+              <span class="stat-count">{{ seg.count }} txns</span>
+            </mat-card>
+          }
+        } @else {
+          @for (seg of segmentProfit(); track seg.segment) {
+            <mat-card class="stat-card" [class.profit]="seg.profit >= 0" [class.loss]="seg.profit < 0">
+              <span class="stat-label">{{ seg.name }}</span>
+              <span class="stat-value" [class.income-text]="seg.profit >= 0" [class.expense-text]="seg.profit < 0">{{ seg.profit | currencyInr }}</span>
+              <span class="stat-count">In {{ seg.income | currencyInr }} · Out {{ seg.expense | currencyInr }}</span>
+            </mat-card>
+          }
         }
       </div>
 
@@ -400,6 +412,15 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   summaryNetProfit = signal(0);
   summaryPendingIncome = signal(0);
   summaryPendingExpense = signal(0);
+  /** Raw summaries for the selected range — the single source for every per-segment figure. */
+  private rangeSummaries = signal<MonthlySummary[]>([]);
+  /** Settled-cash income / expense / profit per segment, same basis as the tiles above. */
+  segmentProfit = computed(() =>
+    this.summaryService.settledBySegment(this.rangeSummaries()).map(s => ({
+      ...s,
+      name: this.segments().find(x => x.id === s.segment)?.name || s.segment,
+    })),
+  );
 
   // Computed stats (from loaded transactions — used for charts/breakdowns)
   totalExpense = signal(0);
@@ -491,18 +512,21 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
 
       // Fetch transactions AND pre-aggregated summaries in parallel
       // Summaries give accurate totals; transactions are for breakdowns/charts
-      const [result, summaryTotals] = await Promise.all([
+      const [result, summaries] = await Promise.all([
         this.transactionService.getAll(filters, 200),
-        this.loadSummaryTotals(),
+        this.loadSummaries(),
       ]);
 
       // Set accurate totals from summaries.
       // Summaries count money at billing time, so strip pending (unreceived)
       // sales and credit (unpaid) purchases out of the tiles and surface them
       // separately as Pending (To Receive) / Credit (To Pay).
-      this.summaryTotalExpense.set(summaryTotals.totalExpense - summaryTotals.pendingExpense);
-      this.summaryTotalIncome.set(summaryTotals.totalIncome - summaryTotals.pendingIncome);
-      this.summaryNetProfit.set(summaryTotals.netProfit - summaryTotals.pendingIncome + summaryTotals.pendingExpense);
+      const summaryTotals = this.summaryService.aggregateSummaries(summaries);
+      const settled = this.summaryService.settledTotals(summaries);
+      this.rangeSummaries.set(summaries);
+      this.summaryTotalExpense.set(settled.expense);
+      this.summaryTotalIncome.set(settled.income);
+      this.summaryNetProfit.set(settled.profit);
       this.summaryPendingIncome.set(summaryTotals.pendingIncome);
       this.summaryPendingExpense.set(summaryTotals.pendingExpense);
 
@@ -531,23 +555,19 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     }, this.toast);
   }
 
-  /** Load accurate totals from pre-aggregated monthly/yearly summaries */
-  private async loadSummaryTotals(): Promise<{ totalExpense: number; totalIncome: number; netProfit: number; pendingIncome: number; pendingExpense: number }> {
+  /** Load the pre-aggregated monthly summaries covering the selected date range. */
+  private async loadSummaries(): Promise<MonthlySummary[]> {
     try {
       if (this.currentSelection.mode === 'monthly' && this.currentSelection.month) {
-        const summaries = await this.summaryService.getForMonth(this.currentSelection.month);
-        return this.summaryService.aggregateSummaries(summaries);
+        return await this.summaryService.getForMonth(this.currentSelection.month);
       } else if (this.currentSelection.mode === 'custom') {
         const months = getMonthRange(this.currentSelection.fromMonth!, this.currentSelection.toMonth!);
-        const summaries = await this.summaryService.getForMonthsBatched(months);
-        return this.summaryService.aggregateSummaries(summaries);
-      } else {
-        // All time — use all monthly summaries
-        const summaries = await this.summaryService.getAll();
-        return this.summaryService.aggregateSummaries(summaries);
+        return await this.summaryService.getForMonthsBatched(months);
       }
+      // All time — use all monthly summaries
+      return await this.summaryService.getAll();
     } catch {
-      return { totalExpense: 0, totalIncome: 0, netProfit: 0, pendingIncome: 0, pendingExpense: 0 };
+      return [];
     }
   }
 

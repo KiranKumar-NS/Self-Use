@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, computed, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -9,10 +9,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 
 import { AnimalService } from '../../../core/services/animal.service';
+import { TransactionService } from '../../../core/services/transaction.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { Animal } from '../../../core/models/animal.model';
 import { Transaction } from '../../../core/models/transaction.model';
-import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
+import { AnimalSplitMode, computeCostSplits, daysActive } from '../../../core/utils/animal-cost.utils';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 
 export interface CostAttributionDialogData {
@@ -41,7 +42,7 @@ export interface CostAttributionDialogData {
       } @else {
         <div class="split-mode">
           <label class="field-label">Split Mode</label>
-          <mat-select [(ngModel)]="splitMode" (selectionChange)="onSplitModeChange()">
+          <mat-select [ngModel]="splitMode()" (ngModelChange)="splitMode.set($event)">
             <mat-option value="equal">Equal split</mat-option>
             <mat-option value="by_days">Split by days active</mat-option>
             <mat-option value="custom">Custom amounts</mat-option>
@@ -69,8 +70,8 @@ export interface CostAttributionDialogData {
                   <span class="days-info">{{ getDaysActive(animal) }} days</span>
                 }
               </div>
-              @if (splitMode() === 'by_days' && isSelected(animal.id)) {
-                <span class="computed-amount">{{ getByDaysAmount(animal.id) | currencyInr }}</span>
+              @if (splitMode() !== 'custom' && isSelected(animal.id)) {
+                <span class="computed-amount">{{ previewSplits()[animal.id] || 0 | currencyInr }}</span>
               }
               @if (splitMode() === 'custom' && isSelected(animal.id)) {
                 <mat-form-field appearance="outline" class="amount-field">
@@ -83,14 +84,12 @@ export interface CostAttributionDialogData {
         </div>
 
         @if (selectedIds().length > 0) {
-          <div class="summary">
+          <div class="summary" [class.over]="customOver()">
             <span>{{ selectedIds().length }} selected</span>
-            @if (splitMode() === 'equal') {
-              <span>{{ perAnimalAmount() | currencyInr }} each</span>
-            } @else if (splitMode() === 'by_days') {
-              <span>{{ data.transaction.amount | currencyInr }} (proportional)</span>
-            } @else {
+            @if (splitMode() === 'custom') {
               <span>{{ customTotal() | currencyInr }} / {{ data.transaction.amount | currencyInr }}</span>
+            } @else {
+              <span>{{ data.transaction.amount | currencyInr }} split</span>
             }
           </div>
         }
@@ -103,8 +102,11 @@ export interface CostAttributionDialogData {
 
     <mat-dialog-actions align="end">
       <button mat-button (click)="dialogRef.close()">Cancel</button>
+      @if (data.transaction.linkedAnimalIds?.length) {
+        <button mat-button color="warn" [disabled]="saving()" (click)="unlink()">Unlink all</button>
+      }
       <button mat-flat-button color="primary"
-        [disabled]="saving() || selectedIds().length === 0"
+        [disabled]="saving() || selectedIds().length === 0 || customOver()"
         (click)="save()">
         {{ saving() ? 'Saving...' : 'Link' }}
       </button>
@@ -125,6 +127,7 @@ export interface CostAttributionDialogData {
     .computed-amount { font-size: 0.85rem; font-weight: 600; color: var(--color-expense); min-width: 70px; text-align: right; }
     .amount-field { width: 100px; margin-left: 8px; }
     .summary { display: flex; justify-content: space-between; padding: 12px 0; font-weight: 600; color: var(--color-text-subtle); border-top: 2px solid var(--color-border); margin-top: 8px; }
+    .summary.over { color: var(--color-danger); }
     .empty { color: var(--color-text-secondary); padding: 1rem 0; }
     .error-msg { background: var(--color-expense-bg); color: var(--color-danger); padding: 8px 16px; border-radius: 6px; margin-top: 8px; }
   `],
@@ -133,17 +136,39 @@ export class CostAttributionDialogComponent implements OnInit {
   data = inject<CostAttributionDialogData>(MAT_DIALOG_DATA);
   dialogRef = inject(MatDialogRef<CostAttributionDialogComponent>);
   animalService = inject(AnimalService);
-  private firestore = inject(Firestore);
+  private transactionService = inject(TransactionService);
   private toast = inject(ToastService);
 
   animals = signal<Animal[]>([]);
   saving = signal(false);
   error = signal('');
 
-  splitMode = signal<'equal' | 'custom' | 'by_days'>('equal');
+  splitMode = signal<AnimalSplitMode>('equal');
   selectedIds = signal<string[]>([]);
   customAmounts = signal<Record<string, number>>({});
-  private byDaysAmounts: Record<string, number> = {};
+
+  /** Same split math the write path applies, so the preview always matches what is saved. */
+  previewSplits = computed<Record<string, number>>(() => {
+    const selected = this.selectedIds();
+    const targets = selected
+      .map(id => this.animals().find(a => a.id === id))
+      .filter((a): a is Animal => !!a);
+    return computeCostSplits(
+      targets,
+      this.data.transaction.amount,
+      this.splitMode(),
+      this.data.transaction.date.toDate(),
+      this.customAmounts(),
+    );
+  });
+
+  customTotal = computed(() =>
+    this.selectedIds().reduce((s, id) => s + (this.customAmounts()[id] || 0), 0),
+  );
+
+  customOver = computed(() =>
+    this.splitMode() === 'custom' && this.customTotal() > this.data.transaction.amount + 0.005,
+  );
 
   async ngOnInit(): Promise<void> {
     try {
@@ -178,119 +203,35 @@ export class CostAttributionDialogComponent implements OnInit {
     } else {
       this.selectedIds.set([...this.selectedIds(), id]);
     }
-    if (this.splitMode() === 'by_days') this.recalcByDays();
   }
 
   setCustomAmount(id: string, amount: number): void {
     this.customAmounts.update(amounts => ({ ...amounts, [id]: amount }));
   }
 
-  onSplitModeChange(): void {
-    if (this.splitMode() === 'by_days') {
-      this.recalcByDays();
-    }
-  }
-
   getDaysActive(animal: Animal): number {
-    const expenseDate = this.data.transaction.date.toDate().getTime();
-    const originMs = animal.originDate.toDate().getTime();
-    return Math.max(1, Math.ceil((expenseDate - originMs) / (1000 * 60 * 60 * 24)));
-  }
-
-  getByDaysAmount(animalId: string): number {
-    return this.byDaysAmounts[animalId] || 0;
-  }
-
-  private recalcByDays(): void {
-    this.byDaysAmounts = {};
-    const selectedIds = this.selectedIds();
-    if (selectedIds.length === 0) return;
-
-    const totalAmount = this.data.transaction.amount;
-    let totalDays = 0;
-    const daysByAnimal: Record<string, number> = {};
-
-    for (const id of selectedIds) {
-      const animal = this.animals().find(a => a.id === id);
-      if (!animal) continue;
-      const days = this.getDaysActive(animal);
-      daysByAnimal[id] = days;
-      totalDays += days;
-    }
-
-    if (totalDays === 0) return;
-
-    let allocated = 0;
-    for (let i = 0; i < selectedIds.length; i++) {
-      const id = selectedIds[i];
-      if (i === selectedIds.length - 1) {
-        this.byDaysAmounts[id] = Math.round((totalAmount - allocated) * 100) / 100;
-      } else {
-        const share = Math.round(((daysByAnimal[id] || 1) / totalDays) * totalAmount * 100) / 100;
-        this.byDaysAmounts[id] = share;
-        allocated += share;
-      }
-    }
-  }
-
-  perAnimalAmount(): number {
-    if (this.selectedIds().length === 0) return 0;
-    return Math.round((this.data.transaction.amount / this.selectedIds().length) * 100) / 100;
-  }
-
-  customTotal(): number {
-    return Object.values(this.customAmounts()).reduce((s, v) => s + (v || 0), 0);
+    return daysActive(animal.originDate, this.data.transaction.date.toDate());
   }
 
   async save(): Promise<void> {
+    await this.commit(this.selectedIds());
+  }
+
+  async unlink(): Promise<void> {
+    await this.commit([]);
+  }
+
+  /** One atomic write: txn link fields + timeline + every affected animal's ledger. */
+  private async commit(animalIds: string[]): Promise<void> {
     this.saving.set(true);
     this.error.set('');
-
     try {
-      const txn = this.data.transaction;
-
-      // Remove old attributions first
-      if (txn.linkedAnimalIds?.length) {
-        for (const oldId of txn.linkedAnimalIds) {
-          await this.animalService.removeCost(oldId, txn.id);
-        }
-      }
-
-      // Apply new attributions
-      const animalNames = this.selectedIds().map(id => {
-        const a = this.animals().find(x => x.id === id);
-        return a ? this.animalService.getDisplayName(a) : id;
-      });
-
-      await this.animalService.attributeCost(
-        this.selectedIds(),
-        txn.id,
-        {
-          category: txn.category,
-          categoryName: txn.categoryName,
-          date: txn.date.toDate(),
-          totalAmount: txn.amount,
-          description: txn.description,
-        },
+      await this.transactionService.setAnimalAttribution(
+        this.data.transaction.id,
+        animalIds,
         this.splitMode(),
-        this.splitMode() === 'custom' ? this.customAmounts() : undefined
+        this.splitMode() === 'custom' ? this.customAmounts() : undefined,
       );
-
-      // Store the computed splits for reference
-      const actualSplits = this.splitMode() === 'by_days' ? this.byDaysAmounts
-        : this.splitMode() === 'custom' ? this.customAmounts() : undefined;
-
-      // Update the transaction document with linked animal IDs
-      const txnRef = doc(this.firestore, 'transactions', txn.id);
-      const txnUpdates: Record<string, any> = {
-        linkedAnimalIds: this.selectedIds(),
-        linkedAnimalNames: animalNames,
-      };
-      if (actualSplits) {
-        txnUpdates['animalCostSplit'] = actualSplits;
-      }
-      await updateDoc(txnRef, txnUpdates);
-
       this.dialogRef.close(true);
     } catch (err: any) {
       this.error.set(err.message || 'Failed to link');

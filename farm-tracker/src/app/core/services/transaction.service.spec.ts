@@ -13,7 +13,8 @@ const mockInjected = {
   canViewSegment: () => true,
   clearCache: () => undefined,
   updateStats: undefined as any, // assigned per-test via vi.fn()
-  removeCost: undefined as any, // AnimalService.removeCost, assigned per-test via vi.fn()
+  // AnimalService.getDisplayName (pure) — used by setAnimalAttribution for linkedAnimalNames
+  getDisplayName: (a: any) => a.batchLabel || a.name || a.id,
 };
 
 vi.mock('@angular/fire/firestore', () => {
@@ -123,8 +124,13 @@ describe('TransactionService', () => {
     mockGetDocResults.length = 0;
     mockTxnCaptures.length = 0;
     mockInjected.updateStats = vi.fn().mockResolvedValue(undefined);
-    mockInjected.removeCost = vi.fn().mockResolvedValue(undefined);
   });
+
+  /** Updates the last runTransaction issued against a given collection path prefix. */
+  function updatesFor(prefix: string): any[][] {
+    const txn = mockTxnCaptures.slice(-1)[0];
+    return txn.update.mock.calls.filter((c: any[]) => c[0].path.startsWith(prefix));
+  }
 
   const baseExpenseData = {
     type: 'expense' as const,
@@ -463,21 +469,50 @@ describe('TransactionService', () => {
       expect(mockInjected.updateStats).toHaveBeenCalledWith('buyer-1', -5000, -5, null, 'seg1');
     });
 
-    it('should remove attributed cost from each linked animal (ANI-09)', async () => {
+    it('should strip the attributed cost from each linked animal inside the same transaction (ANI-09)', async () => {
       queueGetDoc({
         ...baseExpenseData, isDeleted: false, createdBy: 'test-uid', timeline: [],
         date: { toDate: () => new Date() },
         linkedAnimalIds: ['a1', 'a2'],
       });
+      // Linked animals are read inside the transaction, in linkedAnimalIds order
+      queueGetDoc({
+        purchasePrice: 5000, status: 'active', totalCosts: 700, totalInvested: 5700,
+        costEntries: [{ transactionId: 'txn-1', amount: 500 }, { transactionId: 'txn-9', amount: 200 }],
+      });
+      queueGetDoc({
+        purchasePrice: 0, status: 'sold', salePrice: 3000, totalCosts: 500, totalInvested: 500,
+        costEntries: [{ transactionId: 'txn-1', amount: 500 }],
+      });
 
       await service.softDelete('txn-1');
 
-      expect(mockInjected.removeCost).toHaveBeenCalledTimes(2);
-      expect(mockInjected.removeCost).toHaveBeenCalledWith('a1', 'txn-1');
-      expect(mockInjected.removeCost).toHaveBeenCalledWith('a2', 'txn-1');
+      const animalUpdates = updatesFor('animals/');
+      expect(animalUpdates).toHaveLength(2);
+      const a1 = animalUpdates.find(c => c[0].path === 'animals/a1')![1];
+      expect(a1.costEntries).toEqual([{ transactionId: 'txn-9', amount: 200 }]);
+      expect(a1.totalCosts).toBe(200);
+      expect(a1.totalInvested).toBe(5200);
+      const a2 = animalUpdates.find(c => c[0].path === 'animals/a2')![1];
+      expect(a2.costEntries).toEqual([]);
+      expect(a2.totalInvested).toBe(0);
+      expect(a2.profit).toBe(3000); // sold animal's profit is recomputed
     });
 
-    it('should not touch animals when the txn has no links', async () => {
+    it('should leave a linked animal untouched when its ledger has no entry for the txn', async () => {
+      queueGetDoc({
+        ...baseExpenseData, isDeleted: false, createdBy: 'test-uid', timeline: [],
+        date: { toDate: () => new Date() },
+        linkedAnimalIds: ['a1'],
+      });
+      queueGetDoc({ purchasePrice: 5000, status: 'active', costEntries: [{ transactionId: 'txn-9', amount: 200 }] });
+
+      await service.softDelete('txn-1');
+
+      expect(updatesFor('animals/')).toHaveLength(0);
+    });
+
+    it('should not read animals when the txn has no links', async () => {
       queueGetDoc({
         ...baseExpenseData, isDeleted: false, createdBy: 'test-uid', timeline: [],
         date: { toDate: () => new Date() },
@@ -485,25 +520,136 @@ describe('TransactionService', () => {
 
       await service.softDelete('txn-1');
 
-      expect(mockInjected.removeCost).not.toHaveBeenCalled();
+      const txn = mockTxnCaptures.slice(-1)[0];
+      expect(txn.get).toHaveBeenCalledTimes(1);
+      expect(updatesFor('animals/')).toHaveLength(0);
     });
   });
 
   // ──────────── hardDelete ────────────
 
   describe('hardDelete', () => {
-    it('should remove attributed cost from each linked animal (ANI-09)', async () => {
+    it('should strip the attributed cost from each linked animal inside the same transaction (ANI-09)', async () => {
       queueGetDoc({
         ...baseExpenseData, isDeleted: false, createdBy: 'test-uid', timeline: [],
         date: { toDate: () => new Date() },
         linkedAnimalIds: ['a1', 'a2'],
       });
+      queueGetDoc({ purchasePrice: 5000, status: 'active', costEntries: [{ transactionId: 'txn-1', amount: 500 }] });
+      queueGetDoc({ purchasePrice: 5000, status: 'active', costEntries: [{ transactionId: 'txn-1', amount: 500 }] });
 
       await service.hardDelete('txn-1');
 
-      expect(mockInjected.removeCost).toHaveBeenCalledTimes(2);
-      expect(mockInjected.removeCost).toHaveBeenCalledWith('a1', 'txn-1');
-      expect(mockInjected.removeCost).toHaveBeenCalledWith('a2', 'txn-1');
+      const txn = mockTxnCaptures.slice(-1)[0];
+      expect(txn.delete).toHaveBeenCalledTimes(1);
+      const animalUpdates = updatesFor('animals/');
+      expect(animalUpdates.map(c => c[0].path).sort()).toEqual(['animals/a1', 'animals/a2']);
+      expect(animalUpdates[0][1].totalInvested).toBe(5000);
+    });
+  });
+
+  // ──────────── setAnimalAttribution ────────────
+
+  describe('setAnimalAttribution', () => {
+    const origin = { toDate: () => new Date('2026-01-01') };
+    const linkableExpense = (overrides: Record<string, any> = {}) => ({
+      ...baseExpenseData, amount: 3000, isDeleted: false, createdBy: 'test-uid', timeline: [],
+      date: { toDate: () => new Date('2026-03-15'), toMillis: () => new Date('2026-03-15').getTime() },
+      ...overrides,
+    });
+
+    it('should write the animal ledgers and the txn link fields in one transaction', async () => {
+      queueGetDoc(linkableExpense());
+      queueGetDoc({ batchLabel: 'Batch A', purchasePrice: 5000, status: 'active', originDate: origin, costEntries: [] });
+      queueGetDoc({ batchLabel: 'Batch B', purchasePrice: 0, status: 'active', originDate: origin, costEntries: [] });
+
+      await service.setAnimalAttribution('txn-1', ['a1', 'a2'], 'equal');
+
+      const a1 = updatesFor('animals/a1')[0][1];
+      expect(a1.costEntries).toHaveLength(1);
+      expect(a1.costEntries[0]).toMatchObject({ transactionId: 'txn-1', amount: 1500, category: 'cat-feed', categoryName: 'Feed' });
+      expect(a1.totalCosts).toBe(1500);
+      expect(a1.totalInvested).toBe(6500);
+      expect(updatesFor('animals/a2')[0][1].totalInvested).toBe(1500);
+
+      const txnUpdate = updatesFor('transactions/')[0][1];
+      expect(txnUpdate.linkedAnimalIds).toEqual(['a1', 'a2']);
+      expect(txnUpdate.linkedAnimalNames).toEqual(['Batch A', 'Batch B']);
+      expect(txnUpdate.animalCostSplit).toEqual({ a1: 1500, a2: 1500 });
+      expect(txnUpdate.timeline).toHaveLength(1);
+      expect(txnUpdate.timeline[0]).toMatchObject({ action: 'updated', changes: 'animals: none→Batch A, Batch B' });
+    });
+
+    it('should move the cost off animals that are unlinked', async () => {
+      queueGetDoc(linkableExpense({ linkedAnimalIds: ['a1'], linkedAnimalNames: ['Batch A'], animalCostSplit: { a1: 3000 } }));
+      // Read order: old links first, then new
+      queueGetDoc({ batchLabel: 'Batch A', purchasePrice: 5000, status: 'active', originDate: origin, costEntries: [{ transactionId: 'txn-1', amount: 3000 }] });
+      queueGetDoc({ batchLabel: 'Batch B', purchasePrice: 0, status: 'active', originDate: origin, costEntries: [] });
+
+      await service.setAnimalAttribution('txn-1', ['a2'], 'equal');
+
+      expect(updatesFor('animals/a1')[0][1].costEntries).toEqual([]);
+      expect(updatesFor('animals/a2')[0][1].totalCosts).toBe(3000);
+      const txnUpdate = updatesFor('transactions/')[0][1];
+      expect(txnUpdate.linkedAnimalIds).toEqual(['a2']);
+      expect(txnUpdate.timeline[0].changes).toBe('animals: Batch A→Batch B');
+    });
+
+    it('should write nothing when the attribution is already in place (idempotent)', async () => {
+      queueGetDoc(linkableExpense({ linkedAnimalIds: ['a1'], linkedAnimalNames: ['Batch A'], animalCostSplit: { a1: 3000 } }));
+      queueGetDoc({ batchLabel: 'Batch A', purchasePrice: 5000, status: 'active', originDate: origin, costEntries: [{ transactionId: 'txn-1', amount: 3000 }] });
+
+      await service.setAnimalAttribution('txn-1', ['a1'], 'equal');
+
+      const txn = mockTxnCaptures.slice(-1)[0];
+      expect(txn.update).not.toHaveBeenCalled();
+    });
+
+    it('should re-split when the amount changed but the links did not', async () => {
+      queueGetDoc(linkableExpense({ amount: 4000, linkedAnimalIds: ['a1'], linkedAnimalNames: ['Batch A'], animalCostSplit: { a1: 3000 } }));
+      queueGetDoc({ batchLabel: 'Batch A', purchasePrice: 5000, status: 'active', originDate: origin, costEntries: [{ transactionId: 'txn-1', amount: 3000 }] });
+
+      await service.setAnimalAttribution('txn-1', ['a1'], 'equal');
+
+      expect(updatesFor('animals/a1')[0][1].totalCosts).toBe(4000);
+      const txnUpdate = updatesFor('transactions/')[0][1];
+      expect(txnUpdate.animalCostSplit).toEqual({ a1: 4000 });
+      expect(txnUpdate.timeline[0].changes).toBe('animal cost split updated');
+    });
+
+    it('should link but never count the animal purchase expense as a raising cost', async () => {
+      queueGetDoc(linkableExpense({ tags: ['animal-purchase'] }));
+      queueGetDoc({ batchLabel: 'Batch A', purchasePrice: 3000, status: 'active', originDate: origin, costEntries: [] });
+
+      await service.setAnimalAttribution('txn-1', ['a1'], 'equal');
+
+      expect(updatesFor('animals/')).toHaveLength(0);
+      expect(updatesFor('transactions/')[0][1].linkedAnimalIds).toEqual(['a1']);
+    });
+
+    it('should clear the attribution with an empty list', async () => {
+      queueGetDoc(linkableExpense({ linkedAnimalIds: ['a1'], linkedAnimalNames: ['Batch A'], animalCostSplit: { a1: 3000 } }));
+      queueGetDoc({ batchLabel: 'Batch A', purchasePrice: 5000, status: 'sold', salePrice: 9000, originDate: origin, costEntries: [{ transactionId: 'txn-1', amount: 3000 }] });
+
+      await service.setAnimalAttribution('txn-1', [], 'equal');
+
+      const a1 = updatesFor('animals/a1')[0][1];
+      expect(a1.costEntries).toEqual([]);
+      expect(a1.profit).toBe(4000);
+      const txnUpdate = updatesFor('transactions/')[0][1];
+      expect(txnUpdate.linkedAnimalIds).toEqual([]);
+      expect(txnUpdate.animalCostSplit).toBeNull();
+    });
+
+    it('should reject income, deleted and loan-linked transactions', async () => {
+      queueGetDoc(linkableExpense({ type: 'income' }));
+      await expect(service.setAnimalAttribution('txn-1', ['a1'])).rejects.toThrow('Only expenses');
+
+      queueGetDoc(linkableExpense({ isDeleted: true }));
+      await expect(service.setAnimalAttribution('txn-1', ['a1'])).rejects.toThrow('deleted');
+
+      queueGetDoc(linkableExpense({ linkedLoanId: 'loan-1' }));
+      await expect(service.setAnimalAttribution('txn-1', ['a1'])).rejects.toThrow('Loan-linked');
     });
   });
 

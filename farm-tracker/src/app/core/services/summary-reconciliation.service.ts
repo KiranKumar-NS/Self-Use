@@ -19,6 +19,8 @@ import { Transaction, pendingRemaining, settledPortion, personSummaryKey } from 
 import { MonthlySummary, YearlySummary } from '../models/monthly-summary.model';
 import { Buyer } from '../models/buyer.model';
 import { Supplier } from '../models/supplier.model';
+import { Animal } from '../models/animal.model';
+import { costEntriesDiffer, costFieldsFromEntries, rebuildCostEntries } from '../utils/animal-cost.utils';
 
 /** Fallback bucket for transactions with a blank category or payer. Firestore rejects an
  *  empty map key and fails the whole batch, so nothing may key a map off '' . */
@@ -39,6 +41,13 @@ export interface CounterpartyReconciliationReport {
   buyersCorrected: number;
   suppliersChecked: number;
   suppliersCorrected: number;
+}
+
+export interface AnimalCostReconciliationReport {
+  totalTransactions: number;
+  linkedTransactions: number;
+  animalsChecked: number;
+  animalsCorrected: number;
 }
 
 interface SummaryAccumulator {
@@ -445,6 +454,69 @@ export class SummaryReconciliationService {
       buyersCorrected,
       suppliersChecked,
       suppliersCorrected,
+    };
+  }
+
+  /**
+   * Rebuild every animal's cost ledger (costEntries / totalCosts / totalInvested /
+   * profit / profitMargin) from the expense transactions that name it, and rewrite
+   * any animal whose stored ledger drifted. Uses the same pure rules as the write
+   * path (animal-cost.utils), so a clean system reports 0 corrections.
+   */
+  async reconcileAnimalCosts(): Promise<AnimalCostReconciliationReport> {
+    const transactions = await this.fetchAllTransactions();
+    const linked = transactions.filter(t => t.type === 'expense' && t.linkedAnimalIds?.length);
+
+    // Index by animal so each animal only scans the transactions that name it
+    const byAnimal = new Map<string, Transaction[]>();
+    for (const txn of linked) {
+      for (const id of txn.linkedAnimalIds!) {
+        let list = byAnimal.get(id);
+        if (!list) { list = []; byAnimal.set(id, list); }
+        list.push(txn);
+      }
+    }
+
+    const animalSnap = await getDocs(collection(this.firestore, 'animals'));
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    const writes: { ref: any; data: Record<string, any> }[] = [];
+    let animalsChecked = 0;
+    let animalsCorrected = 0;
+    for (const snap of animalSnap.docs) {
+      const animal = { ...(snap.data() as Animal), id: snap.id };
+      if (animal.isDeleted) continue;
+      animalsChecked++;
+
+      const rebuilt = rebuildCostEntries(animal, byAnimal.get(snap.id) || []);
+      const fields = costFieldsFromEntries(animal, rebuilt);
+      const drifted =
+        costEntriesDiffer(animal.costEntries, rebuilt) ||
+        round2(animal.totalCosts || 0) !== fields.totalCosts ||
+        round2(animal.totalInvested || 0) !== fields.totalInvested ||
+        (fields.profit !== undefined && (
+          round2(animal.profit ?? NaN) !== fields.profit ||
+          round2(animal.profitMargin ?? NaN) !== fields.profitMargin
+        ));
+      if (!drifted) continue;
+      animalsCorrected++;
+      writes.push({ ref: doc(this.firestore, 'animals', snap.id), data: fields });
+    }
+
+    const BATCH_LIMIT = 500;
+    for (let i = 0; i < writes.length; i += BATCH_LIMIT) {
+      const batch = writeBatch(this.firestore);
+      for (const w of writes.slice(i, i + BATCH_LIMIT)) {
+        batch.update(w.ref, w.data);
+      }
+      await batch.commit();
+    }
+
+    return {
+      totalTransactions: transactions.length,
+      linkedTransactions: linked.length,
+      animalsChecked,
+      animalsCorrected,
     };
   }
 }

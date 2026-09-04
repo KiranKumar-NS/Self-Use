@@ -14,11 +14,12 @@ import {
   serverTimestamp,
   Timestamp,
 } from '@angular/fire/firestore';
-import { Animal, AnimalFormData, AnimalCostEntry, VaccinationEntry, MedicalEntry, WeightLogEntry } from '../models/animal.model';
+import { Animal, AnimalFormData, VaccinationEntry, MedicalEntry, WeightLogEntry } from '../models/animal.model';
 import { AuthService } from './auth.service';
 import { InventoryService } from './inventory.service';
 import { SegmentService } from './segment.service';
 import { getMonthString, getYear } from '../utils/date.utils';
+import { animalProfitFields } from '../utils/animal-cost.utils';
 
 /** Outcome of deleting an animal — whether its origin stock event was reversed. */
 export interface AnimalDeleteResult {
@@ -106,10 +107,7 @@ export class AnimalService {
       const existingData = existing.data() as Animal;
       updates['totalInvested'] = data.purchasePrice + existingData.totalCosts;
       if (existingData.status === 'sold' && existingData.salePrice) {
-        updates['profit'] = existingData.salePrice - updates['totalInvested'];
-        updates['profitMargin'] = updates['totalInvested'] > 0
-          ? Math.round((updates['profit'] / updates['totalInvested']) * 10000) / 100
-          : 0;
+        Object.assign(updates, animalProfitFields(existingData.salePrice, updates['totalInvested']));
       }
     }
 
@@ -218,10 +216,7 @@ export class AnimalService {
     const updates: Record<string, any> = {
       salePrice,
       salePricePerHead: countSold > 1 ? Math.round((salePrice / countSold) * 100) / 100 : salePrice,
-      profit: salePrice - animal.totalInvested,
-      profitMargin: animal.totalInvested > 0
-        ? Math.round(((salePrice - animal.totalInvested) / animal.totalInvested) * 10000) / 100
-        : 0,
+      ...animalProfitFields(salePrice, animal.totalInvested),
     };
     await updateDoc(animalRef, updates);
   }
@@ -261,137 +256,10 @@ export class AnimalService {
     return snapshot.docs.map(d => d.data() as Animal);
   }
 
-  async attributeCost(
-    animalIds: string[],
-    transactionId: string,
-    costData: { category: string; categoryName: string; date: Date; totalAmount: number; description?: string },
-    splitMode: 'equal' | 'custom' | 'by_days',
-    customSplits?: Record<string, number>
-  ): Promise<void> {
-    const batch = writeBatch(this.firestore);
-
-    // Batch-fetch all animals upfront to avoid N+1 queries
-    const animalSnaps = await Promise.all(
-      animalIds.map(id => getDoc(doc(this.firestore, 'animals', id)))
-    );
-    const animalMap = new Map<string, Animal>();
-    for (const snap of animalSnaps) {
-      if (snap.exists()) animalMap.set(snap.id, snap.data() as Animal);
-    }
-
-    // Pre-calculate splits for by_days mode
-    if (splitMode === 'by_days' && !customSplits) {
-      customSplits = {};
-      const expenseDate = costData.date.getTime();
-      let totalDays = 0;
-      const daysByAnimal: Record<string, number> = {};
-
-      for (const animalId of animalIds) {
-        const animal = animalMap.get(animalId);
-        if (!animal) continue;
-        const originMs = animal.originDate.toDate().getTime();
-        const days = Math.max(1, Math.ceil((expenseDate - originMs) / (1000 * 60 * 60 * 24)));
-        daysByAnimal[animalId] = days;
-        totalDays += days;
-      }
-
-      // Proportional split
-      if (totalDays > 0) {
-        let allocated = 0;
-        const ids = Object.keys(daysByAnimal);
-        for (let i = 0; i < ids.length; i++) {
-          const id = ids[i];
-          if (i === ids.length - 1) {
-            // Last animal gets remainder to avoid rounding errors
-            customSplits[id] = Math.round((costData.totalAmount - allocated) * 100) / 100;
-          } else {
-            const share = Math.round((daysByAnimal[id] / totalDays) * costData.totalAmount * 100) / 100;
-            customSplits[id] = share;
-            allocated += share;
-          }
-        }
-      }
-      // Switch to custom mode for the actual attribution
-      splitMode = 'custom';
-    }
-
-    const perAnimalAmount = splitMode === 'equal'
-      ? Math.round((costData.totalAmount / animalIds.length) * 100) / 100
-      : 0;
-
-    for (const animalId of animalIds) {
-      const animal = animalMap.get(animalId);
-      if (!animal) continue;
-      const animalRef = doc(this.firestore, 'animals', animalId);
-
-      const amount = splitMode === 'custom' && customSplits
-        ? (customSplits[animalId] || 0)
-        : perAnimalAmount;
-
-      if (amount <= 0) continue;
-
-      const entry: AnimalCostEntry = {
-        transactionId,
-        date: Timestamp.fromDate(costData.date),
-        category: costData.category,
-        categoryName: costData.categoryName,
-        amount,
-        description: costData.description,
-      };
-
-      const newTotalCosts = animal.totalCosts + amount;
-      const newTotalInvested = (animal.purchasePrice || 0) + newTotalCosts;
-
-      const updates: Record<string, any> = {
-        costEntries: [...animal.costEntries, entry],
-        totalCosts: newTotalCosts,
-        totalInvested: newTotalInvested,
-      };
-
-      if (animal.status === 'sold' && animal.salePrice) {
-        updates['profit'] = animal.salePrice - newTotalInvested;
-        updates['profitMargin'] = newTotalInvested > 0
-          ? Math.round(((animal.salePrice - newTotalInvested) / newTotalInvested) * 10000) / 100
-          : 0;
-      }
-
-      batch.update(animalRef, updates);
-    }
-
-    await batch.commit();
-  }
-
-  async removeCost(animalId: string, transactionId: string): Promise<void> {
-    const animalRef = doc(this.firestore, 'animals', animalId);
-    const animalSnap = await getDoc(animalRef);
-    if (!animalSnap.exists()) return;
-    const animal = animalSnap.data() as Animal;
-
-    const removedEntries = animal.costEntries.filter(e => e.transactionId === transactionId);
-    if (removedEntries.length === 0) return;
-
-    const removedAmount = removedEntries.reduce((sum, e) => sum + e.amount, 0);
-    const newCostEntries = animal.costEntries.filter(e => e.transactionId !== transactionId);
-    const newTotalCosts = animal.totalCosts - removedAmount;
-    const newTotalInvested = (animal.purchasePrice || 0) + newTotalCosts;
-
-    const updates: Record<string, any> = {
-      costEntries: newCostEntries,
-      totalCosts: newTotalCosts,
-      totalInvested: newTotalInvested,
-    };
-
-    if (animal.status === 'sold' && animal.salePrice) {
-      updates['profit'] = animal.salePrice - newTotalInvested;
-      updates['profitMargin'] = newTotalInvested > 0
-        ? Math.round(((animal.salePrice - newTotalInvested) / newTotalInvested) * 10000) / 100
-        : 0;
-    }
-
-    const batch = writeBatch(this.firestore);
-    batch.update(animalRef, updates);
-    await batch.commit();
-  }
+  // Cost attribution (costEntries / totalCosts / totalInvested / profit) is owned by
+  // TransactionService.setAnimalAttribution, which commits the animal ledger and the
+  // transaction's link fields in one Firestore transaction. Drift repair lives in
+  // SummaryReconciliationService.reconcileAnimalCosts.
 
   async recordSale(animalId: string, saleData: {
     salePrice: number;
@@ -425,10 +293,7 @@ export class AnimalService {
       updates['salePricePerHead'] = countSold > 1
         ? Math.round((saleData.salePrice / countSold) * 100) / 100
         : saleData.salePrice;
-      updates['profit'] = saleData.salePrice - animal.totalInvested;
-      updates['profitMargin'] = animal.totalInvested > 0
-        ? Math.round(((saleData.salePrice - animal.totalInvested) / animal.totalInvested) * 10000) / 100
-        : 0;
+      Object.assign(updates, animalProfitFields(saleData.salePrice, animal.totalInvested));
     }
 
     if (saleData.buyerId) updates['buyerId'] = saleData.buyerId;

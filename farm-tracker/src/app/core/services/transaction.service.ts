@@ -18,12 +18,20 @@ import {
   DocumentSnapshot,
 } from '@angular/fire/firestore';
 import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatus, ExpensePaymentStatus, pendingRemaining, settledPortion, personSummaryKey } from '../models/transaction.model';
+import { Animal, AnimalCostEntry } from '../models/animal.model';
 import { AuthService } from './auth.service';
 import { SummaryService } from './summary.service';
 import { BuyerService } from './buyer.service';
 import { SupplierService } from './supplier.service';
 import { AnimalService } from './animal.service';
 import { appendTimelineCapped } from '../utils/timeline.utils';
+import {
+  AnimalSplitMode,
+  computeCostSplits,
+  costEntriesDiffer,
+  costFieldsFromEntries,
+  isAttributableCost,
+} from '../utils/animal-cost.utils';
 
 /** Summary maps are keyed by category id. Firestore rejects an empty map key and fails the
  *  whole write, so a legacy transaction saved with a blank category must land in a bucket
@@ -83,18 +91,30 @@ export class TransactionService {
   }
 
   /**
-   * Strip attributed cost entries from linked animals after a txn is deleted.
-   * Runs post-commit (removeCost does its own reads/writes, disallowed inside
-   * runTransaction) and best-effort per animal, mirroring buyer-stats sync.
+   * Read every animal a transaction is linked to, inside a Firestore transaction.
+   * Must be called in the read phase (before any transaction.set/update).
    */
-  private async reverseAnimalCosts(txn: Transaction | undefined, txnId: string): Promise<void> {
-    if (!txn?.linkedAnimalIds?.length) return;
-    for (const animalId of txn.linkedAnimalIds) {
-      try {
-        await this.animalService.removeCost(animalId, txnId);
-      } catch (err) {
-        console.error('Failed to remove attributed animal cost', animalId, err);
-      }
+  private async readLinkedAnimals(transaction: any, ids: string[]): Promise<Map<string, Animal>> {
+    const unique = [...new Set(ids)];
+    const snaps = await Promise.all(unique.map(id => transaction.get(doc(this.firestore, 'animals', id))));
+    const animals = new Map<string, Animal>();
+    snaps.forEach((snap: any, i: number) => {
+      if (snap.exists()) animals.set(unique[i], { ...(snap.data() as Animal), id: unique[i] });
+    });
+    return animals;
+  }
+
+  /**
+   * Drop a deleted transaction's cost entries from its linked animals, in the same
+   * Firestore transaction as the delete so the ledger and the animals can never
+   * disagree. Animals whose ledger did not carry the txn are left untouched.
+   */
+  private stripAnimalCosts(transaction: any, txnId: string, animals: Map<string, Animal>): void {
+    for (const [id, animal] of animals) {
+      const stored = animal.costEntries || [];
+      const kept = stored.filter(e => e.transactionId !== txnId);
+      if (kept.length === stored.length) continue;
+      transaction.update(doc(this.firestore, 'animals', id), costFieldsFromEntries(animal, kept));
     }
   }
 
@@ -693,6 +713,9 @@ export class TransactionService {
         throw new Error('This transaction is linked to a loan. Manage it from the loan detail page.');
       }
 
+      // Reads must all precede writes: fetch linked animals before touching summaries
+      const linkedAnimals = await this.readLinkedAnimals(transaction, oldData.linkedAnimalIds || []);
+
       // Build reversal fields using shared helper
       const reversalFields = this.buildReversalFields(oldData);
 
@@ -723,6 +746,8 @@ export class TransactionService {
           at: Timestamp.now(),
         }),
       });
+
+      this.stripAnimalCosts(transaction, id, linkedAnimals);
     });
     this.summaryService.clearCache();
 
@@ -732,7 +757,6 @@ export class TransactionService {
     if (capturedOld?.type === 'expense' && capturedOld.linkedSupplierId && !capturedOld.linkedLoanId) {
       await this.adjustSupplierStats(capturedOld.linkedSupplierId, -capturedOld.amount, -1, -pendingRemaining(capturedOld), null, capturedOld.segment);
     }
-    await this.reverseAnimalCosts(capturedOld, id);
   }
 
   async hardDelete(id: string): Promise<void> {
@@ -748,6 +772,8 @@ export class TransactionService {
       if (oldData.linkedLoanId) {
         throw new Error('This transaction is linked to a loan. Manage it from the loan detail page.');
       }
+
+      const linkedAnimals = await this.readLinkedAnimals(transaction, oldData.linkedAnimalIds || []);
 
       // Build reversal fields using shared helper
       const reversalFields = this.buildReversalFields(oldData);
@@ -771,6 +797,7 @@ export class TransactionService {
       }, { merge: true });
 
       transaction.delete(txnRef);
+      this.stripAnimalCosts(transaction, id, linkedAnimals);
     });
     this.summaryService.clearCache();
 
@@ -780,7 +807,87 @@ export class TransactionService {
     if (capturedOld?.type === 'expense' && capturedOld.linkedSupplierId && !capturedOld.linkedLoanId) {
       await this.adjustSupplierStats(capturedOld.linkedSupplierId, -capturedOld.amount, -1, -pendingRemaining(capturedOld), null, capturedOld.segment);
     }
-    await this.reverseAnimalCosts(capturedOld, id);
+  }
+
+  /**
+   * Link an expense to the animals it was spent on. The transaction's link fields
+   * (`linkedAnimalIds` / `linkedAnimalNames` / `animalCostSplit`), its timeline, and
+   * every affected animal's cost ledger (old links dropped, new ones written) commit
+   * in ONE Firestore transaction, so a half-applied attribution is impossible.
+   * Idempotent: re-running with the same result writes nothing. An empty `animalIds`
+   * clears the attribution. The animal's own purchase expense is linked but never
+   * counted as a cost (its price is already `purchasePrice`).
+   */
+  async setAnimalAttribution(
+    txnId: string,
+    animalIds: string[],
+    splitMode: AnimalSplitMode = 'equal',
+    customSplits?: Record<string, number>,
+  ): Promise<void> {
+    const user = this.authService.requireUser();
+    const txnRef = doc(this.firestore, 'transactions', txnId);
+
+    await runTransaction(this.firestore, async (transaction) => {
+      const txnSnap = await transaction.get(txnRef);
+      if (!txnSnap.exists()) throw new Error('Transaction not found');
+      const txn = { ...(txnSnap.data() as Transaction), id: txnId };
+      if (txn.isDeleted) throw new Error('Cannot link a deleted transaction to animals');
+      if (txn.linkedLoanId) throw new Error('Loan-linked transactions cannot be attributed to animals');
+      if (txn.type !== 'expense' && animalIds.length > 0) throw new Error('Only expenses can be attributed to animals');
+
+      const oldIds = txn.linkedAnimalIds || [];
+      const animals = await this.readLinkedAnimals(transaction, [...oldIds, ...animalIds]);
+
+      // Targets keep the caller's order; unknown ids are dropped rather than stored
+      const targets = animalIds.map(id => animals.get(id)).filter((a): a is Animal => !!a);
+      const splits = computeCostSplits(targets, txn.amount, splitMode, txn.date.toDate(), customSplits);
+      const newIds = targets.map(a => a.id);
+      const newNames = targets.map(a => this.animalService.getDisplayName(a));
+      const storedSplit: Record<string, number> = {};
+      for (const id of newIds) storedSplit[id] = splits[id] || 0;
+
+      // Animal ledgers: replace this txn's entry on every old/new animal
+      for (const [id, animal] of animals) {
+        const stored = animal.costEntries || [];
+        const entries = stored.filter(e => e.transactionId !== txnId);
+        if (newIds.includes(id) && isAttributableCost(txn, animal) && storedSplit[id] > 0) {
+          const entry: AnimalCostEntry = {
+            transactionId: txnId,
+            date: txn.date,
+            category: txn.category,
+            categoryName: txn.categoryName,
+            amount: storedSplit[id],
+          };
+          if (txn.description) entry.description = txn.description;
+          entries.push(entry);
+        }
+        if (!costEntriesDiffer(stored, entries)) continue;
+        transaction.update(doc(this.firestore, 'animals', id), costFieldsFromEntries(animal, entries));
+      }
+
+      // Transaction link fields + audit trail (skipped when nothing changed)
+      const sameIds = oldIds.length === newIds.length && oldIds.every((id, i) => id === newIds[i]);
+      const oldSplit = txn.animalCostSplit || {};
+      const sameSplit = sameIds && newIds.every(id => (oldSplit[id] || 0) === storedSplit[id]);
+      const sameNames = sameIds && newNames.every((n, i) => (txn.linkedAnimalNames || [])[i] === n);
+      if (sameIds && sameSplit && sameNames) return;
+
+      const oldLabel = (txn.linkedAnimalNames || []).join(', ') || 'none';
+      const newLabel = newNames.join(', ') || 'none';
+      const changes = sameIds ? 'animal cost split updated' : `animals: ${oldLabel}→${newLabel}`;
+      transaction.update(txnRef, {
+        linkedAnimalIds: newIds,
+        linkedAnimalNames: newNames,
+        animalCostSplit: newIds.length > 0 ? storedSplit : null,
+        timeline: appendTimelineCapped(txn.timeline, {
+          action: 'updated',
+          by: user.uid,
+          byName: user.displayName,
+          at: Timestamp.now(),
+          changes,
+        }),
+      });
+    });
   }
 
   async updateDistribution(transactionId: string, distributions: DistributionEntry[]): Promise<void> {

@@ -6,6 +6,8 @@
  *      pending counters net of partial payments, distributions)
  *   2. buyers / suppliers stat counters (totals, segment maps, supplier
  *      pendingAmount)
+ *   3. animals cost ledgers (costEntries, totalCosts, totalInvested, profit,
+ *      profitMargin) from the expense transactions linked to each animal
  *
  * Usage:
  *   node reconcile-summaries.js           # dry run — report drift only
@@ -88,6 +90,54 @@ function accumulate(acc, txn) {
 
 const sameMap = (a, b) =>
   JSON.stringify(Object.entries(a || {}).sort()) === JSON.stringify(Object.entries(b || {}).sort());
+
+// ---------- Animal cost helpers — mirror src/app/core/utils/animal-cost.utils.ts ----------
+const round2 = n => Math.round(n * 100) / 100;
+
+function animalProfitFields(salePrice, totalInvested) {
+  const profit = salePrice - totalInvested;
+  return { profit, profitMargin: totalInvested > 0 ? round2((profit / totalInvested) * 100) : 0 };
+}
+
+function costFieldsFromEntries(animal, costEntries) {
+  const totalCosts = round2(costEntries.reduce((s, e) => s + e.amount, 0));
+  const totalInvested = round2((animal.purchasePrice || 0) + totalCosts);
+  const fields = { costEntries, totalCosts, totalInvested };
+  if (animal.status === 'sold' && animal.salePrice) Object.assign(fields, animalProfitFields(animal.salePrice, totalInvested));
+  return fields;
+}
+
+/** Income, deleted docs and the animal's own purchase expense never count as raising cost. */
+function isAttributableCost(txn, animal) {
+  if (txn.type !== 'expense' || txn.isDeleted) return false;
+  if (animal.purchaseTransactionId && txn.id === animal.purchaseTransactionId) return false;
+  if (Array.isArray(txn.tags) && txn.tags.includes('animal-purchase')) return false;
+  return true;
+}
+
+function costEntryFor(txn, animal) {
+  const linked = txn.linkedAnimalIds || [];
+  if (!linked.includes(animal.id) || !isAttributableCost(txn, animal)) return null;
+  const amount = txn.animalCostSplit
+    ? round2(txn.animalCostSplit[animal.id] || 0)
+    : round2(txn.amount / linked.length);
+  if (amount <= 0) return null;
+  const entry = { transactionId: txn.id, date: txn.date, category: txn.category, categoryName: txn.categoryName, amount };
+  if (txn.description) entry.description = txn.description;
+  return entry;
+}
+
+function rebuildCostEntries(animal, txns) {
+  return txns.map(t => costEntryFor(t, animal)).filter(Boolean)
+    .sort((a, b) => a.date.toMillis() - b.date.toMillis() || a.transactionId.localeCompare(b.transactionId));
+}
+
+function costEntriesDiffer(stored, rebuilt) {
+  const key = e => `${e.transactionId}:${round2(e.amount)}`;
+  const a = (stored || []).map(key).sort();
+  const b = rebuilt.map(key).sort();
+  return a.length !== b.length || a.some((k, i) => k !== b[i]);
+}
 
 function summaryDrifted(existing, computed) {
   if (!existing) return 'missing';
@@ -226,7 +276,6 @@ async function main() {
     }
   }
 
-  const round2 = n => Math.round(n * 100) / 100;
   const [buyerSnap, supplierSnap] = await Promise.all([
     db.collection('buyers').get(),
     db.collection('suppliers').get(),
@@ -295,6 +344,40 @@ async function main() {
   }
 
   console.log(`Counterparties: ${buyersCorrected} buyer(s) + ${suppliersCorrected} supplier(s) drifted`);
+
+  // ---------- 3. Animal costs ----------
+  const byAnimal = new Map();
+  for (const txn of transactions) {
+    if (txn.type !== 'expense' || !Array.isArray(txn.linkedAnimalIds)) continue;
+    for (const id of txn.linkedAnimalIds) {
+      if (!byAnimal.has(id)) byAnimal.set(id, []);
+      byAnimal.get(id).push(txn);
+    }
+  }
+  const animalSnap = await db.collection('animals').get();
+  let animalsChecked = 0;
+  let animalsCorrected = 0;
+  for (const snap of animalSnap.docs) {
+    const animal = { ...snap.data(), id: snap.id };
+    if (animal.isDeleted) continue;
+    animalsChecked++;
+    const rebuilt = rebuildCostEntries(animal, byAnimal.get(snap.id) || []);
+    const fields = costFieldsFromEntries(animal, rebuilt);
+    const drifted =
+      costEntriesDiffer(animal.costEntries, rebuilt) ||
+      round2(animal.totalCosts || 0) !== fields.totalCosts ||
+      round2(animal.totalInvested || 0) !== fields.totalInvested ||
+      (fields.profit !== undefined && (
+        round2(animal.profit ?? NaN) !== fields.profit ||
+        round2(animal.profitMargin ?? NaN) !== fields.profitMargin));
+    if (!drifted) continue;
+    animalsCorrected++;
+    const label = animal.batchLabel || animal.name || animal.tag || snap.id;
+    console.log(`  animal ${label} (${snap.id}): costs ${animal.totalCosts || 0}→${fields.totalCosts}, invested ${animal.totalInvested || 0}→${fields.totalInvested}` +
+      (fields.profit !== undefined ? `, profit ${animal.profit ?? '—'}→${fields.profit}` : ''));
+    writes.push({ ref: db.collection('animals').doc(snap.id), update: true, data: fields });
+  }
+  console.log(`Animal costs: ${animalsChecked} checked, ${animalsCorrected} drifted`);
   console.log(`\nTotal pending writes: ${writes.length}`);
 
   if (!APPLY) {

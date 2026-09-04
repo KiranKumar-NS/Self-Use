@@ -5,11 +5,14 @@ import { AnimalService } from '../../../core/services/animal.service';
 import { BuyerService } from '../../../core/services/buyer.service';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { SegmentService } from '../../../core/services/segment.service';
+import { SummaryService } from '../../../core/services/summary.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { Animal } from '../../../core/models/animal.model';
 import { Buyer } from '../../../core/models/buyer.model';
 import { Transaction } from '../../../core/models/transaction.model';
 import { Segment } from '../../../core/models/segment.model';
+import { MonthlySummary } from '../../../core/models/monthly-summary.model';
+import { getMonthRange, getMonthString } from '../../../core/utils/date.utils';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { LoadingSkeletonComponent } from '../../../shared/components/loading-skeleton/loading-skeleton.component';
@@ -482,6 +485,7 @@ export class AnimalAnalyticsComponent implements OnInit {
   private buyerService = inject(BuyerService);
   private transactionService = inject(TransactionService);
   private segmentService = inject(SegmentService);
+  private summaryService = inject(SummaryService);
   private router = inject(Router);
   private toast = inject(ToastService);
 
@@ -489,18 +493,18 @@ export class AnimalAnalyticsComponent implements OnInit {
   buyers = signal<Buyer[]>([]);
   allTransactions = signal<Transaction[]>([]);
   segments = signal<Segment[]>([]);
+  /** Monthly summaries for the same window as allTransactions — the source for every
+   *  income / expense / profit figure, so this page agrees with the dashboard. */
+  rangeSummaries = signal<MonthlySummary[]>([]);
   loading = signal(true);
   fullHistory = signal(false);
   loadingHistory = signal(false);
 
-  // --- Overall ---
-  overallIncome = computed(() =>
-    this.allTransactions().filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-  );
-  overallExpense = computed(() =>
-    this.allTransactions().filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
-  );
-  overallProfit = computed(() => this.overallIncome() - this.overallExpense());
+  // --- Overall (settled cash, same basis as the dashboard tiles) ---
+  private overallTotals = computed(() => this.summaryService.settledTotals(this.rangeSummaries()));
+  overallIncome = computed(() => this.overallTotals().income);
+  overallExpense = computed(() => this.overallTotals().expense);
+  overallProfit = computed(() => this.overallTotals().profit);
 
   // --- Animals ---
   soldAnimals = computed(() => this.allAnimals().filter(a => a.status === 'sold'));
@@ -542,20 +546,22 @@ export class AnimalAnalyticsComponent implements OnInit {
     return this.maxTrend() > 0 ? (amount / this.maxTrend()) * 100 : 0;
   }
 
-  // --- Revenue by Segment ---
+  // --- Revenue by Segment (from summaries; txn count from the loaded transactions) ---
   segmentSales = computed<SegmentSales[]>(() => {
-    const segMap: Record<string, SegmentSales> = {};
+    const counts: Record<string, number> = {};
+    const names: Record<string, string> = {};
     for (const t of this.allTransactions()) {
-      if (!segMap[t.segment]) {
-        segMap[t.segment] = { segment: t.segment, segmentName: t.segmentName, totalRevenue: 0, totalExpense: 0, profit: 0, txnCount: 0 };
-      }
-      if (t.type === 'income') segMap[t.segment].totalRevenue += t.amount;
-      else segMap[t.segment].totalExpense += t.amount;
-      segMap[t.segment].txnCount++;
+      counts[t.segment] = (counts[t.segment] || 0) + 1;
+      names[t.segment] = t.segmentName;
     }
-    return Object.values(segMap)
-      .map(s => ({ ...s, profit: s.totalRevenue - s.totalExpense }))
-      .sort((a, b) => b.totalRevenue - a.totalRevenue);
+    return this.summaryService.settledBySegment(this.rangeSummaries()).map(s => ({
+      segment: s.segment,
+      segmentName: this.segments().find(x => x.id === s.segment)?.name || names[s.segment] || s.segment,
+      totalRevenue: s.income,
+      totalExpense: s.expense,
+      profit: s.profit,
+      txnCount: counts[s.segment] || 0,
+    }));
   });
 
   // --- Income by Category ---
@@ -664,12 +670,16 @@ export class AnimalAnalyticsComponent implements OnInit {
       // Default to the last 12 months; "Load full history" fetches the rest on demand
       const dateFrom = new Date();
       dateFrom.setMonth(dateFrom.getMonth() - 12);
-      const txns = await this.fetchTransactions({ dateFrom });
+      const [txns, summaries] = await Promise.all([
+        this.fetchTransactions({ dateFrom }),
+        this.summaryService.getForMonthsBatched(getMonthRange(getMonthString(dateFrom), getMonthString(new Date()))),
+      ]);
 
       this.allAnimals.set(animals);
       this.buyers.set(buyers.filter(b => b.totalPurchases > 0));
       this.segments.set(segments);
       this.allTransactions.set(txns);
+      this.rangeSummaries.set(summaries);
     } catch (err) {
       console.error('Failed to load analytics data', err);
       this.toast.error('Failed to load data. Check your connection and try again.');
@@ -682,7 +692,9 @@ export class AnimalAnalyticsComponent implements OnInit {
     if (this.fullHistory() || this.loadingHistory()) return;
     this.loadingHistory.set(true);
     try {
-      this.allTransactions.set(await this.fetchTransactions({}));
+      const [txns, summaries] = await Promise.all([this.fetchTransactions({}), this.summaryService.getAll()]);
+      this.allTransactions.set(txns);
+      this.rangeSummaries.set(summaries);
       this.fullHistory.set(true);
     } catch (err) {
       console.error('Failed to load full history', err);

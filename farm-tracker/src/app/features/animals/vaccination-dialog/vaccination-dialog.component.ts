@@ -278,12 +278,7 @@ export class VaccinationDialogComponent implements OnInit {
           year: getYear(this.date),
         });
 
-        await this.animalService.attributeCost(
-          [animal.id],
-          txnId,
-          { category: 'medicine', categoryName: 'Medicine', date: this.date, totalAmount: this.cost, description },
-          'equal',
-        );
+        await this.transactionService.setAnimalAttribution(txnId, [animal.id], 'equal');
 
         entry.linkedTransactionId = txnId;
       }

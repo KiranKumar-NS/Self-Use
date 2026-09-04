@@ -896,37 +896,13 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         throw this.saveError(err, 'save the transaction');
       }
 
-      // Animal cost attribution runs after the txn is saved.
-      if (this.isEdit()) {
-        // Re-attribute animal costs if links or amount changed
-        if (this.type === 'expense') {
-          const linksChanged = JSON.stringify(this.oldLinkedAnimalIds.sort()) !== JSON.stringify(this.selectedAnimalIds.sort());
-          if (linksChanged || this.oldLinkedAnimalIds.length > 0) {
-            // Remove old attributions
-            for (const oldId of this.oldLinkedAnimalIds) {
-              await this.animalService.removeCost(oldId, this.editId);
-            }
-            // Apply new attributions
-            if (this.selectedAnimalIds.length > 0) {
-              await this.animalService.attributeCost(
-                this.selectedAnimalIds,
-                this.editId,
-                { category: this.category, categoryName: formData.categoryName, date: this.date, totalAmount: this.amount, description: this.description },
-                this.animalSplitMode
-              );
-            }
-          }
-        }
-      } else {
-        // Attribute costs to animals
-        if (this.selectedAnimalIds.length > 0 && this.type === 'expense') {
-          await this.animalService.attributeCost(
-            this.selectedAnimalIds,
-            savedTxnId,
-            { category: this.category, categoryName: formData.categoryName, date: this.date, totalAmount: this.amount, description: this.description },
-            this.animalSplitMode
-          );
-        }
+      // Animal cost attribution: one atomic write that syncs the txn's link fields
+      // and every affected animal's ledger. Idempotent, so it is safe to call
+      // whenever links exist (before or after the edit) — an amount/date change
+      // re-splits, a type flip to income clears the old attribution.
+      const wantsLinks = this.type === 'expense' ? this.selectedAnimalIds : [];
+      if (wantsLinks.length > 0 || this.oldLinkedAnimalIds.length > 0) {
+        await this.transactionService.setAnimalAttribution(savedTxnId, wantsLinks, this.animalSplitMode);
       }
       if (this.tags.length) this.tagService.addTags(this.tags);
       this.toast.success(this.isEdit() ? 'Transaction updated' : 'Transaction created');

@@ -100,6 +100,33 @@ export class SummaryService {
     return docSnap.exists() ? (docSnap.data() as YearlySummary) : null;
   }
 
+  /**
+   * Settled-cash view of a set of summaries: pending (unreceived) sales and credit
+   * (unpaid) purchases are stripped out, matching the dashboard tiles. Shared by
+   * every page that shows income / expense / profit so they can never disagree.
+   */
+  settledTotals(summaries: MonthlySummary[]): { income: number; expense: number; profit: number } {
+    const agg = this.aggregateSummaries(summaries);
+    return {
+      income: agg.totalIncome - agg.pendingIncome,
+      expense: agg.totalExpense - agg.pendingExpense,
+      profit: agg.netProfit - agg.pendingIncome + agg.pendingExpense,
+    };
+  }
+
+  /** settledTotals() per segment id, sorted by profit descending. */
+  settledBySegment(summaries: MonthlySummary[]): { segment: string; income: number; expense: number; profit: number }[] {
+    const bySegment = new Map<string, MonthlySummary[]>();
+    for (const s of summaries) {
+      const list = bySegment.get(s.segment) || [];
+      list.push(s);
+      bySegment.set(s.segment, list);
+    }
+    return [...bySegment.entries()]
+      .map(([segment, list]) => ({ segment, ...this.settledTotals(list) }))
+      .sort((a, b) => b.profit - a.profit);
+  }
+
   aggregateSummaries(summaries: MonthlySummary[]): {
     totalIncome: number;
     totalExpense: number;

@@ -424,7 +424,7 @@ Guards: `authGuard` (login + active check), `roleGuard(roles)`, `unsavedChangesG
 
 **SummaryService** — Query monthly/yearly summaries. Aggregation helpers. Batched multi-month queries. 5-min cache, cleared by every summary-touching write.
 
-**SummaryReconciliationService** — Admin repair tool (not part of the normal write path). `reconcileAll()` recomputes all monthly/yearly summaries from raw transactions and heals drift (deletes orphaned summary docs). `reconcileCounterparties()` recomputes buyer/supplier denormalized stats. Mirrored by `scripts/reconcile-summaries.js`. If a new field feeds summary math, reconciliation must be updated too.
+**SummaryReconciliationService** — Admin repair tool (not part of the normal write path). `reconcileAll()` recomputes all monthly/yearly summaries from raw transactions and heals drift (deletes orphaned summary docs). `reconcileCounterparties()` recomputes buyer/supplier denormalized stats. `reconcileAnimalCosts()` rebuilds every animal's cost ledger (`costEntries` / `totalCosts` / `totalInvested` / `profit` / `profitMargin`) from the expense transactions linked to it, using the same pure rules as the write path (`core/utils/animal-cost.utils.ts`: income, deleted docs and the animal's own purchase expense never count). All three mirrored by `scripts/reconcile-summaries.js`. If a new field feeds summary or animal-cost math, reconciliation must be updated too.
 
 **DuesService** — Read-only computed receivables/payables (see Dues feature). No Firestore writes.
 
@@ -474,11 +474,11 @@ Guards: `authGuard` (login + active check), `roleGuard(roles)`, `unsavedChangesG
 
 **`scripts/import-backup.js`** — Restore from Excel exports. Auto-detects transaction backup vs loan detail. `--dry-run` flag supported.
 
-**`scripts/reconcile-summaries.js`** — Rebuilds monthly/yearly summaries from raw transactions (mirrors SummaryReconciliationService). `--apply` to write corrections.
+**`scripts/reconcile-summaries.js`** — Rebuilds monthly/yearly summaries, buyer/supplier counters and animal cost ledgers from raw transactions (mirrors SummaryReconciliationService). `--apply` to write corrections.
 
 ## Testing
 
-184 tests across 14 spec files using Vitest. Covers services, utilities, and component logic.
+312 tests across 21 spec files using Vitest. Covers services (including every loan money path, cost attribution, and all three reconcilers), utilities, guards, and pipes.
 
 ## Build Config
 

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@ang
 import { FormsModule } from '@angular/forms';
 import { SegmentService } from '../../../core/services/segment.service';
 import { CategoryService } from '../../../core/services/category.service';
-import { SummaryReconciliationService, ReconciliationReport, CounterpartyReconciliationReport } from '../../../core/services/summary-reconciliation.service';
+import { SummaryReconciliationService, ReconciliationReport, CounterpartyReconciliationReport, AnimalCostReconciliationReport } from '../../../core/services/summary-reconciliation.service';
 import { TagService } from '../../../core/services/tag.service';
 import { Segment } from '../../../core/models/segment.model';
 import { Category } from '../../../core/models/category.model';
@@ -418,6 +418,45 @@ import {
                 {{ reconcilingParties() ? 'Reconciling...' : 'Reconcile Buyer/Supplier Stats' }}
               </button>
             </mat-card>
+
+            <!-- Reconcile Animal Costs Section -->
+            <mat-card class="reconcile-section">
+              <div class="reconcile-header">
+                <mat-icon class="reconcile-icon">pets</mat-icon>
+                <div>
+                  <h3>Reconcile Animal Costs</h3>
+                  <p class="reconcile-desc">Rebuild every animal's cost ledger (cost entries, total invested, profit) from the expense transactions linked to it. Use this if an animal's invested or profit figure disagrees with its linked transactions.</p>
+                </div>
+              </div>
+              @if (reconcilingAnimals()) {
+                <mat-progress-bar mode="indeterminate" />
+                <p class="reconcile-status">Reconciling... This may take a moment.</p>
+              }
+              @if (animalReport()) {
+                <div class="reconcile-results">
+                  <div class="reconcile-stat">
+                    <span class="stat-label">Transactions processed</span>
+                    <span class="stat-value">{{ animalReport()!.totalTransactions }}</span>
+                  </div>
+                  <div class="reconcile-stat">
+                    <span class="stat-label">Linked to animals</span>
+                    <span class="stat-value">{{ animalReport()!.linkedTransactions }}</span>
+                  </div>
+                  <div class="reconcile-stat">
+                    <span class="stat-label">Animals checked</span>
+                    <span class="stat-value">{{ animalReport()!.animalsChecked }}</span>
+                  </div>
+                  <div class="reconcile-stat corrected">
+                    <span class="stat-label">Animals corrected</span>
+                    <span class="stat-value">{{ animalReport()!.animalsCorrected }}</span>
+                  </div>
+                </div>
+              }
+              <button mat-flat-button color="warn" (click)="reconcileAnimals()" [disabled]="reconcilingAnimals()">
+                <mat-icon>pets</mat-icon>
+                {{ reconcilingAnimals() ? 'Reconciling...' : 'Reconcile Animal Costs' }}
+              </button>
+            </mat-card>
           </div>
         </mat-tab>
 
@@ -517,6 +556,8 @@ export class DataSetupComponent implements OnInit {
   reconcileReport = signal<ReconciliationReport | null>(null);
   reconcilingParties = signal(false);
   partyReport = signal<CounterpartyReconciliationReport | null>(null);
+  reconcilingAnimals = signal(false);
+  animalReport = signal<AnimalCostReconciliationReport | null>(null);
   tags = signal<string[]>([]);
   tagBusy = signal(false);
   renameFrom = '';
@@ -740,6 +781,25 @@ export class DataSetupComponent implements OnInit {
       this.errorMsg.set(err.message || 'Counterparty reconciliation failed');
     } finally {
       this.reconcilingParties.set(false);
+    }
+  }
+
+  async reconcileAnimals(): Promise<void> {
+    this.clearMessages();
+    this.animalReport.set(null);
+    this.reconcilingAnimals.set(true);
+    try {
+      const report = await this.reconciliationService.reconcileAnimalCosts();
+      this.animalReport.set(report);
+      this.successMsg.set(
+        report.animalsCorrected > 0
+          ? `Animal cost reconciliation complete. ${report.animalsCorrected} animal(s) corrected from ${report.linkedTransactions} linked transactions.`
+          : `Animal cost reconciliation complete. All ${report.animalsChecked} animals were already accurate (${report.linkedTransactions} linked transactions).`
+      );
+    } catch (err: any) {
+      this.errorMsg.set(err.message || 'Animal cost reconciliation failed');
+    } finally {
+      this.reconcilingAnimals.set(false);
     }
   }
 
