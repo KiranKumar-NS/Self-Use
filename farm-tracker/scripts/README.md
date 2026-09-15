@@ -130,19 +130,24 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node verify-backup.js farm-backup.xlsx
 
 ---
 
-### 5. `set-custom-claims.js` (in `/firebase` folder)
+### 5. `set-custom-claims.js` (in the repo-root `/firebase` folder)
 
-Sets role custom claims on an existing Firebase Auth user.
+Sets the `role` custom claim on an existing Firebase Auth user. **Required after
+every user created in Admin > Add User** — the app and `firestore.rules` read the
+role from this claim, not from the Firestore profile, so until it is set the
+account behaves as a viewer on every device and its writes are rejected.
 
 ```bash
+# run from the repo root; uses scripts/node_modules and scripts/service-account-key.json
 node firebase/set-custom-claims.js <uid> <role>
 ```
 
-Use this if you created a user through the app UI and need to set their role:
 ```bash
-# Get the UID from Firebase Console > Authentication
-node firebase/set-custom-claims.js abc123def456 admin
+# The UID is shown in the app after creating the user, or in Firebase Console > Authentication
+node firebase/set-custom-claims.js abc123def456 manager
 ```
+
+The user then logs out and back in (the app also retries the claim once on its own).
 
 ---
 

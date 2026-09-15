@@ -25,6 +25,11 @@ export class ToastService {
     this.show(message, 5000);
   }
 
+  /** Long-lived notice for things the user must act on (stays 15s). */
+  warning(message: string): void {
+    this.show(message, 15000);
+  }
+
   private show(message: string, duration?: number): void {
     const now = Date.now();
     if (message === this.lastMessage && now - this.lastShownAt < this.DEDUP_WINDOW_MS) {
@@ -32,6 +37,6 @@ export class ToastService {
     }
     this.lastMessage = message;
     this.lastShownAt = now;
-    this.snackBar.open(message, 'Close', duration ? { duration } : undefined);
+    this.snackBar.open(message, 'Close', duration !== undefined ? { duration } : undefined);
   }
 }

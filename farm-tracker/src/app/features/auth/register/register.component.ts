@@ -134,11 +134,17 @@ export class RegisterComponent implements OnInit {
         ? this.segments().map((s) => s.id)
         : this.selectedSegments;
 
-      await withTimeout(this.authService.register(
+      const uid = await withTimeout(this.authService.register(
         this.email(), this.password(), this.displayName(),
         this.role, assignedSegments
       ));
-      this.success.set(`User "${this.displayName()}" created successfully!`);
+      // The role lives in an Auth custom claim that only the admin script can
+      // set (no Cloud Functions on Spark). Until then the account is a viewer
+      // on every device and its writes are rejected by firestore.rules.
+      this.success.set(
+        `User "${this.displayName()}" created. To activate the ${this.role} role, run on the admin PC: ` +
+        `node firebase/set-custom-claims.js ${uid} ${this.role}`,
+      );
       this.displayName.set('');
       this.email.set('');
       this.password.set('');

@@ -109,6 +109,7 @@ export class UserFormComponent implements OnInit {
   role = signal<UserRole>('manager');
   assignedSegments = signal<string[]>([]);
   private userId = '';
+  private loadedRole: UserRole | null = null;
 
   async ngOnInit(): Promise<void> {
     await safeLoad(this.loading, async () => {
@@ -122,6 +123,7 @@ export class UserFormComponent implements OnInit {
       if (user) {
         this.displayName.set(user.displayName);
         this.role.set(user.role);
+        this.loadedRole = user.role;
         this.assignedSegments.set(user.assignedSegments || []);
       }
     }, this.toast);
@@ -139,7 +141,17 @@ export class UserFormComponent implements OnInit {
           ? this.segments().map((s) => s.id)
           : this.assignedSegments(),
       });
-      this.success.set('User updated successfully!');
+      if (this.loadedRole !== null && this.role() !== this.loadedRole) {
+        // Access is decided by the Auth custom claim, which the app cannot
+        // change — the profile role alone does nothing until the script runs.
+        this.success.set(
+          `User updated. The ${this.role()} role takes effect only after running on the admin PC: ` +
+          `node firebase/set-custom-claims.js ${this.userId} ${this.role()}`,
+        );
+        this.loadedRole = this.role();
+      } else {
+        this.success.set('User updated successfully!');
+      }
     } catch (err: any) {
       this.error.set(err.message || 'Failed to update user');
     } finally {

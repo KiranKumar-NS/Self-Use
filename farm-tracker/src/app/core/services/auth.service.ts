@@ -44,6 +44,9 @@ export class AuthService {
 
   private readyResolvers: (() => void)[] = [];
   private profileUnsub: (() => void) | null = null;
+  /** One forced token refresh per session when the profile says admin/manager
+   *  but the ID token carries no role claim (claim set after last token mint). */
+  private claimRefreshTried = false;
 
   /**
    * Resolves once the initial auth state (claims + profile) has loaded.
@@ -65,6 +68,7 @@ export class AuthService {
     onAuthStateChanged(this.auth, async (user) => {
       this.detachProfileListener();
       this.currentUser.set(user);
+      this.claimRefreshTried = false;
       if (!user) {
         this.userRole.set(null);
         this.userProfile.set(null);
@@ -72,14 +76,19 @@ export class AuthService {
         return;
       }
       this.isLoading.set(true);
-      try {
-        const tokenResult = await user.getIdTokenResult();
-        this.userRole.set((tokenResult.claims['role'] as UserRole) || null);
-      } catch (err) {
-        console.error('Error loading user claims:', err);
-      }
+      await this.loadRoleClaim(user, false);
       this.watchProfile(user.uid);
     });
+  }
+
+  /** Reads the `role` custom claim from the ID token into userRole. */
+  private async loadRoleClaim(user: User, forceRefresh: boolean): Promise<void> {
+    try {
+      const tokenResult = await user.getIdTokenResult(forceRefresh);
+      this.userRole.set((tokenResult.claims['role'] as UserRole) || null);
+    } catch (err) {
+      console.error('Error loading user claims:', err);
+    }
   }
 
   /** Live listener on own users/{uid} doc: keeps profile fresh and signs the
@@ -87,13 +96,14 @@ export class AuthService {
   private watchProfile(uid: string): void {
     this.profileUnsub = onSnapshot(
       doc(this.firestore, 'users', uid),
-      (snap) => {
+      async (snap) => {
         if (this.auth.currentUser?.uid !== uid) return; // stale after sign-out/re-auth
         if (snap.exists()) {
-          this.userProfile.set(snap.data() as AppUser);
-          // If role not in claims, default to viewer (don't trust Firestore role)
+          const profile = snap.data() as AppUser;
+          this.userProfile.set(profile);
           if (!this.userRole()) {
-            this.userRole.set('viewer');
+            await this.resolveMissingRoleClaim(uid, profile);
+            if (this.auth.currentUser?.uid !== uid) return; // signed out during refresh
           }
         }
         this.markReady();
@@ -106,6 +116,33 @@ export class AuthService {
         this.markReady();
       },
     );
+  }
+
+  /**
+   * The ID token has no `role` claim. The Firestore profile role is NOT
+   * trusted for access (firestore.rules read the claim), but it tells us
+   * whether a claim is *expected*: for admin/manager profiles retry once
+   * with a forced token refresh (claim may have been set after the last
+   * token was minted), and if it is still missing say so loudly instead of
+   * silently downgrading — the admin must run firebase/set-custom-claims.js.
+   */
+  private async resolveMissingRoleClaim(uid: string, profile: AppUser): Promise<void> {
+    const user = this.auth.currentUser;
+    const expectsClaim = profile.role === 'admin' || profile.role === 'manager';
+    if (user && expectsClaim && !this.claimRefreshTried) {
+      this.claimRefreshTried = true;
+      await this.loadRoleClaim(user, true);
+      if (this.userRole()) return;
+    }
+    if (!this.userRole()) {
+      this.userRole.set('viewer');
+      if (expectsClaim) {
+        console.warn(`[auth] users/${uid} says role "${profile.role}" but the Auth token has no role claim. ` +
+          `Run: node firebase/set-custom-claims.js ${uid} ${profile.role}`);
+        this.toast.warning(`Your ${profile.role} role is not activated yet — you are in view-only mode. ` +
+          'Ask the admin to run set-custom-claims for your account, then log in again.');
+      }
+    }
   }
 
   private async kickDeactivatedUser(): Promise<void> {
