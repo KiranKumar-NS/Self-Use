@@ -6,4 +6,4 @@ Personal projects repository.
 
 | Project | Description |
 |---------|-------------|
-| [goat-farm](./goat-farm/) | Goat Farm Management System — Angular 21 + Firebase |
+| [farm-tracker](./farm-tracker/) | Farm Tracker — farm finance, stock & animal management PWA (Angular + Firebase) |
