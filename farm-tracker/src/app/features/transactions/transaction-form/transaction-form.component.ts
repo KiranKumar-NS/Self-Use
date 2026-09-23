@@ -74,6 +74,29 @@ const FIELD_LABELS: Record<string, string> = {
           </mat-radio-group>
         </div>
 
+        <!-- Segment / Category -->
+        <div class="form-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Segment</mat-label>
+            <mat-select [(ngModel)]="segment" name="segment" required (selectionChange)="onSegmentChange()" #segmentModel="ngModel">
+              @for (seg of filteredSegments(); track seg.id) {
+                <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
+              }
+            </mat-select>
+            <mat-error>{{ segmentModel.errors | errorMessage }}</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Category</mat-label>
+            <mat-select [(ngModel)]="category" name="category" required #categoryModel="ngModel">
+              @for (cat of filteredCategories(); track cat.id) {
+                <mat-option [value]="cat.id">{{ cat.name }}</mat-option>
+              }
+            </mat-select>
+            <mat-error>{{ categoryModel.errors | errorMessage }}</mat-error>
+          </mat-form-field>
+        </div>
+
         <div class="form-row">
           <mat-form-field appearance="outline">
             <mat-label>Date</mat-label>
@@ -114,28 +137,6 @@ const FIELD_LABELS: Record<string, string> = {
           <mat-form-field appearance="outline">
             <mat-label>Rate/Unit (₹)</mat-label>
             <input matInput type="number" [(ngModel)]="ratePerUnit" name="ratePerUnit" min="0" step="0.5" (ngModelChange)="onQtyRateChange()" />
-          </mat-form-field>
-        </div>
-
-        <div class="form-row">
-          <mat-form-field appearance="outline">
-            <mat-label>Segment</mat-label>
-            <mat-select [(ngModel)]="segment" name="segment" required (selectionChange)="onSegmentChange()" #segmentModel="ngModel">
-              @for (seg of filteredSegments(); track seg.id) {
-                <mat-option [value]="seg.id">{{ seg.name }}</mat-option>
-              }
-            </mat-select>
-            <mat-error>{{ segmentModel.errors | errorMessage }}</mat-error>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Category</mat-label>
-            <mat-select [(ngModel)]="category" name="category" required #categoryModel="ngModel">
-              @for (cat of filteredCategories(); track cat.id) {
-                <mat-option [value]="cat.id">{{ cat.name }}</mat-option>
-              }
-            </mat-select>
-            <mat-error>{{ categoryModel.errors | errorMessage }}</mat-error>
           </mat-form-field>
         </div>
 
