@@ -30,7 +30,7 @@ Summary cards (income/expense/profit), stock widget, budget vs actual (monthly m
 
 ### Transactions `/transactions`
 
-Expense & income CRUD with pagination, sorting, filtering. Fields: amount, date, category, segment, description, paymentMethod (cash/upi), paidBy (user or "other" with custom name), quantity/unit/rate (for sales). Units: `kg|head|dozen|litre|pieces|bag|bundle`.
+Expense & income CRUD with pagination, sorting, filtering. Fields: amount, date, category, segment, description, paymentMethod (cash/upi), paidBy (user or "other" with custom name), quantity/unit/rate (for sales). Units: `kg|head|dozen|litre|pieces|bag|bundle` (defaults to `kg`; stored only when a quantity is entered).
 
 **Payment Status:** Income: received/pending. Expense: paid/credit (pending).
 

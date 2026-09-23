@@ -424,7 +424,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   date = new Date();
   amount = 0;
   quantity: number | null = null;
-  unit: SaleUnit | '' = '';
+  unit: SaleUnit | '' = 'kg'; // default for new entries; only saved when a quantity is entered
   ratePerUnit: number | null = null;
   segment = '';
   category = '';
@@ -542,7 +542,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
           this.customPaidByName = txn.paidByName || '';
         }
         this.quantity = txn.quantity || null;
-        this.unit = txn.unit || '';
+        this.unit = txn.unit || 'kg';
         this.ratePerUnit = txn.ratePerUnit || null;
         this.paymentMethod = txn.paymentMethod || 'cash';
         this.paymentStatus = txn.paymentStatus || 'received';
@@ -841,7 +841,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         date: this.date,
         amount: this.amount,
         quantity: this.quantity || undefined,
-        unit: this.unit || undefined,
+        unit: this.quantity ? (this.unit || undefined) : undefined,
         ratePerUnit: this.ratePerUnit || undefined,
         category: this.category,
         categoryName: selectedCategory?.name || this.category,
