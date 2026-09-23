@@ -281,8 +281,8 @@ export class LedgerPageComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     const ok = await safeLoad(this.loading, async () => {
-      const segs = (await this.segmentService.getAll()).filter(s => s.isActive !== false);
-      this.segments.set(segs);
+      // Every segment the user may view, active or not — an inactive segment can still hold history
+      this.segments.set(await this.segmentService.getAll());
     }, this.toast);
     if (!ok) { this.loadFailed.set(true); return; }
     await this.loadData();
