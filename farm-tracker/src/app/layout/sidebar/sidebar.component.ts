@@ -41,6 +41,11 @@ import { MatIconModule } from '@angular/material/icon';
             <span>Dues</span>
           </a>
 
+          <a routerLink="/ledger" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
+            <mat-icon>table_chart</mat-icon>
+            <span>Ledger</span>
+          </a>
+
           <a routerLink="/stock" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
             <mat-icon>inventory_2</mat-icon>
             <span>Stock</span>

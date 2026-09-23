@@ -729,6 +729,45 @@ export class UserGuideDialogComponent implements OnInit {
       ],
     },
     {
+      id: 'ledger',
+      icon: 'table_chart',
+      title: 'Ledger',
+      route: '/ledger',
+      overview: 'A plain statement per segment. Pick a segment tab, then <strong>Sale</strong> or <strong>Expense</strong>, and see every transaction for the month with a running total at the bottom. Nothing to edit here — it reads the same transactions you entered on the Transactions page.',
+      prerequisites: [
+        '<strong>Transactions</strong> — the ledger only shows what has already been recorded, tagged to a segment',
+        '<strong>Paid By on each transaction</strong> — the Person filter groups by who paid or received the money',
+      ],
+      steps: [
+        { action: 'Choose a segment', detail: 'Goats, Chickens or Dragon Fruit — managers only see the segments assigned to them' },
+        { action: 'Switch Sale / Expense', detail: 'Sale lists income for the segment; Expense lists what it cost. Switching is instant, no reload' },
+        { action: 'Pick months', detail: 'Defaults to this month. Tick several months (say the last three) to combine them; untick everything for the full history of the segment' },
+        { action: 'Filter by person', detail: 'Narrow to one person — the totals at the bottom follow the filter' },
+        { action: 'Read the Total row', detail: 'Total = billed amount; Received/Paid = cash actually settled; Pending = still outstanding. Received + Pending always equals Total' },
+        { action: 'Tap a row', detail: 'Opens the transaction detail if you need to check or edit it' },
+      ],
+      example: {
+        title: 'Month-end Goat Sales Check',
+        scenario: 'You want to know what the goats earned in September and how much is still unpaid.',
+        steps: [
+          'Open <strong>Ledger → Goats → Sale</strong>, month <strong>September 2026</strong>',
+          'The table lists every goat sale with buyer status chips',
+          'The footer shows <strong>Total ₹1,20,000</strong>, <strong>Received ₹95,000</strong>, <strong>Pending ₹25,000</strong>',
+          'Filter <strong>Person = Raju</strong> → totals shrink to just the sales he handled',
+          'Switch to <strong>Expense</strong> → same month, same segment, now showing feed, medicine and transport costs',
+        ],
+      },
+      consequences: [
+        { skip: 'Transactions saved without a segment', result: 'They never appear on any segment tab — fix the segment on the Transactions page' },
+        { skip: 'Leave Paid By blank', result: 'The row is attributed to whoever created it, so the Person filter may group it under the wrong name' },
+      ],
+      tips: [
+        'Untick every month and add a person filter to see everything one person has paid for in a segment',
+        'The Total row respects sorting and the person filter, so it always matches the rows you can see',
+        'Need to add or change something? The Transactions page is still the place to edit',
+      ],
+    },
+    {
       id: 'buyers',
       icon: 'people',
       title: 'Buyers',

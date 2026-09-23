@@ -19,13 +19,9 @@ import { AuthService } from '../../core/services/auth.service';
           <mat-icon>receipt_long</mat-icon>
           <span>Txns</span>
         </a>
-        <a routerLink="/loans" routerLinkActive="active" class="nav-item">
-          <mat-icon>account_balance</mat-icon>
-          <span>Loans</span>
-        </a>
-        <a routerLink="/stock" routerLinkActive="active" class="nav-item">
-          <mat-icon>inventory_2</mat-icon>
-          <span>Stock</span>
+        <a routerLink="/ledger" routerLinkActive="active" class="nav-item">
+          <mat-icon>table_chart</mat-icon>
+          <span>Ledger</span>
         </a>
       } @else {
         <a routerLink="/tasks" routerLinkActive="active" class="nav-item">

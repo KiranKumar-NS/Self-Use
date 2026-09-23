@@ -31,6 +31,11 @@ export const routes: Routes = [
         canActivate: [roleGuard(['admin', 'manager'])],
       },
       {
+        path: 'ledger',
+        loadComponent: () => import('./features/ledger/ledger-page.component').then(m => m.LedgerPageComponent),
+        canActivate: [roleGuard(['admin', 'manager'])],
+      },
+      {
         path: 'stock',
         loadChildren: () => import('./features/stock/stock.routes').then(m => m.STOCK_ROUTES),
         canActivate: [roleGuard(['admin', 'manager'])],

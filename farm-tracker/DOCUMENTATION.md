@@ -14,7 +14,7 @@ Segments: Goats (🐐), Chickens (🐔), Dragon Fruit (🌵). Users assigned to 
 | Manager | Full (assigned segments) | Full | No |
 | Viewer | No | Full | Dashboard read-only |
 
-**Segment scoping (all non-admins):** The segment picker in user create/edit is shown for both manager and viewer roles. Every non-admin user (manager and viewer) is read-scoped to their `assignedSegments` — the dashboard/analytics (segments, summaries, transactions, loans) are filtered client-side to those segments via `AuthService.isSegmentRestricted`/`canViewSegment`. An empty `assignedSegments` means **no data visible** (strict; the old "empty = sees all" back-compat was removed 2026-07). The dashboard shows a "No segments assigned" notice in that case. Admins are never restricted (and are auto-assigned all segment IDs on save). This is soft enforcement only — Firestore rules still allow any active user to read all data. Service caches always store unfiltered data; scoping is applied on the return path. Viewer mobile bottom nav shows Home/Tasks/More (no Txns/Loans/Stock); Reminders and dashboard export/backup buttons are hidden from viewers. Tasks have no segment field and are not scoped. Segments created after assignment require re-editing the user.
+**Segment scoping (all non-admins):** The segment picker in user create/edit is shown for both manager and viewer roles. Every non-admin user (manager and viewer) is read-scoped to their `assignedSegments` — the dashboard/analytics (segments, summaries, transactions, loans) are filtered client-side to those segments via `AuthService.isSegmentRestricted`/`canViewSegment`. An empty `assignedSegments` means **no data visible** (strict; the old "empty = sees all" back-compat was removed 2026-07). The dashboard shows a "No segments assigned" notice in that case. Admins are never restricted (and are auto-assigned all segment IDs on save). This is soft enforcement only — Firestore rules still allow any active user to read all data. Service caches always store unfiltered data; scoping is applied on the return path. Mobile bottom nav shows Home/Txns/Ledger/More for admins and managers (Loans, Stock and everything else live under More); viewers see Home/Tasks/More; Reminders and dashboard export/backup buttons are hidden from viewers. Tasks have no segment field and are not scoped. Segments created after assignment require re-editing the user.
 
 ## Features
 
@@ -201,6 +201,10 @@ Name, phone, location, note. Denormalized stats auto-updated on sales: totalPurc
 
 Per-counterparty pending payments (receivables from buyers/customers, payables to suppliers). **Computed live — no `dues` collection, no counters** (deliberate, to avoid counter drift across write paths). `DuesService.getReceivables()` queries pending income (`type=income, paymentStatus=pending`); `getPayables()` queries pending credit expenses (`type=expense, expensePaymentStatus=pending`, excludes loan-linked). Groups by counterparty (`linkedBuyerId`/`linkedSupplierId`, else name, else `paidBy`), nets out partial payments via `pendingRemaining()` (exported from `transaction.model.ts` — the single source of truth for outstanding amounts), computes aging (`oldestDays`, `overdueCount`). Dashboard alerts via `due_receivable`/`due_payable` notification types. Supports `?tab=payables` query param to open the "To Pay" tab directly (used by the dashboard Credit tile).
 
+### Ledger `/ledger`
+
+Read-only per-segment transaction table. Segment tabs on top (built from `SegmentService.getAll()`, so segment-restricted managers only see their segments), then **Sale** (income) / **Expense** sub-tabs, then **Month** (multi-select; defaults to the current month, tick several months to combine them, none ticked = whole segment history) and **Person** (paid-by name, derived from the loaded rows) filters. Columns mirror the Transactions table (Date, Status, Category, Amount, Paid Via, By, Description); rows open the transaction detail. A footer **Total** section shows record count, total amount, settled amount (Received / Paid) and pending amount, all computed over the visible rows via `computeLedgerTotals()` in `core/utils/ledger.utils.ts` (uses `settledPortion()` / `pendingRemaining()`). One `TransactionService.getAll({segment, months?})` fetch (no `type` filter; `months` becomes a Firestore `in` query on the existing `segment+month` index, up to 30 months; paged to the end, 10 000-row cap) feeds both sub-tabs; no new collection, index, rule or counter.
+
 ### Tasks `/tasks`
 
 Kanban board: backlog → todo → in_progress → done. Priority: low/medium/high/urgent. Assignee, due dates, subtasks (with individual completion and optional due dates). Tags. Visibility: shared (all users) or personal (creator only). Drag-drop via Angular CDK. Desktop: Kanban columns. Mobile: tab view. Filter: All Tasks vs My Tasks. kanbanOrder for column sorting.
@@ -379,6 +383,7 @@ Same fields as monthlySummaries, aggregated annually.
 | `/consumables` | Admin, Manager |
 | `/suppliers` | Admin, Manager |
 | `/dues` | Admin, Manager |
+| `/ledger` | Admin, Manager |
 | `/tasks` | All authenticated |
 | `/admin`, `/admin/register`, `/admin/data-setup` | Admin only |
 | `/auth/login`, `/auth/forgot-password` | Public |

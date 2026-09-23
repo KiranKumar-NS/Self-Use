@@ -1163,6 +1163,8 @@ export class TransactionService {
       type?: 'expense' | 'income';
       segment?: string;
       month?: string;
+      /** Several months at once (Firestore `in`, max 30 values); same composite index as `month` */
+      months?: string[];
       createdBy?: string;
       dateFrom?: Date;
       dateTo?: Date;
@@ -1179,6 +1181,8 @@ export class TransactionService {
     if (filters.type) constraints.push(where('type', '==', filters.type));
     if (filters.segment) constraints.push(where('segment', '==', filters.segment));
     if (filters.month) constraints.push(where('month', '==', filters.month));
+    else if (filters.months?.length === 1) constraints.push(where('month', '==', filters.months[0]));
+    else if (filters.months?.length) constraints.push(where('month', 'in', filters.months.slice(0, 30)));
     if (filters.createdBy) constraints.push(where('createdBy', '==', filters.createdBy));
     if (filters.dateFrom) constraints.push(where('date', '>=', Timestamp.fromDate(filters.dateFrom)));
     if (filters.dateTo) constraints.push(where('date', '<=', Timestamp.fromDate(filters.dateTo)));
