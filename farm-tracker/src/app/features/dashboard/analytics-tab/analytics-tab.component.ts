@@ -1,7 +1,6 @@
-import { ChangeDetectionStrategy, Component, inject, signal, computed, Input, OnChanges, SimpleChanges, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, Input, OnChanges, SimpleChanges, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { Transaction, pendingRemaining, settledPortion } from '../../../core/models/transaction.model';
-import { MonthlySummary } from '../../../core/models/monthly-summary.model';
 import { TransactionService } from '../../../core/services/transaction.service';
 import { LoanService } from '../../../core/services/loan.service';
 import { Loan } from '../../../core/models/loan.model';
@@ -15,15 +14,15 @@ import { getMonthRange } from '../../../core/utils/date.utils';
 import { safeLoad } from '../../../core/utils/async.utils';
 import { ToastService } from '../../../core/services/toast.service';
 import { normalizeName } from '../../../core/utils/name.utils';
+import { QuantityByUnit, quantityByUnit, formatQuantityByUnit } from '../../../core/utils/ledger.utils';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { DateRangeSelection } from '../../../shared/components/date-range-filter/date-range-filter.component';
-import { BaseChartDirective } from 'ng2-charts';
-import { ChartConfiguration } from 'chart.js';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-/** Running per-person tally used by both the initial load and the filtered recompute. */
+
+/** Running per-person tally used by the Person Investment cards. */
 interface PersonTally {
   expensesPaid: number;
   incomeReceived: number;
@@ -38,13 +37,22 @@ interface PersonTally {
   spentFromHeldCash: number;
 }
 
+/** One card per segment: gross income / expense plus sale quantities grouped by unit. */
+export interface SegmentCard {
+  segment: string;
+  name: string;
+  icon: string;
+  income: number;
+  expense: number;
+  soldQty: QuantityByUnit[];
+}
+
 @Component({
   selector: 'app-analytics-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CurrencyInrPipe, LoadingSpinnerComponent,
-    BaseChartDirective,
     MatCardModule, MatButtonModule, MatIconModule, MatDialogModule,
   ],
   template: `
@@ -87,42 +95,61 @@ interface PersonTally {
     @if (loading()) {
       <app-loading-spinner />
     } @else {
-      <!-- Summary Stats: use pre-aggregated summaries when unfiltered, transaction-based when filtered -->
+      <!-- Summary cards: gross (billed) figures, with the status split inside each card.
+           Expense rows follow every chip; income rows follow Segment / Tag only —
+           the Person chip narrows who *paid*, and which Person card is shown. -->
       <div class="summary-grid">
         <mat-card class="stat-card total">
           <span class="stat-label">Total Expense</span>
-          <span class="stat-value expense-text">{{ (hasFilters() ? totalExpense() : summaryTotalExpense()) | currencyInr }}</span>
+          <span class="stat-value expense-text">{{ expenseGross() | currencyInr }}</span>
           <span class="stat-count">{{ filtered().length }} transactions</span>
+          <div class="card-breakdown">
+            <div class="breakdown-row">
+              <span class="bd-label">Paid</span>
+              <span class="bd-value income-text">{{ totalExpense() | currencyInr }}</span>
+            </div>
+            @if (pendingExpenseAmount() > 0) {
+              <div class="breakdown-row clickable" (click)="goToDues('payables')" title="View dues to pay">
+                <span class="bd-label">Credit (to pay)</span>
+                <span class="bd-value expense-text">{{ pendingExpenseAmount() | currencyInr }}</span>
+              </div>
+            }
+          </div>
         </mat-card>
         <mat-card class="stat-card income-card">
           <span class="stat-label">Total Income</span>
-          <span class="stat-value income-text">{{ (hasFilters() ? totalIncomeAmount() : summaryTotalIncome()) | currencyInr }}</span>
+          <span class="stat-value income-text">{{ incomeGross() | currencyInr }}</span>
           <span class="stat-count">{{ filteredIncome().length }} transactions</span>
+          <div class="card-breakdown">
+            <div class="breakdown-row">
+              <span class="bd-label">Distributed</span>
+              <span class="bd-value income-text">{{ totalIncomeAmount() | currencyInr }}</span>
+            </div>
+            @if (incomeReinvested() > 0) {
+              <div class="breakdown-row">
+                <span class="bd-label">Reinvested</span>
+                <span class="bd-value reinvest-text">{{ incomeReinvested() | currencyInr }}</span>
+              </div>
+            }
+            @if (totalUndistributed() > 0) {
+              <div class="breakdown-row">
+                <span class="bd-label">Undistributed</span>
+                <span class="bd-value holding-text">{{ totalUndistributed() | currencyInr }}</span>
+              </div>
+            }
+            @if (pendingIncomeAmount() > 0) {
+              <div class="breakdown-row clickable" (click)="goToDues('receivables')" title="View dues to receive">
+                <span class="bd-label">Pending (to receive)</span>
+                <span class="bd-value expense-text">{{ pendingIncomeAmount() | currencyInr }}</span>
+              </div>
+            }
+          </div>
         </mat-card>
-        <mat-card class="stat-card" [class.profit]="(hasFilters() ? netProfit() : summaryNetProfit()) >= 0" [class.loss]="(hasFilters() ? netProfit() : summaryNetProfit()) < 0">
+        <mat-card class="stat-card" [class.profit]="netProfit() >= 0" [class.loss]="netProfit() < 0">
           <span class="stat-label">Net Profit/Loss</span>
-          <span class="stat-value" [class.income-text]="(hasFilters() ? netProfit() : summaryNetProfit()) >= 0" [class.expense-text]="(hasFilters() ? netProfit() : summaryNetProfit()) < 0">{{ (hasFilters() ? netProfit() : summaryNetProfit()) | currencyInr }}</span>
+          <span class="stat-value" [class.income-text]="netProfit() >= 0" [class.expense-text]="netProfit() < 0">{{ netProfit() | currencyInr }}</span>
+          <span class="stat-count">income − expense</span>
         </mat-card>
-        @if ((hasFilters() ? pendingIncomeAmount() : summaryPendingIncome()) > 0) {
-          <mat-card class="stat-card pending-card" (click)="goToDues('receivables')">
-            <span class="stat-label">Pending (To Receive)</span>
-            <span class="stat-value pending-text">{{ (hasFilters() ? pendingIncomeAmount() : summaryPendingIncome()) | currencyInr }}</span>
-            <span class="stat-count">to receive — view dues</span>
-          </mat-card>
-        }
-        @if ((hasFilters() ? pendingExpenseAmount() : summaryPendingExpense()) > 0) {
-          <mat-card class="stat-card credit-card" (click)="goToDues('payables')">
-            <span class="stat-label">Credit (To Pay)</span>
-            <span class="stat-value expense-text">{{ (hasFilters() ? pendingExpenseAmount() : summaryPendingExpense()) | currencyInr }}</span>
-            <span class="stat-count">to pay — view dues</span>
-          </mat-card>
-        }
-        @if (totalUndistributed() > 0) {
-          <mat-card class="stat-card undistributed-card">
-            <span class="stat-label">Undistributed</span>
-            <span class="stat-value holding-text">{{ totalUndistributed() | currencyInr }}</span>
-          </mat-card>
-        }
       </div>
 
       <!-- Tag Productivity -->
@@ -212,77 +239,32 @@ interface PersonTally {
         }
       </div>
 
-      <!-- Charts Section -->
-      <h3 class="section-title desktop-only">Breakdown</h3>
-      <div class="charts-grid desktop-only">
-        <mat-card class="chart-card">
-          <h3>Expense by Person</h3>
-          @if (personChartData().labels!.length > 0) {
-            <canvas baseChart
-              [datasets]="personChartData().datasets"
-              [labels]="personChartData().labels"
-              [options]="barOptions"
-              type="bar"></canvas>
-          }
-        </mat-card>
-        <mat-card class="chart-card">
-          <h3>Expense by Category</h3>
-          @if (categoryChartData().labels!.length > 0) {
-            <canvas baseChart
-              [datasets]="categoryChartData().datasets"
-              [labels]="categoryChartData().labels"
-              [options]="pieOptions"
-              type="doughnut"></canvas>
-          }
-        </mat-card>
-      </div>
-
-      <!-- Segment Cards: profit per segment from summaries when unfiltered,
-           filtered expense totals when a person/tag/segment chip is active -->
-      <h3 class="section-title">{{ hasFilters() ? 'Segments' : 'Profit by Segment' }}</h3>
-      <div class="summary-grid">
-        @if (hasFilters()) {
-          @for (seg of segmentTotals(); track seg.name) {
-            <mat-card class="stat-card">
-              <span class="stat-label">{{ seg.name }}</span>
-              <span class="stat-value">{{ seg.total | currencyInr }}</span>
-              <span class="stat-count">{{ seg.count }} txns</span>
+      <!-- Segment cards: gross income / expense per segment plus what was sold -->
+      <h3 class="section-title">Segments</h3>
+      @if (segmentCards().length === 0) {
+        <p class="no-data">No transactions for this selection.</p>
+      } @else {
+        <div class="segment-grid">
+          @for (seg of segmentCards(); track seg.segment) {
+            <mat-card class="segment-card">
+              <div class="segment-name">{{ seg.icon }} {{ seg.name }}</div>
+              <div class="segment-figures">
+                <div class="segment-figure">
+                  <span class="stat-label">Income</span>
+                  <span class="segment-value income-text">{{ seg.income | currencyInr }}</span>
+                </div>
+                <div class="segment-figure">
+                  <span class="stat-label">Expense</span>
+                  <span class="segment-value expense-text">{{ seg.expense | currencyInr }}</span>
+                </div>
+              </div>
+              @if (seg.soldQty.length > 0) {
+                <div class="segment-sold">Sold: {{ soldLabel(seg.soldQty) }}</div>
+              }
             </mat-card>
           }
-        } @else {
-          @for (seg of segmentProfit(); track seg.segment) {
-            <mat-card class="stat-card" [class.profit]="seg.profit >= 0" [class.loss]="seg.profit < 0">
-              <span class="stat-label">{{ seg.name }}</span>
-              <span class="stat-value" [class.income-text]="seg.profit >= 0" [class.expense-text]="seg.profit < 0">{{ seg.profit | currencyInr }}</span>
-              <span class="stat-count">In {{ seg.income | currencyInr }} · Out {{ seg.expense | currencyInr }}</span>
-            </mat-card>
-          }
-        }
-      </div>
-
-      <div class="charts-grid desktop-only">
-        <mat-card class="chart-card">
-          <h3>Expense by Segment</h3>
-          @if (segmentChartData().labels!.length > 0) {
-            <canvas baseChart
-              [datasets]="segmentChartData().datasets"
-              [labels]="segmentChartData().labels"
-              [options]="pieOptions"
-              type="doughnut"></canvas>
-          }
-        </mat-card>
-        <mat-card class="chart-card">
-          <h3>Monthly Expense Trend</h3>
-          @if (monthlyChartData().labels!.length > 0) {
-            <canvas baseChart
-              [datasets]="monthlyChartData().datasets"
-              [labels]="monthlyChartData().labels"
-              [options]="barOptions"
-              type="bar"></canvas>
-          }
-        </mat-card>
-      </div>
-
+        </div>
+      }
     }
   `,
   styles: [`
@@ -300,7 +282,7 @@ interface PersonTally {
     .filter-chip:hover { border-color: var(--color-primary); color: var(--color-primary); }
     .filter-chip.active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
 
-    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
     .stat-card { padding: 1.25rem; display: flex; flex-direction: column; border-left: 4px solid var(--color-border); min-width: 0; overflow: hidden; }
     .stat-card.total { border-color: var(--color-primary); background: var(--color-primary-light); }
     .stat-card.income-card { border-color: var(--color-income); background: var(--color-income-bg); }
@@ -309,10 +291,7 @@ interface PersonTally {
     .expense-text { color: var(--color-expense); }
     .income-text { color: var(--color-income); }
     .holding-text { color: var(--color-warning); }
-    .undistributed-card { border-color: var(--color-warning); background: var(--color-warning-light); }
-    .pending-text { color: var(--color-expense); }
-    .pending-card { border-color: var(--color-expense); background: var(--color-expense-bg); cursor: pointer; }
-    .credit-card { border-color: var(--color-expense); background: var(--color-expense-bg); cursor: pointer; }
+    .reinvest-text { color: var(--color-purple); }
     .stat-label { font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
     .stat-value {
       font-size: var(--font-2xl); font-weight: 700; color: var(--color-text); margin: 4px 0;
@@ -320,7 +299,16 @@ interface PersonTally {
     }
     .stat-count { font-size: var(--font-sm); color: var(--color-text-muted); }
 
+    /* Status split inside a summary card (same look as the Cash in Hand strip on person cards) */
+    .card-breakdown { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; padding: 8px 10px; background: var(--color-bg-alt); border-radius: 6px; }
+    .breakdown-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .breakdown-row.clickable { cursor: pointer; }
+    .breakdown-row.clickable:hover .bd-label { text-decoration: underline; }
+    .bd-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--color-text-secondary); white-space: nowrap; }
+    .bd-value { font-size: 0.9rem; font-weight: 700; white-space: nowrap; }
+
     .section-title { margin: 1.5rem 0 0.75rem; font-size: 1.1rem; color: var(--color-text); }
+    .no-data { color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 1.5rem; }
 
     .person-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
     .person-card { padding: 1.25rem; }
@@ -347,21 +335,30 @@ interface PersonTally {
     .invest-row.sub-row { padding-left: 1rem; opacity: 0.85; }
     .invest-label.sub-label { font-size: 0.7rem; color: var(--color-text-muted); }
 
-    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
-    .chart-card { padding: 1.25rem; }
-    .chart-card h3 { margin: 0 0 1rem; font-size: var(--font-md); color: var(--color-text); }
+    .segment-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+    .segment-card { padding: 1.25rem; min-width: 0; }
+    .segment-name { font-size: var(--font-lg); font-weight: 700; color: var(--color-text); margin-bottom: 8px; }
+    .segment-figures { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .segment-figure { display: flex; flex-direction: column; min-width: 0; }
+    .segment-value { font-size: var(--font-xl); font-weight: 700; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .segment-sold { margin-top: 8px; font-size: 0.8rem; color: var(--color-text-secondary); }
 
     @media (max-width: 768px) {
-      .charts-grid { grid-template-columns: 1fr; }
       .person-grid { grid-template-columns: 1fr; }
-      .desktop-only { display: none; }
     }
     @media (max-width: 480px) {
       .summary-grid { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+      .segment-grid { grid-template-columns: 1fr; gap: 0.5rem; }
       .stat-card { padding: 0.75rem 1rem; }
       .stat-label { font-size: 0.6rem; }
       .stat-value { font-size: 1.1rem; }
       .stat-count { font-size: 0.65rem; }
+      /* A lone third card (Net) takes the whole row instead of half */
+      .summary-grid > .stat-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+      .card-breakdown { padding: 6px 8px; }
+      .breakdown-row { flex-wrap: wrap; }
+      .bd-label { font-size: 0.6rem; white-space: normal; }
+      .bd-value { font-size: 0.8rem; margin-left: auto; }
       .section-title { font-size: 1rem; }
       .person-card { padding: 1rem; }
       .person-amount { font-size: 1rem; }
@@ -369,6 +366,8 @@ interface PersonTally {
       .invest-row.sub-row { padding-left: 0.75rem; font-size: 0.65rem; }
       .holding-tag { font-size: 0.5rem; padding: 1px 3px; }
       .filter-chip { padding: 5px 10px; font-size: 0.75rem; }
+      .segment-card { padding: 1rem; }
+      .segment-value { font-size: 1rem; }
     }
   `],
 })
@@ -385,8 +384,14 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   private router = inject(Router);
 
   loading = signal(true);
+  /** Expense rows for the selected date range (every page, not just the first). */
   allTransactions = signal<Transaction[]>([]);
+  /** Expense rows after the chips are applied. */
   filtered = signal<Transaction[]>([]);
+  /** Income rows for the selected date range. */
+  incomeTransactions = signal<Transaction[]>([]);
+  /** Income rows after the Segment / Tag chips are applied. */
+  filteredIncome = signal<Transaction[]>([]);
 
   private currentSelection!: DateRangeSelection;
 
@@ -396,36 +401,27 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
   filterCategory = '';
   filterTag = '';
 
-
-  // Unique values for dropdowns
+  // Unique values for chips
   allSegments = signal<string[]>([]);
   allPaidBy = signal<string[]>([]);
   allCategories = signal<string[]>([]);
   allTags = signal<string[]>([]);
   tagProductivity = signal<{ income: number; expense: number; net: number; incomeCount: number; expenseCount: number } | null>(null);
 
-  // Summary-based totals (accurate, from pre-aggregated Firestore summaries)
-  // Income/profit/expense count settled money only; pending sales and credit
-  // purchases are shown separately as Pending (To Receive) / Credit (To Pay)
-  summaryTotalExpense = signal(0);
-  summaryTotalIncome = signal(0);
-  summaryNetProfit = signal(0);
-  summaryPendingIncome = signal(0);
-  summaryPendingExpense = signal(0);
-  /** Raw summaries for the selected range — the single source for every per-segment figure. */
-  private rangeSummaries = signal<MonthlySummary[]>([]);
-  /** Settled-cash income / expense / profit per segment, same basis as the tiles above. */
-  segmentProfit = computed(() =>
-    this.summaryService.settledBySegment(this.rangeSummaries()).map(s => ({
-      ...s,
-      name: this.segments().find(x => x.id === s.segment)?.name || s.segment,
-    })),
-  );
+  // Expense card: gross (billed) → Paid (settled) + Credit (still to pay)
+  expenseGross = signal(0);
+  totalExpense = signal(0);          // settled portion — also feeds Person Investment + WhatsApp share
+  pendingExpenseAmount = signal(0);  // credit still to pay
+  // Income card: gross (billed) → Distributed + Reinvested + Undistributed + Pending
+  incomeGross = signal(0);
+  totalIncomeAmount = signal(0);     // distributed to persons
+  incomeReinvested = signal(0);
+  totalUndistributed = signal(0);
+  pendingIncomeAmount = signal(0);   // still to receive
+  netProfit = signal(0);             // incomeGross − expenseGross
 
-  // Computed stats (from loaded transactions — used for charts/breakdowns)
-  totalExpense = signal(0);
   segmentTotals = signal<{ name: string; total: number; count: number }[]>([]);
-  personTotals = signal<{ name: string; total: number; segments: { name: string; total: number }[] }[]>([]);
+  segmentCards = signal<SegmentCard[]>([]);
   investmentSummary = signal<{
     name: string;
     expensesPaid: number;
@@ -442,39 +438,11 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     cashInHand: number;
   }[]>([]);
   maxInvestment = signal(0);
-  incomeTransactions = signal<Transaction[]>([]);
   segments = signal<Segment[]>([]);
-  totalIncomeAmount = signal(0);
-  netProfit = signal(0);
-  totalUndistributed = signal(0);
-  pendingIncomeAmount = signal(0);
-  pendingExpenseAmount = signal(0);
-  filteredIncome = signal<Transaction[]>([]);
 
-  // Cached data (loaded once, reused across filter changes)
+  // Cached reference data (loaded with the transactions, reused across chip changes)
   private cachedUidToName: Record<string, string> = {};
   private cachedLoans: Loan[] = [];
-
-  // Charts
-  segmentChartData = signal<ChartConfiguration<'doughnut'>['data']>({ labels: [], datasets: [] });
-  categoryChartData = signal<ChartConfiguration<'doughnut'>['data']>({ labels: [], datasets: [] });
-  personChartData = signal<ChartConfiguration<'bar'>['data']>({ labels: [], datasets: [] });
-  monthlyChartData = signal<ChartConfiguration<'bar'>['data']>({ labels: [], datasets: [] });
-
-  pieOptions: ChartConfiguration<'doughnut'>['options'] = {
-    responsive: true,
-    plugins: { legend: { position: 'bottom' } },
-  };
-  barOptions: ChartConfiguration<'bar'>['options'] = {
-    responsive: true,
-    plugins: { legend: { display: false } },
-    scales: {
-      y: { beginAtZero: true },
-      x: { ticks: { maxRotation: 45, autoSkip: true } },
-    },
-  };
-
-  private colors = ['#4f46e5', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#be123c', '#65a30d'];
 
   async ngOnInit(): Promise<void> {
     try {
@@ -485,7 +453,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       this.segments.set(segs);
       // Always show all active segments and users in filter chips
       this.allSegments.set(segs.filter(s => s.isActive).map(s => s.name).sort());
-      this.allPaidBy.set(users.filter(u => u.isActive).map(u => u.displayName).sort());
+      this.allPaidBy.set([...new Set([...this.allPaidBy(), ...users.filter(u => u.isActive).map(u => u.displayName)])].sort());
     } catch (err) {
       console.error('[AnalyticsTab] ngOnInit', err);
       this.toast.error('Failed to load data. Check your connection and try again.');
@@ -501,237 +469,53 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
 
   async loadTransactions(): Promise<void> {
     await safeLoad(this.loading, async () => {
-      // Clear cache on fresh data load
-      this.cachedUidToName = {};
-      this.cachedLoans = [];
-      const filters: any = { type: 'expense' as const };
+      const sel = this.currentSelection;
 
-      if (this.currentSelection.mode === 'monthly') {
-        filters.month = this.currentSelection.month;
+      // One query for both income and expense; page to the end so all-time /
+      // multi-month totals are exact. Query shapes all have composite indexes:
+      // month ==, month in (≤30), or no month filter at all.
+      const filters: { month?: string; months?: string[] } = {};
+      let rangeMonths: string[] = [];
+      if (sel.mode === 'monthly' && sel.month) {
+        filters.month = sel.month;
+      } else if (sel.mode === 'custom') {
+        rangeMonths = getMonthRange(sel.fromMonth!, sel.toMonth!);
+        if (rangeMonths.length <= 30) filters.months = rangeMonths;
       }
 
-      // Fetch transactions AND pre-aggregated summaries in parallel
-      // Summaries give accurate totals; transactions are for breakdowns/charts
-      const [result, summaries] = await Promise.all([
-        this.transactionService.getAll(filters, 200),
-        this.loadSummaries(),
+      const [rows, users, loanResult] = await Promise.all([
+        this.transactionService.getAllPages(filters),
+        this.userService.getAll(),
+        this.loanService.getAll({}, 200),
       ]);
 
-      // Set accurate totals from summaries.
-      // Summaries count money at billing time, so strip pending (unreceived)
-      // sales and credit (unpaid) purchases out of the tiles and surface them
-      // separately as Pending (To Receive) / Credit (To Pay).
-      const summaryTotals = this.summaryService.aggregateSummaries(summaries);
-      const settled = this.summaryService.settledTotals(summaries);
-      this.rangeSummaries.set(summaries);
-      this.summaryTotalExpense.set(settled.expense);
-      this.summaryTotalIncome.set(settled.income);
-      this.summaryNetProfit.set(settled.profit);
-      this.summaryPendingIncome.set(summaryTotals.pendingIncome);
-      this.summaryPendingExpense.set(summaryTotals.pendingExpense);
-
-      let txns = result.transactions;
-
-      if (this.currentSelection.mode === 'custom') {
-        txns = txns.filter(t => t.month >= this.currentSelection.fromMonth! && t.month <= this.currentSelection.toMonth!);
-      }
-
-      this.allTransactions.set(txns);
-
-      // Extract unique tags from expense transactions (income tags added below)
-      const tagSet = new Set<string>(txns.flatMap(t => t.tags || []));
-
-      // Merge transaction names with base reference data (adds external/non-registered persons)
-      const txnPersons = txns.map(t => normalizeName(t.paidByName || 'Unknown'));
-      this.allPaidBy.set([...new Set([...this.allPaidBy(), ...txnPersons])].sort());
-      this.allCategories.set([...new Set(txns.map((t) => t.categoryName))].sort());
-
-      this.applyFilters();
-      await this.buildInvestmentSummary(txns);
-
-      // Merge income tags and set allTags
-      this.incomeTransactions().forEach(t => (t.tags || []).forEach(tag => tagSet.add(tag)));
-      this.allTags.set([...tagSet].sort());
-    }, this.toast);
-  }
-
-  /** Load the pre-aggregated monthly summaries covering the selected date range. */
-  private async loadSummaries(): Promise<MonthlySummary[]> {
-    try {
-      if (this.currentSelection.mode === 'monthly' && this.currentSelection.month) {
-        return await this.summaryService.getForMonth(this.currentSelection.month);
-      } else if (this.currentSelection.mode === 'custom') {
-        const months = getMonthRange(this.currentSelection.fromMonth!, this.currentSelection.toMonth!);
-        return await this.summaryService.getForMonthsBatched(months);
-      }
-      // All time — use all monthly summaries
-      return await this.summaryService.getAll();
-    } catch {
-      return [];
-    }
-  }
-
-  private async buildInvestmentSummary(expenseTxns: Transaction[]): Promise<void> {
-    const personMap: Record<string, PersonTally> = {};
-
-    // Build UID→name lookup (cache for reuse in applyFilters)
-    if (Object.keys(this.cachedUidToName).length === 0) {
-      const users = await this.userService.getAll();
+      this.cachedUidToName = {};
       for (const u of users) {
         if (u.isActive) this.cachedUidToName[u.uid] = normalizeName(u.displayName);
       }
-    }
-    const uidToName = this.cachedUidToName;
+      this.cachedLoans = loanResult.loans;
 
-    // Resolve a person to a consistent key (prefer UID-based name, fallback to normalized input)
-    const resolveKey = (uid: string | null | undefined, name: string | null | undefined): string => {
-      if (uid && uid !== 'other' && uidToName[uid]) return uidToName[uid];
-      return normalizeName(name || 'Unknown');
-    };
+      let inRange = rows;
+      if (sel.mode === 'custom' && rangeMonths.length > 30) {
+        inRange = rows.filter(t => t.month >= sel.fromMonth! && t.month <= sel.toMonth!);
+      }
+      const txns = inRange.filter(t => t.type === 'expense');
+      const income = inRange.filter(t => t.type === 'income');
+      this.allTransactions.set(txns);
+      this.incomeTransactions.set(income);
 
-    const ensurePerson = (name: string) => {
-      if (!personMap[name]) personMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0, loanHolds: 0, loanHoldsDetails: [], loanOwes: 0, loanOwesDetails: [], loanFundedSpend: 0, spentFromHeldCash: 0 };
-    };
-
-    for (const txn of expenseTxns) {
-      const name = resolveKey(txn.paidBy, txn.paidByName || txn.createdByName);
-      ensurePerson(name);
-      const settled = settledPortion(txn);
-      personMap[name].expensesPaid += settled;
-      // Spending drawn from a loan this person holds is farm money, not their own capital.
-      // (loanHolds already nets this out of custody via utilizationRemaining.)
-      if (txn.linkedLoanId) personMap[name].loanFundedSpend += settled;
-    }
-
-    try {
-      const incomeResult = await this.transactionService.getAll({ type: 'income' }, 200);
-      this.incomeTransactions.set(incomeResult.transactions);
-
-      // Add distribution recipients to person chip list
-      const distributionNames = incomeResult.transactions
+      // Chips: registered users + anyone who paid an expense or received a distribution
+      const txnPersons = txns.map(t => normalizeName(t.paidByName || 'Unknown'));
+      const distributionNames = income
         .flatMap(t => (t.distributions || []))
         .filter(d => d.uid !== 'reinvestment')
         .map(d => d.name);
-      const currentPaidBy = this.allPaidBy();
-      this.allPaidBy.set([...new Set([...currentPaidBy, ...distributionNames])].sort());
+      this.allPaidBy.set([...new Set([...this.allPaidBy(), ...txnPersons, ...distributionNames])].sort());
+      this.allCategories.set([...new Set(txns.map((t) => t.categoryName))].sort());
+      this.allTags.set([...new Set(inRange.flatMap(t => t.tags || []))].sort());
 
-      let incomeForRange = incomeResult.transactions;
-      if (this.currentSelection.mode === 'monthly') {
-        incomeForRange = incomeForRange.filter(t => t.month === this.currentSelection.month);
-      } else if (this.currentSelection.mode === 'custom') {
-        incomeForRange = incomeForRange.filter(t => t.month >= this.currentSelection.fromMonth! && t.month <= this.currentSelection.toMonth!);
-      }
-      if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segment === this.filterSegment);
-      this.filteredIncome.set(incomeForRange);
-      this.pendingIncomeAmount.set(
-        incomeForRange.reduce((s, t) => s + pendingRemaining(t), 0)
-      );
-
-      let distributedTotal = 0;
-      let undistributedTotal = 0;
-
-      for (const txn of incomeForRange) {
-        // Total of ALL distributions (including reinvestment) = money that's been allocated
-        const totalAllocated = (txn.distributions || [])
-          .reduce((s, d) => s + d.amount, 0);
-
-        // Only count person distributions as income (not reinvestment)
-        for (const d of (txn.distributions || [])) {
-          if (d.uid === 'reinvestment') continue;
-          const dName = resolveKey(d.uid, d.name);
-          ensurePerson(dName);
-          personMap[dName].incomeReceived += d.amount;
-          distributedTotal += d.amount;
-        }
-
-        // Undistributed = total income - everything allocated (including reinvestment).
-        // Pending (unreceived) income is not money in hand — it belongs in Dues, not here.
-        const receiver = resolveKey(txn.paidBy, txn.paidByName || txn.createdByName);
-        const undistributed = txn.amount - totalAllocated;
-        if (undistributed > 0 && txn.paymentStatus !== 'pending') {
-          ensurePerson(receiver);
-          personMap[receiver].holding += undistributed;
-          undistributedTotal += undistributed;
-        }
-      }
-
-      // Total Income = only distributed to persons (not undistributed, not reinvestment)
-      this.totalIncomeAmount.set(distributedTotal);
-      this.netProfit.set(distributedTotal - this.totalExpense());
-    } catch {}
-
-    // Loan tracking — separate "holds" (custody) from "owes" (personal debt)
-    try {
-      if (this.cachedLoans.length === 0) {
-        const loanResult = await this.loanService.getAll({}, 200);
-        this.cachedLoans = loanResult.loans;
-      }
-      for (const loan of this.cachedLoans) {
-        // Personal withdrawals = OWES (person took money for personal use, must return)
-        if (loan.parentFormalLoanId && loan.balanceRemaining > 0) {
-          const name = resolveKey(loan.personUid, loan.personName);
-          ensurePerson(name);
-          personMap[name].loanOwes += loan.balanceRemaining;
-          personMap[name].loanOwesDetails.push({
-            loanId: loan.id,
-            label: loan.purpose || 'Personal use',
-            amount: loan.balanceRemaining,
-          });
-        }
-        // Formal loan fund holders = HOLDS (person manages business money, not personal debt)
-        if (loan.loanCategory === 'formal' && loan.repaymentStatus !== 'completed') {
-          const label = `${loan.loanSourceName ?? loan.personName}${loan.accountNumber ? ' (' + loan.accountNumber + ')' : ''}`;
-          // Cash advanced to other people to hold (float) — attribute to each of them
-          const openAdvances = (loan.advances ?? []).filter(a => a.status === 'open');
-          let advancedOut = 0;
-          for (const a of openAdvances) {
-            const bal = a.amount - a.spent - a.returned;
-            if (bal <= 0) continue;
-            advancedOut += bal;
-            const aName = resolveKey(a.personUid, a.personName);
-            ensurePerson(aName);
-            personMap[aName].loanHolds += bal;
-            personMap[aName].loanHoldsDetails.push({ loanId: loan.id, label: `Advance · ${label}`, amount: bal });
-          }
-          // The named holder keeps whatever unused funds are not advanced out
-          const holderShare = (loan.utilizationRemaining ?? 0) - advancedOut;
-          if (loan.heldByName && holderShare > 0) {
-            const name = resolveKey(loan.heldByUid, loan.heldByName);
-            ensurePerson(name);
-            personMap[name].loanHolds += holderShare;
-            personMap[name].loanHoldsDetails.push({ loanId: loan.id, label, amount: holderShare });
-          }
-        }
-      }
-    } catch {}
-
-    const summary = Object.entries(personMap)
-      .map(([name, data]) => {
-        // Spending someone funds out of farm cash they are already holding is not an
-        // investment by them, and it must also draw that cash down. Loan-funded spend is
-        // already netted out of loanHolds, so only the income-custody part reduces holding.
-        const ownSpendBeforeHeld = Math.max(0, data.expensesPaid - data.loanFundedSpend);
-        const spentFromHeldCash = Math.min(ownSpendBeforeHeld, data.holding);
-        const holdingLeft = data.holding - spentFromHeldCash;
-        const fundedFromFarmCash = data.loanFundedSpend + spentFromHeldCash;
-        return {
-          name,
-          ...data,
-          spentFromHeldCash,
-          fundedFromFarmCash,
-          // Own money actually put in, net of anything funded from farm cash in custody.
-          net: data.expensesPaid - fundedFromFarmCash - data.incomeReceived,
-          holding: holdingLeft,
-          // Cash this person holds right now: undistributed income they have not spent,
-          // plus unused loan funds in their custody. Loan Owes is a receivable, so excluded.
-          cashInHand: holdingLeft + data.loanHolds,
-        };
-      })
-      .sort((a, b) => b.net - a.net);
-
-    this.investmentSummary.set(summary);
-    this.maxInvestment.set(summary.length > 0 ? Math.max(...summary.map(s => s.net)) : 0);
-    this.totalUndistributed.set(summary.reduce((s, p) => s + p.holding, 0));
+      this.applyFilters();
+    }, this.toast);
   }
 
   goToDues(tab: 'receivables' | 'payables' = 'receivables'): void {
@@ -771,6 +555,11 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     this.setFilter('all', '');
   }
 
+  /** "320 kg · 12 head" — same formatting as the Ledger footer */
+  soldLabel(soldQty: QuantityByUnit[]): string {
+    return formatQuantityByUnit(soldQty);
+  }
+
   applyFilters(): void {
     let txns = [...this.allTransactions()];
 
@@ -788,12 +577,11 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     }
 
     this.filtered.set(txns);
-    // Tiles/charts count settled cash only; the credit (unpaid) portion is
-    // surfaced separately in the Credit (To Pay) tile
+    this.expenseGross.set(txns.reduce((s, t) => s + t.amount, 0));
     this.totalExpense.set(txns.reduce((s, t) => s + settledPortion(t), 0));
     this.pendingExpenseAmount.set(txns.reduce((s, t) => s + pendingRemaining(t), 0));
 
-    // Segment totals
+    // Segment expense totals (settled) — WhatsApp share sends these
     const segMap = new Map<string, { total: number; count: number }>();
     txns.forEach((t) => {
       const e = segMap.get(t.segmentName) || { total: 0, count: 0 };
@@ -805,41 +593,22 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       Array.from(segMap.entries()).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.total - a.total)
     );
 
-    // Person totals with segment breakdown
-    const personMap = new Map<string, Map<string, number>>();
-    txns.forEach((t) => {
-      const name = normalizeName(t.paidByName || 'Unknown');
-      if (!personMap.has(name)) personMap.set(name, new Map());
-      const segInner = personMap.get(name)!;
-      segInner.set(t.segmentName, (segInner.get(t.segmentName) || 0) + settledPortion(t));
-    });
-    this.personTotals.set(
-      Array.from(personMap.entries()).map(([name, segs]) => ({
-        name,
-        total: Array.from(segs.values()).reduce((s, v) => s + v, 0),
-        segments: Array.from(segs.entries()).map(([sName, sTotal]) => ({ name: sName, total: sTotal })),
-      })).sort((a, b) => b.total - a.total)
-    );
-
-    this.buildCharts(txns);
-
-    // Re-filter income — filter by date range and segment/category only (NOT by person)
-    // Person filter is applied later per-distribution, not on the whole income transaction
+    // Income rows follow Segment / Category / Tag only (NOT Person): the Person
+    // chip applies per-distribution on the person cards, not to the whole sale.
     let incomeForRange = this.incomeTransactions();
-    if (this.currentSelection.mode === 'monthly') {
-      incomeForRange = incomeForRange.filter(t => t.month === this.currentSelection.month);
-    } else if (this.currentSelection.mode === 'custom') {
-      incomeForRange = incomeForRange.filter(t => t.month >= this.currentSelection.fromMonth! && t.month <= this.currentSelection.toMonth!);
-    }
     if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segmentName === this.filterSegment);
     if (this.filterCategory) incomeForRange = incomeForRange.filter(t => t.categoryName === this.filterCategory);
     if (this.filterTag) incomeForRange = incomeForRange.filter(t => t.tags?.includes(this.filterTag));
     this.filteredIncome.set(incomeForRange);
-    this.pendingIncomeAmount.set(
-      incomeForRange.reduce((s, t) => s + pendingRemaining(t), 0)
+    this.incomeGross.set(incomeForRange.reduce((s, t) => s + t.amount, 0));
+    this.pendingIncomeAmount.set(incomeForRange.reduce((s, t) => s + pendingRemaining(t), 0));
+    this.incomeReinvested.set(
+      incomeForRange.reduce((s, t) => s + (t.distributions || [])
+        .filter(d => d.uid === 'reinvestment')
+        .reduce((ds, d) => ds + d.amount, 0), 0)
     );
 
-    // Compute tag productivity when a tag is selected
+    // Tag productivity when a tag is selected
     if (this.filterTag) {
       const tagExpense = txns.reduce((s, t) => s + t.amount, 0);
       const tagIncome = incomeForRange.reduce((s, t) => s + t.amount, 0);
@@ -854,66 +623,77 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       this.tagProductivity.set(null);
     }
 
-    // Rebuild person investment from filtered data (use cached UID lookup)
-    const uidToName2 = this.cachedUidToName;
-    const resolveKey2 = (uid: string | null | undefined, name: string | null | undefined): string => {
-      if (uid && uid !== 'other' && uidToName2[uid]) return uidToName2[uid];
+    this.buildSegmentCards(txns, incomeForRange);
+
+    // Person investment from filtered data (cached UID lookup + loans)
+    const uidToName = this.cachedUidToName;
+    const resolveKey = (uid: string | null | undefined, name: string | null | undefined): string => {
+      if (uid && uid !== 'other' && uidToName[uid]) return uidToName[uid];
       return normalizeName(name || 'Unknown');
     };
     const investMap: Record<string, PersonTally> = {};
-    const ensurePerson2 = (name: string) => {
+    const ensurePerson = (name: string) => {
       if (!investMap[name]) investMap[name] = { expensesPaid: 0, incomeReceived: 0, holding: 0, loanHolds: 0, loanHoldsDetails: [], loanOwes: 0, loanOwesDetails: [], loanFundedSpend: 0, spentFromHeldCash: 0 };
     };
     let distributedTotal = 0;
     for (const t of txns) {
-      const name = resolveKey2(t.paidBy, t.paidByName || t.createdByName);
-      ensurePerson2(name);
+      const name = resolveKey(t.paidBy, t.paidByName || t.createdByName);
+      ensurePerson(name);
       const settled = settledPortion(t);
       investMap[name].expensesPaid += settled;
+      // Spending drawn from a loan this person holds is farm money, not their own capital.
       if (t.linkedLoanId) investMap[name].loanFundedSpend += settled;
     }
     for (const t of incomeForRange) {
+      // Total of ALL distributions (including reinvestment) = money that's been allocated
       const totalAllocated = (t.distributions || []).reduce((s, d) => s + d.amount, 0);
+      // Only person distributions count as income received (not reinvestment)
       for (const d of (t.distributions || [])) {
         if (d.uid === 'reinvestment') continue;
-        const dName = resolveKey2(d.uid, d.name);
-        ensurePerson2(dName);
+        const dName = resolveKey(d.uid, d.name);
+        ensurePerson(dName);
         investMap[dName].incomeReceived += d.amount;
         distributedTotal += d.amount;
       }
-      const receiver = resolveKey2(t.paidBy, t.paidByName || t.createdByName);
+      // Undistributed = income − everything allocated. Pending (unreceived) income
+      // is not money in hand — it belongs in Dues, not here.
+      const receiver = resolveKey(t.paidBy, t.paidByName || t.createdByName);
       const undistributed = t.amount - totalAllocated;
       if (undistributed > 0 && t.paymentStatus !== 'pending') {
-        ensurePerson2(receiver);
+        ensurePerson(receiver);
         investMap[receiver].holding += undistributed;
       }
     }
-    // Loan tracking — holds vs owes (use cached loans)
+    // Loan tracking — separate "holds" (custody) from "owes" (personal debt)
     try {
       for (const loan of this.cachedLoans) {
+        // Personal withdrawals = OWES (person took money for personal use, must return)
         if (loan.parentFormalLoanId && loan.balanceRemaining > 0) {
-          const name = resolveKey2(loan.personUid, loan.personName);
-          ensurePerson2(name);
+          const name = resolveKey(loan.personUid, loan.personName);
+          ensurePerson(name);
           investMap[name].loanOwes += loan.balanceRemaining;
           investMap[name].loanOwesDetails.push({ loanId: loan.id, label: loan.purpose || 'Personal use', amount: loan.balanceRemaining });
         }
+        // Formal loan fund holders = HOLDS (person manages business money, not personal debt)
         if (loan.loanCategory === 'formal' && loan.repaymentStatus !== 'completed') {
           const label = `${loan.loanSourceName ?? loan.personName}${loan.accountNumber ? ' (' + loan.accountNumber + ')' : ''}`;
+          // Cash advanced to other people to hold (float) — attribute to each of them
           const openAdvances = (loan.advances ?? []).filter(a => a.status === 'open');
           let advancedOut = 0;
           for (const a of openAdvances) {
             const bal = a.amount - a.spent - a.returned;
             if (bal <= 0) continue;
             advancedOut += bal;
-            const aName = resolveKey2(a.personUid, a.personName);
-            ensurePerson2(aName);
+            const aName = resolveKey(a.personUid, a.personName);
+            ensurePerson(aName);
             investMap[aName].loanHolds += bal;
             investMap[aName].loanHoldsDetails.push({ loanId: loan.id, label: `Advance · ${label}`, amount: bal });
           }
+          // The named holder keeps whatever unused funds are not advanced out
           const holderShare = (loan.utilizationRemaining ?? 0) - advancedOut;
           if (loan.heldByName && holderShare > 0) {
-            const name = resolveKey2(loan.heldByUid, loan.heldByName);
-            ensurePerson2(name);
+            const name = resolveKey(loan.heldByUid, loan.heldByName);
+            ensurePerson(name);
             investMap[name].loanHolds += holderShare;
             investMap[name].loanHoldsDetails.push({ loanId: loan.id, label, amount: holderShare });
           }
@@ -922,7 +702,7 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     } catch {}
 
     this.totalIncomeAmount.set(distributedTotal);
-    this.netProfit.set(distributedTotal - this.totalExpense());
+    this.netProfit.set(this.incomeGross() - this.expenseGross());
 
     let summaryEntries = Object.entries(investMap);
     if (this.filterPaidBy) {
@@ -930,6 +710,9 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     }
     const summary = summaryEntries
       .map(([name, data]) => {
+        // Spending someone funds out of farm cash they are already holding is not an
+        // investment by them, and it must also draw that cash down. Loan-funded spend is
+        // already netted out of loanHolds, so only the income-custody part reduces holding.
         const ownSpendBeforeHeld = Math.max(0, data.expensesPaid - data.loanFundedSpend);
         const spentFromHeldCash = Math.min(ownSpendBeforeHeld, data.holding);
         const holdingLeft = data.holding - spentFromHeldCash;
@@ -939,8 +722,11 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
           ...data,
           spentFromHeldCash,
           fundedFromFarmCash,
+          // Own money actually put in, net of anything funded from farm cash in custody.
           net: data.expensesPaid - fundedFromFarmCash - data.incomeReceived,
           holding: holdingLeft,
+          // Cash this person holds right now: undistributed income they have not spent,
+          // plus unused loan funds in their custody. Loan Owes is a receivable, so excluded.
           cashInHand: holdingLeft + data.loanHolds,
         };
       })
@@ -948,6 +734,41 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
     this.investmentSummary.set(summary);
     this.maxInvestment.set(summary.length > 0 ? Math.max(...summary.map(s => s.net)) : 0);
     this.totalUndistributed.set(summary.reduce((s, p) => s + p.holding, 0));
+  }
+
+  /** Gross income / expense per segment plus sale quantities grouped by unit. */
+  private buildSegmentCards(expenseTxns: Transaction[], incomeTxns: Transaction[]): void {
+    const cards = new Map<string, { name: string; income: number; expense: number; sales: Transaction[] }>();
+    const ensure = (t: Transaction) => {
+      let c = cards.get(t.segment);
+      if (!c) {
+        c = { name: t.segmentName, income: 0, expense: 0, sales: [] };
+        cards.set(t.segment, c);
+      }
+      return c;
+    };
+    for (const t of expenseTxns) ensure(t).expense += t.amount;
+    for (const t of incomeTxns) {
+      const c = ensure(t);
+      c.income += t.amount;
+      c.sales.push(t);
+    }
+    const segs = this.segments();
+    this.segmentCards.set(
+      [...cards.entries()]
+        .map(([segment, c]) => {
+          const seg = segs.find(s => s.id === segment);
+          return {
+            segment,
+            name: seg?.name || c.name,
+            icon: seg?.icon || '',
+            income: c.income,
+            expense: c.expense,
+            soldQty: quantityByUnit(c.sales),
+          };
+        })
+        .sort((a, b) => b.income - a.income || a.name.localeCompare(b.name))
+    );
   }
 
   private get rangeLabel(): string {
@@ -1003,11 +824,6 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       .sort((a, b) => b.total - a.total);
 
     let incomeForRange = this.incomeTransactions();
-    if (this.currentSelection.mode === 'monthly') {
-      incomeForRange = incomeForRange.filter(t => t.month === this.currentSelection.month);
-    } else if (this.currentSelection.mode === 'custom') {
-      incomeForRange = incomeForRange.filter(t => t.month >= this.currentSelection.fromMonth! && t.month <= this.currentSelection.toMonth!);
-    }
     if (this.filterSegment) incomeForRange = incomeForRange.filter(t => t.segmentName === this.filterSegment);
 
     const incomeDetails = incomeForRange.map(t => ({ segmentName: t.segmentName, categoryName: t.categoryName, amount: t.amount }));
@@ -1055,49 +871,5 @@ export class AnalyticsTabComponent implements OnInit, OnChanges {
       transactions: allTxns,
     };
     this.dialog.open(WhatsappShareDialogComponent, { data, width: '90vw', maxWidth: '360px' });
-  }
-
-  private buildCharts(txns: Transaction[]): void {
-    // Segment doughnut
-    const segLabels = this.segmentTotals().map((s) => s.name);
-    const segData = this.segmentTotals().map((s) => s.total);
-    this.segmentChartData.set({
-      labels: segLabels,
-      datasets: [{ data: segData, backgroundColor: this.colors.slice(0, segLabels.length) }],
-    });
-
-    // Category doughnut
-    const catMap = new Map<string, number>();
-    txns.forEach((t) => catMap.set(t.categoryName, (catMap.get(t.categoryName) || 0) + settledPortion(t)));
-    const catEntries = Array.from(catMap.entries()).sort((a, b) => b[1] - a[1]);
-    this.categoryChartData.set({
-      labels: catEntries.map(([k]) => k),
-      datasets: [{ data: catEntries.map(([, v]) => v), backgroundColor: this.colors.slice(0, catEntries.length) }],
-    });
-
-    // Person bar
-    const persons = this.personTotals();
-    this.personChartData.set({
-      labels: persons.map((p) => p.name),
-      datasets: [{
-        data: persons.map((p) => p.total),
-        backgroundColor: this.colors.slice(0, persons.length),
-      }],
-    });
-
-    // Monthly bar
-    const monthMap = new Map<string, number>();
-    txns.forEach((t) => monthMap.set(t.month, (monthMap.get(t.month) || 0) + settledPortion(t)));
-    const monthEntries = Array.from(monthMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-    this.monthlyChartData.set({
-      labels: monthEntries.map(([m]) => {
-        const [y, mo] = m.split('-');
-        return new Date(parseInt(y), parseInt(mo) - 1).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
-      }),
-      datasets: [{
-        data: monthEntries.map(([, v]) => v),
-        backgroundColor: '#4f46e5',
-      }],
-    });
   }
 }

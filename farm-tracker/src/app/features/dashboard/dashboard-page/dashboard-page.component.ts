@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal, OnInit, V
 import { AuthService } from '../../../core/services/auth.service';
 import { SummaryService } from '../../../core/services/summary.service';
 import { UserService } from '../../../core/services/user.service';
-import { LoanService } from '../../../core/services/loan.service';
 import { BackupService } from '../../../core/services/backup.service';
 import { MonthlySummary } from '../../../core/models/monthly-summary.model';
 import { getMonthName, getLast6MonthsFrom, getMonthRange } from '../../../core/utils/date.utils';
@@ -12,8 +11,6 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { SegmentBreakdownChartComponent } from '../segment-breakdown-chart/segment-breakdown-chart.component';
 import { MonthlyTrendChartComponent } from '../monthly-trend-chart/monthly-trend-chart.component';
-import { LoanSummaryWidgetComponent } from '../loan-summary-widget/loan-summary-widget.component';
-import { BudgetWidgetComponent } from '../budget-widget/budget-widget.component';
 import { StockWidgetComponent } from '../stock-widget/stock-widget.component';
 import { AnalyticsTabComponent } from '../analytics-tab/analytics-tab.component';
 import { SegmentService } from '../../../core/services/segment.service';
@@ -27,7 +24,7 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     SegmentBreakdownChartComponent, MonthlyTrendChartComponent,
-    LoanSummaryWidgetComponent, BudgetWidgetComponent, StockWidgetComponent,
+    StockWidgetComponent,
     AnalyticsTabComponent,
     LoadingSpinnerComponent, LoadingSkeletonComponent, DateRangeFilterComponent,
     MatIconModule, MatButtonModule,
@@ -76,27 +73,6 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
           <app-monthly-trend-chart [trendData]="trendData()" [chartTitle]="trendTitle()" />
         </div>
 
-        @if (currentMode() === 'monthly' || hasLoanData()) {
-          <div class="widgets-row">
-            @if (currentMode() === 'monthly') {
-              <app-budget-widget [segments]="segments()" [summaries]="currentMonthSummaries()" />
-            }
-            @if (hasLoanData()) {
-              <app-loan-summary-widget
-                  [unusedInHand]="loanSummary().unusedInHand"
-                  [pendingGiven]="loanSummary().pendingGiven"
-                  [pendingReceived]="loanSummary().pendingReceived"
-                  [totalSanctioned]="loanSummary().totalSanctioned"
-                  [totalOutstanding]="loanSummary().totalOutstanding"
-                  [upcomingEMICount]="loanSummary().upcomingEMICount"
-                  [upcomingEMIAmount]="loanSummary().upcomingEMIAmount"
-                  [totalInterestPaid]="loanSummary().totalInterestPaid" />
-            }
-          </div>
-        }
-
-        <hr class="section-divider" />
-
         <app-analytics-tab [dateSelection]="currentSelection()!" />
       }
 
@@ -108,11 +84,8 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
     .page-title { margin: 0; font-size: var(--font-2xl); color: var(--color-text); }
     .header-actions { display: flex; gap: 0.25rem; }
     .wa-share-btn { color: #25D366 !important; }
-    :host app-stock-widget,
-    :host app-recent-transactions { display: block; margin-bottom: 1rem; }
+    :host app-stock-widget { display: block; margin-bottom: 1rem; }
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
-    .widgets-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 1rem; margin-bottom: 1rem; }
-    .section-divider { border: none; border-top: 1px solid var(--color-border); margin: 1.5rem 0; }
     .no-access-notice {
       display: flex; align-items: center; gap: 0.75rem;
       padding: 1.25rem; border: 1px solid var(--color-border); border-radius: 12px;
@@ -123,7 +96,6 @@ import { DateRangeFilterComponent, DateRangeSelection } from '../../../shared/co
     @media (max-width: 768px) {
       .page-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
       .charts-grid { grid-template-columns: 1fr; }
-      .widgets-row { grid-template-columns: 1fr; }
       .hide-mobile { display: none; }
     }
   `],
@@ -135,20 +107,16 @@ export class DashboardPageComponent implements OnInit {
   private summaryService = inject(SummaryService);
   private segmentService = inject(SegmentService);
   private userService = inject(UserService);
-  private loanService = inject(LoanService);
   private backupService = inject(BackupService);
   private toast = inject(ToastService);
 
   exporting = signal(false);
   initialLoading = signal(true);
   loading = signal(false);
-  currentMode = signal<'monthly' | 'custom' | 'alltime'>('monthly');
   currentSelection = signal<DateRangeSelection | null>(null);
   trendTitle = signal('Monthly Trend (Last 6 Months)');
   currentMonthSummaries = signal<MonthlySummary[]>([]);
   personBreakdown = signal<Record<string, Record<string, { income: number; expense: number }>>>({});
-  loanSummary = signal({ totalGiven: 0, totalReceived: 0, pendingGiven: 0, pendingReceived: 0, totalSanctioned: 0, totalOutstanding: 0, upcomingEMICount: 0, upcomingEMIAmount: 0, totalInterestPaid: 0, unusedInHand: 0 });
-  hasLoanData = computed(() => Object.values(this.loanSummary()).some(v => v > 0));
   noSegmentAccess = computed(() => this.auth.isSegmentRestricted() && this.auth.assignedSegments().length === 0);
   segments = signal<Segment[]>([]);
   trendData = signal<{ month: string; income: number; expense: number }[]>([]);
@@ -159,14 +127,12 @@ export class DashboardPageComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await safeLoad(this.initialLoading, async () => {
-      const [users, loans, segs] = await Promise.all([
+      const [users, segs] = await Promise.all([
         this.userService.getAll(),
-        this.loanService.getSummary(),
         this.segmentService.getAll(),
       ]);
       this.segments.set(segs);
       for (const u of users) this.nameMap[u.uid] = u.displayName;
-      this.loanSummary.set(loans);
       this.initialized = true;
     }, this.toast);
 
@@ -182,7 +148,6 @@ export class DashboardPageComponent implements OnInit {
       this.pendingSelection = selection;
       return;
     }
-    this.currentMode.set(selection.mode);
     this.currentSelection.set(selection);
 
     await safeLoad(this.loading, async () => {

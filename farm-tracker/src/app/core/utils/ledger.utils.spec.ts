@@ -1,4 +1,4 @@
-import { computeLedgerTotals, ledgerPersonName, ledgerPeople, buildMonthOptions } from './ledger.utils';
+import { computeLedgerTotals, ledgerPersonName, ledgerPeople, buildMonthOptions, quantityByUnit, formatQuantityByUnit } from './ledger.utils';
 import { createTestTransaction } from '../../testing/test-data';
 import { Transaction } from '../models/transaction.model';
 
@@ -75,5 +75,27 @@ describe('ledger.utils', () => {
       const opts = buildMonthOptions('2027-01', new Date(2026, 8, 23));
       expect(opts.map(o => o.value)).toEqual(['2026-09']);
     });
+  });
+});
+
+describe('ledger.utils quantities', () => {
+  it('sums quantities per unit, largest first, ignoring rows without one', () => {
+    const rows = [
+      txn({ quantity: 120, unit: 'kg' }),
+      txn({ id: 'b', quantity: 200.5, unit: 'kg' }),
+      txn({ id: 'c', quantity: 12, unit: 'head' }),
+      txn({ id: 'd' }),
+      txn({ id: 'e', quantity: 3 }), // no unit → "unit"
+    ];
+    expect(quantityByUnit(rows)).toEqual([
+      { unit: 'kg', qty: 320.5 },
+      { unit: 'head', qty: 12 },
+      { unit: 'unit', qty: 3 },
+    ]);
+  });
+
+  it('formats as an Indian-grouped, dot-separated label', () => {
+    expect(formatQuantityByUnit([{ unit: 'kg', qty: 3420.5 }, { unit: 'head', qty: 12 }])).toBe('3,420.5 kg · 12 head');
+    expect(formatQuantityByUnit([])).toBe('');
   });
 });

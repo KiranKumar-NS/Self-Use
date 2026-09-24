@@ -756,4 +756,36 @@ describe('TransactionService', () => {
       expect(result.transactions).toHaveLength(2);
     });
   });
+
+  describe('getAllPages', () => {
+    const page = (ids: string[]) => ({
+      docs: ids.map(id => ({ data: () => ({ id, isDeleted: false }), id })),
+      empty: ids.length === 0,
+      size: ids.length,
+    });
+
+    it('should keep paging until a short page and concatenate every row', async () => {
+      const { getDocs } = await import('@angular/fire/firestore');
+      (getDocs as any).mockClear();
+      (getDocs as any)
+        .mockResolvedValueOnce(page(['a', 'b']))
+        .mockResolvedValueOnce(page(['c', 'd']))
+        .mockResolvedValueOnce(page(['e']));
+
+      const rows = await service.getAllPages({}, 2, 10);
+      expect(rows.map(r => r.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+      expect((getDocs as any)).toHaveBeenCalledTimes(3);
+    });
+
+    it('should stop at the page cap even when pages keep coming back full', async () => {
+      const { getDocs } = await import('@angular/fire/firestore');
+      (getDocs as any).mockClear();
+      (getDocs as any).mockResolvedValue(page(['x', 'y']));
+
+      const rows = await service.getAllPages({}, 2, 3);
+      expect(rows).toHaveLength(6);
+      expect((getDocs as any)).toHaveBeenCalledTimes(3);
+      (getDocs as any).mockResolvedValue({ docs: [], empty: true, size: 0 });
+    });
+  });
 });

@@ -49,3 +49,32 @@ export function buildMonthOptions(from = '2024-01', now = new Date()): MonthOpti
     .reverse()
     .map((value) => ({ value, label: getMonthName(value) }));
 }
+
+export interface QuantityByUnit {
+  unit: string;
+  qty: number;
+}
+
+/**
+ * Quantities summed per unit over rows that recorded one (e.g. 320 kg + 12 head),
+ * largest first. Rows without a quantity are ignored. Shared by the Ledger footer
+ * and the Dashboard segment cards.
+ */
+export function quantityByUnit(rows: Pick<Transaction, 'quantity' | 'unit'>[]): QuantityByUnit[] {
+  const byUnit = new Map<string, number>();
+  for (const t of rows) {
+    if (!t.quantity || t.quantity <= 0) continue;
+    const unit = t.unit || 'unit';
+    byUnit.set(unit, (byUnit.get(unit) || 0) + t.quantity);
+  }
+  return [...byUnit.entries()]
+    .map(([unit, qty]) => ({ unit, qty }))
+    .sort((a, b) => b.qty - a.qty);
+}
+
+/** "3,420.5 kg · 12 head" */
+export function formatQuantityByUnit(list: QuantityByUnit[]): string {
+  return list
+    .map(q => `${Number(q.qty.toFixed(2)).toLocaleString('en-IN')} ${q.unit}`)
+    .join(' · ');
+}

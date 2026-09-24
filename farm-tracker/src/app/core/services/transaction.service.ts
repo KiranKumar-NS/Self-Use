@@ -1201,6 +1201,27 @@ export class TransactionService {
     return { transactions, lastDoc: last };
   }
 
+  /**
+   * Every transaction matching `filters`, paged to the end (or to `maxPages`) so
+   * totals are exact instead of truncated at one page. Shared by the Ledger and
+   * the Dashboard analytics section.
+   */
+  async getAllPages(
+    filters: Parameters<TransactionService['getAll']>[0] = {},
+    pageSize = 500,
+    maxPages = 20,
+  ): Promise<Transaction[]> {
+    const all: Transaction[] = [];
+    let lastDoc: DocumentSnapshot | null = null;
+    for (let page = 0; page < maxPages; page++) {
+      const result = await this.getAll(filters, pageSize, lastDoc ?? undefined);
+      all.push(...result.transactions);
+      lastDoc = result.lastDoc;
+      if (result.transactions.length < pageSize || !lastDoc) break;
+    }
+    return all;
+  }
+
   async getById(id: string): Promise<Transaction | null> {
     const docSnap = await getDoc(doc(this.firestore, 'transactions', id));
     if (!docSnap.exists()) return null;

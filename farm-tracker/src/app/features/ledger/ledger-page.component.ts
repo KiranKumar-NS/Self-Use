@@ -13,15 +13,12 @@ import { EmptyStateComponent } from '../../shared/components/empty-state/empty-s
 import { sortData, toggleSortState, getSortIndicator, SortDirection } from '../../core/utils/table.utils';
 import { safeLoad } from '../../core/utils/async.utils';
 import { getMonthString } from '../../core/utils/date.utils';
-import { buildMonthOptions, computeLedgerTotals, ledgerPeople, ledgerPersonName } from '../../core/utils/ledger.utils';
+import { buildMonthOptions, computeLedgerTotals, ledgerPeople, ledgerPersonName, quantityByUnit, formatQuantityByUnit } from '../../core/utils/ledger.utils';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTabsModule } from '@angular/material/tabs';
-
-const PAGE_SIZE = 500;
-const MAX_PAGES = 20; // safety cap: 10 000 rows per segment view
 
 @Component({
   selector: 'app-ledger-page',
@@ -168,6 +165,9 @@ const MAX_PAGES = 20; // safety cap: 10 000 rows per segment view
                       <span class="figure main"><span class="figure-label">Total</span><strong>{{ totals().total | currencyInr }}</strong></span>
                       <span class="figure"><span class="figure-label">{{ type() === 'income' ? 'Received' : 'Paid' }}</span><strong>{{ totals().settled | currencyInr }}</strong></span>
                       <span class="figure pending"><span class="figure-label">Pending</span><strong>{{ totals().pending | currencyInr }}</strong></span>
+                      @if (quantities().length > 0) {
+                        <span class="figure qty"><span class="figure-label">{{ type() === 'income' ? 'Sold' : 'Bought' }}</span><strong>{{ quantityLabel() }}</strong></span>
+                      }
                     </span>
                   </div>
                 </td>
@@ -231,6 +231,7 @@ const MAX_PAGES = 20; // safety cap: 10 000 rows per segment view
     .total-row.income .figure.main strong { color: var(--color-income); }
     .total-row.expense .figure.main strong { color: var(--color-expense); }
     .figure.pending strong { color: var(--color-warning); }
+    .figure.qty strong { color: var(--color-text-secondary); font-size: 0.9rem; }
 
     @media (max-width: 768px) {
       .totals { flex-direction: column; align-items: stretch; }
@@ -278,6 +279,9 @@ export class LedgerPageComponent implements OnInit {
   });
 
   totals = computed(() => computeLedgerTotals(this.displayedRows()));
+  /** Quantities per unit over the displayed rows (e.g. kg sold), for the footer */
+  quantities = computed(() => quantityByUnit(this.displayedRows()));
+  quantityLabel = computed(() => formatQuantityByUnit(this.quantities()));
 
   async ngOnInit(): Promise<void> {
     const ok = await safeLoad(this.loading, async () => {
@@ -337,14 +341,7 @@ export class LedgerPageComponent implements OnInit {
       // One fetch for both Sale and Expense (no type filter) — both query shapes
       // are covered by existing composite indexes. Page through to the end so
       // the footer totals are exact, with a hard cap as a safety net.
-      const all: Transaction[] = [];
-      let lastDoc: any = null;
-      for (let page = 0; page < MAX_PAGES; page++) {
-        const result = await this.transactionService.getAll(filters, PAGE_SIZE, lastDoc);
-        all.push(...result.transactions);
-        lastDoc = result.lastDoc;
-        if (result.transactions.length < PAGE_SIZE || !lastDoc) break;
-      }
+      const all = await this.transactionService.getAllPages(filters);
       this.rows.set(all);
       // Drop a person filter that no longer matches any loaded row
       if (this.filterPerson() && !ledgerPeople(all).includes(this.filterPerson())) {
