@@ -156,24 +156,19 @@ import { MatTabsModule } from '@angular/material/tabs';
                 </tr>
               }
             </tbody>
-            <tfoot>
-              <tr class="total-row" [class.income]="type() === 'income'" [class.expense]="type() === 'expense'">
-                <td colspan="7">
-                  <div class="totals">
-                    <span class="total-label">Total · {{ totals().count }} {{ totals().count === 1 ? 'record' : 'records' }}</span>
-                    <span class="total-figures">
-                      <span class="figure main"><span class="figure-label">Total</span><strong>{{ totals().total | currencyInr }}</strong></span>
-                      <span class="figure"><span class="figure-label">{{ type() === 'income' ? 'Received' : 'Paid' }}</span><strong>{{ totals().settled | currencyInr }}</strong></span>
-                      <span class="figure pending"><span class="figure-label">Pending</span><strong>{{ totals().pending | currencyInr }}</strong></span>
-                      @if (quantities().length > 0) {
-                        <span class="figure qty"><span class="figure-label">{{ type() === 'income' ? 'Sold' : 'Bought' }}</span><strong>{{ quantityLabel() }}</strong></span>
-                      }
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            </tfoot>
           </table>
+        </div>
+        <!-- Totals sit outside the horizontally scrolling table so they never need a sideways scroll -->
+        <div class="totals" [class.income]="type() === 'income'" [class.expense]="type() === 'expense'">
+          <span class="total-label">Total · {{ totals().count }} {{ totals().count === 1 ? 'record' : 'records' }}</span>
+          <div class="total-figures">
+            <div class="figure main"><span class="figure-label">Total</span><strong>{{ totals().total | currencyInr }}</strong></div>
+            <div class="figure"><span class="figure-label">{{ type() === 'income' ? 'Received' : 'Paid' }}</span><strong>{{ totals().settled | currencyInr }}</strong></div>
+            <div class="figure pending"><span class="figure-label">Pending</span><strong>{{ totals().pending | currencyInr }}</strong></div>
+            @if (quantities().length > 0) {
+              <div class="figure qty"><span class="figure-label">{{ type() === 'income' ? 'Sold' : 'Bought' }}</span><strong>{{ quantityLabel() }}</strong></div>
+            }
+          </div>
         </div>
       </mat-card>
     }
@@ -214,30 +209,28 @@ import { MatTabsModule } from '@angular/material/tabs';
     .pay-status-chip.credit { background: var(--color-warning-light); color: var(--color-warning); }
     .pay-status-chip.sale-link { background: var(--color-info-light); color: var(--color-info); }
 
-    /* Total section (table footer) */
-    .ledger-table tfoot td {
-      position: sticky; bottom: 0; z-index: 2;
-      white-space: normal;
-      padding: 12px 14px;
+    /* Totals bar below the table (outside the horizontal scroll area) */
+    .totals {
+      display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+      padding: 12px 14px; border-top: 2px solid var(--color-border); background: var(--color-bg);
     }
-    .ledger-table tfoot tr:hover td { background: var(--color-bg); }
-    .totals { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
     .total-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary); white-space: nowrap; }
     .total-figures { display: flex; gap: 1.5rem; flex-wrap: wrap; justify-content: flex-end; }
     .figure { display: flex; flex-direction: column; align-items: flex-end; }
     .figure-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted); }
     .figure strong { font-size: 1rem; color: var(--color-text); }
     .figure.main strong { font-size: 1.2rem; }
-    .total-row.income .figure.main strong { color: var(--color-income); }
-    .total-row.expense .figure.main strong { color: var(--color-expense); }
+    .totals.income .figure.main strong { color: var(--color-income); }
+    .totals.expense .figure.main strong { color: var(--color-expense); }
     .figure.pending strong { color: var(--color-warning); }
     .figure.qty strong { color: var(--color-text-secondary); font-size: 0.9rem; }
 
     @media (max-width: 768px) {
-      .totals { flex-direction: column; align-items: stretch; }
-      .total-figures { justify-content: space-between; gap: 0.75rem; }
-      .figure { align-items: flex-start; }
-      .ledger-table tfoot td { max-width: none; overflow: visible; }
+      /* Stack: one figure per line, label left / value right */
+      .totals { flex-direction: column; align-items: stretch; gap: 0.5rem; }
+      .total-figures { flex-direction: column; gap: 0.35rem; }
+      .figure { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 0.75rem; }
+      .figure strong { text-align: right; overflow-wrap: anywhere; }
     }
   `],
 })
