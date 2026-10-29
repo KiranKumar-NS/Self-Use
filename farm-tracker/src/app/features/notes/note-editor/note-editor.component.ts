@@ -41,10 +41,15 @@ const AUTOSAVE_MS = 1500;
         @else if (note().updatedAt) { Saved · {{ note().updatedAt.toDate() | date:'d MMM y, h:mm a' }} }
       </span>
       <span class="spacer"></span>
+      <button mat-flat-button color="primary" class="save-btn" matTooltip="Save now (Ctrl+S) — notes also save automatically"
+        (click)="saveNow()" [disabled]="saving() || (!dirty() && !saveError())">
+        <mat-icon>save</mat-icon> {{ dirty() || saveError() ? 'Save' : 'Saved' }}
+      </button>
       <button mat-icon-button [matTooltip]="pinned() ? 'Unpin' : 'Pin to top'" (click)="togglePin()">
         <mat-icon [class.pinned]="pinned()">push_pin</mat-icon>
       </button>
       <button mat-icon-button matTooltip="Print / Save as PDF" (click)="print()"><mat-icon>print</mat-icon></button>
+      <button mat-icon-button matTooltip="Delete (move to Trash)" class="del-btn" (click)="trash()"><mat-icon>delete</mat-icon></button>
       <button mat-icon-button [matMenuTriggerFor]="more" aria-label="More actions"><mat-icon>more_vert</mat-icon></button>
       <mat-menu #more="matMenu">
         <button mat-menu-item (click)="duplicateNote()"><mat-icon>content_copy</mat-icon> Duplicate</button>
@@ -127,6 +132,8 @@ const AUTOSAVE_MS = 1500;
     .save-state mat-icon { font-size: 16px; width: 16px; height: 16px; }
     .save-state a { cursor: pointer; text-decoration: underline; }
     .pinned { color: var(--color-warning); }
+    .save-btn { margin-right: 4px; }
+    .del-btn { color: var(--color-danger); }
     .title-input { border: none; outline: none; background: transparent; font-size: 1.5rem; font-weight: 700; color: var(--color-text); padding: 4px 2px; width: 100%; }
     .meta-row { display: flex; gap: 10px; flex-wrap: wrap; }
     .cat-field { width: 220px; }
