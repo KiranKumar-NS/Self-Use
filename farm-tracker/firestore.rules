@@ -67,6 +67,11 @@ service cloud.firestore {
       allow write: if isManagerOrAdmin() && isActiveUser();
     }
 
+    // Notes (admin-only notebook: learning, experience, medicine, market)
+    match /notes/{noteId} {
+      allow read, write: if isAdmin() && isActiveUser();
+    }
+
     // Categories (reference data)
     match /categories/{categoryId} {
       allow read: if isActiveReader();

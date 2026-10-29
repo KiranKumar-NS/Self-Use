@@ -107,6 +107,11 @@ import { MatIconModule } from '@angular/material/icon';
             <mat-icon>dataset</mat-icon>
             <span>Data Setup</span>
           </a>
+
+          <a routerLink="/admin/notes" routerLinkActive="active" class="nav-item" (click)="closed.emit()">
+            <mat-icon>menu_book</mat-icon>
+            <span>Notes</span>
+          </a>
         }
       </nav>
     </div>
