@@ -178,6 +178,7 @@ const SHEETS = {
       'Linked Supplier Name': ['linkedSupplierName', 'str'],
       'Linked Sale Txn ID': ['linkedSaleTransactionId', 'str'],
       'Linked Sale Label': ['linkedSaleLabel', 'str'],
+      'Linked Sales': ['linkedSales', 'json'],
     },
   },
   'Income': {

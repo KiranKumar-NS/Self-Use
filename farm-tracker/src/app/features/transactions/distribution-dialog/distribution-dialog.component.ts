@@ -165,11 +165,11 @@ export class DistributionDialogComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await safeLoad(this.loading, async () => {
-      const [users, linkedExpenses] = await Promise.all([
+      const [users, sellingCosts] = await Promise.all([
         this.userService.getAll(),
-        this.transactionService.getLinkedSellingExpenses(this.data.transaction.id),
+        this.transactionService.getSellingCostFor(this.data.transaction.id),
       ]);
-      this.sellingCosts.set(linkedExpenses.reduce((s, t) => s + t.amount, 0));
+      this.sellingCosts.set(sellingCosts);
       const activeUsers = users.filter(u => u.isActive);
       const existing = this.data.transaction.distributions || [];
 

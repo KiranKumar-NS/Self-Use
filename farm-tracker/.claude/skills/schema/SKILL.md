@@ -47,7 +47,7 @@ NOT persisted (computed live, keep it that way): **notifications** (notification
 ## Entity link graph
 Convention: every ID link stores a denormalized `*Name` display copy. Every doc carries `segment`+`segmentName`, `month` (`YYYY-MM`) + `year` query keys, audit fields (`createdBy`/`createdByName`/`createdAt`), and `isDeleted` soft-delete (queries filter on it; hard delete is admin-only for most collections).
 
-- **Transaction →** `linkedLoanId` · `linkedAnimalIds[]` + `linkedAnimalNames[]` + `animalCostSplit{animalId: amt}` · `linkedBuyerId` · `linkedSupplierId` · `linkedHarvestId` · `linkedSaleTransactionId` (selling-cost expense → its sale income txn) · `tags[]` · `distributions[{uid,name,amount}]` (uid may be `'reinvestment'`)
+- **Transaction →** `linkedLoanId` · `linkedAnimalIds[]` + `linkedAnimalNames[]` + `animalCostSplit{animalId: amt}` · `linkedBuyerId` · `linkedSupplierId` · `linkedHarvestId` · `linkedSales[{saleId,label,amount}]` + `linkedSaleIds[]` (expense paid partly from sale incomes; remainder = payer's own share, the only part in `expenseByPerson`) · legacy `linkedSaleTransactionId` (single sale, full amount) · `tags[]` · `distributions[{uid,name,amount}]` (uid may be `'reinvestment'`)
 - **Animal →** `buyerId`, `saleTransactionId`, `saleInventoryEventId`, `originInventoryEventId`; embedded `costEntries[].transactionId`, `vaccinationHistory[]`/`medicalHistory[]` `.linkedTransactionId`
 - **Loan →** loan-to-loan: `renewedFromLoanId`/`renewedByLoanId`, `replacesLoanId`/`replacedByLoanId`, `parentFormalLoanId`; users: `heldByUid`, `personUid`. **Repayment →** `transactionId`
 - **Harvest →** `linkedCropActivityId`; embedded `sales[].buyerId` + `.linkedTransactionId`

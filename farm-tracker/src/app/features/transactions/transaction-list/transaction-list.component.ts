@@ -6,7 +6,7 @@ import { TransactionService } from '../../../core/services/transaction.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { SegmentService } from '../../../core/services/segment.service';
 import { ToastService } from '../../../core/services/toast.service';
-import { Transaction } from '../../../core/models/transaction.model';
+import { Transaction, saleAllocations } from '../../../core/models/transaction.model';
 import { Segment } from '../../../core/models/segment.model';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
@@ -194,10 +194,10 @@ import { normalizeName } from '../../../core/utils/name.utils';
                     @if (txn.type === 'expense' && txn.expensePaymentStatus === 'pending') {
                       <span class="pay-status-chip credit">Credit</span>
                     }
-                    @if (txn.type === 'expense' && txn.linkedSaleTransactionId) {
-                      <span class="pay-status-chip sale-link" [title]="txn.linkedSaleLabel || 'Linked to sale'">Sale</span>
+                    @if (txn.type === 'expense' && hasSaleLink(txn)) {
+                      <span class="pay-status-chip sale-link" [title]="saleTitle(txn)">Sale</span>
                     }
-                    @if (txn.type === 'expense' && txn.expensePaymentStatus !== 'pending' && !txn.linkedSaleTransactionId) {
+                    @if (txn.type === 'expense' && txn.expensePaymentStatus !== 'pending' && !hasSaleLink(txn)) {
                       <span class="status-empty">—</span>
                     }
                   </td>
@@ -574,5 +574,13 @@ export class TransactionListComponent implements OnInit {
     if (status === 'full') return 'Distributed';
     if (status === 'partial') return 'Partial';
     return 'Undistributed';
+  }
+
+  hasSaleLink(txn: Transaction): boolean {
+    return saleAllocations(txn).length > 0;
+  }
+
+  saleTitle(txn: Transaction): string {
+    return saleAllocations(txn).map(a => a.label).join('\n') || 'Linked to sale';
   }
 }

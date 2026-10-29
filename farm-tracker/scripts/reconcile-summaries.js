@@ -52,6 +52,12 @@ function settledPortion(txn) {
   return txn.amount - pendingRemaining(txn);
 }
 
+/** Mirrors personSettledShare() in transaction.model.ts (sale-funded part isn't the payer's cash) */
+function personSettledShare(txn) {
+  const fromSales = (txn.linkedSales || []).reduce((s, a) => s + a.amount, 0);
+  return settledPortion(txn) - fromSales;
+}
+
 function emptyAcc() {
   return {
     totalExpense: 0, totalIncome: 0,
@@ -66,7 +72,7 @@ function emptyAcc() {
 function accumulate(acc, txn) {
   const personKey = personSummaryKey(txn.paidBy, txn.paidByName, txn.createdBy);
   // Person maps hold settled cash only (skip zero — matches write-path omission)
-  const settled = settledPortion(txn);
+  const settled = personSettledShare(txn);
   if (txn.type === 'expense') {
     acc.totalExpense += txn.amount;
     acc.expenseByCategory[txn.categoryName] = (acc.expenseByCategory[txn.categoryName] || 0) + txn.amount;

@@ -4,7 +4,7 @@ import { TransactionService } from '../../../core/services/transaction.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { safeLoad } from '../../../core/utils/async.utils';
-import { Transaction } from '../../../core/models/transaction.model';
+import { Transaction, SaleAllocation, saleAllocations, allocatedToSale, fromSalesTotal } from '../../../core/models/transaction.model';
 import { CostAttributionDialogComponent } from '../../animals/cost-attribution-dialog/cost-attribution-dialog.component';
 import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 import { RelativeTimePipe } from '../../../shared/pipes/relative-time.pipe';
@@ -159,13 +159,26 @@ import { DatePipe } from '@angular/common';
         </mat-card>
       }
 
-      <!-- Linked Sale (expense only) -->
-      @if (transaction()!.type === 'expense' && transaction()!.linkedSaleTransactionId) {
-        <h3 class="section-title">Linked Sale</h3>
+      <!-- Paid from Sales (expense only) -->
+      @if (transaction()!.type === 'expense' && linkedSales().length) {
+        <h3 class="section-title">{{ transaction()!.linkedSales?.length ? 'Paid from Sales' : 'Linked Sale' }}</h3>
         <mat-card class="linked-card">
-          <a [routerLink]="['/transactions', transaction()!.linkedSaleTransactionId]" class="buyer-link">
-            <mat-icon>point_of_sale</mat-icon> {{ transaction()!.linkedSaleLabel || 'View sale' }}
-          </a>
+          @for (a of linkedSales(); track a.saleId) {
+            <div class="net-row">
+              <a [routerLink]="['/transactions', a.saleId]" class="buyer-link">
+                <mat-icon>point_of_sale</mat-icon> {{ a.label }}
+              </a>
+              @if (transaction()!.linkedSales?.length) {
+                <span>{{ a.amount | currencyInr }}</span>
+              }
+            </div>
+          }
+          @if (transaction()!.linkedSales?.length) {
+            <div class="net-row total">
+              <span>Own share ({{ transaction()!.paidByName || 'payer' }})</span>
+              <span>{{ ownShare() | currencyInr }}</span>
+            </div>
+          }
         </mat-card>
       }
 
@@ -189,7 +202,7 @@ import { DatePipe } from '@angular/common';
                   @if (e.expensePaymentStatus === 'pending') {
                     <span class="pay-status-badge pending">PENDING</span>
                   }
-                  <span class="selling-amount">{{ e.amount | currencyInr }}</span>
+                  <span class="selling-amount">{{ shareOf(e) | currencyInr }}@if (shareOf(e) !== e.amount) {<span class="selling-note"> of {{ e.amount | currencyInr }}</span>}</span>
                   <a [routerLink]="['/transactions', e.id]" class="selling-view">View</a>
                 </div>
               }
@@ -407,8 +420,23 @@ export class TransactionDetailComponent implements OnInit {
     }, this.toast);
   }
 
+  /** This sale's share of a linked expense. */
+  shareOf(e: Transaction): number {
+    return allocatedToSale(e, this.txnId);
+  }
+
   sellingCosts(): number {
-    return this.sellingExpenses().reduce((s, t) => s + t.amount, 0);
+    return this.sellingExpenses().reduce((s, t) => s + this.shareOf(t), 0);
+  }
+
+  linkedSales(): SaleAllocation[] {
+    const t = this.transaction();
+    return t ? saleAllocations(t) : [];
+  }
+
+  ownShare(): number {
+    const t = this.transaction();
+    return t ? t.amount - fromSalesTotal(t) : 0;
   }
 
   netRealization(): number {

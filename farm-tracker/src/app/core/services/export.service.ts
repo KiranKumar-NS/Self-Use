@@ -580,6 +580,7 @@ export class ExportService {
       'Linked Harvest Name': t.linkedHarvestName || '',
       'Linked Sale Txn ID': t.linkedSaleTransactionId || '',
       'Linked Sale Label': t.linkedSaleLabel || '',
+      'Linked Sales': t.linkedSales?.length ? JSON.stringify(t.linkedSales) : '',
       'Created By': t.createdBy,
       'Created By Name': t.createdByName,
       'Created At': tsIso(t.createdAt),

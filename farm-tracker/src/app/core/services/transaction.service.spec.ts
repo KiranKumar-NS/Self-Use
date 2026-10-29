@@ -81,7 +81,7 @@ vi.mock('@angular/core', async () => {
 });
 
 import { TransactionService } from './transaction.service';
-import { personSummaryKey } from '../models/transaction.model';
+import { personSummaryKey, allocatedToSale, personSettledShare, saleAllocations } from '../models/transaction.model';
 import { writeBatch, increment } from '@angular/fire/firestore';
 
 describe('personSummaryKey', () => {
@@ -101,6 +101,32 @@ describe('personSummaryKey', () => {
 
   it('keeps the literal "other" key when no name is available', () => {
     expect(personSummaryKey('other', '', 'fallback')).toBe('other');
+  });
+});
+
+describe('sale allocation helpers', () => {
+  const sales = [{ saleId: 's1', label: 'S1', amount: 20000 }, { saleId: 's2', label: 'S2', amount: 20000 }];
+
+  it('reads new multi-sale links with per-sale amounts', () => {
+    const t = { amount: 60000, linkedSales: sales } as any;
+    expect(saleAllocations(t)).toHaveLength(2);
+    expect(allocatedToSale(t, 's1')).toBe(20000);
+    expect(allocatedToSale(t, 'nope')).toBe(0);
+  });
+
+  it('treats a legacy single link as the full amount', () => {
+    const t = { amount: 3750, linkedSaleTransactionId: 's1', linkedSaleLabel: 'S1' } as any;
+    expect(allocatedToSale(t, 's1')).toBe(3750);
+  });
+
+  it('credits the payer with only the own share', () => {
+    const t = { type: 'expense', amount: 60000, expensePaymentStatus: 'paid', linkedSales: sales } as any;
+    expect(personSettledShare(t)).toBe(20000);
+  });
+
+  it('keeps legacy links fully on the payer', () => {
+    const t = { type: 'expense', amount: 3750, expensePaymentStatus: 'paid', linkedSaleTransactionId: 's1' } as any;
+    expect(personSettledShare(t)).toBe(3750);
   });
 });
 
@@ -243,6 +269,43 @@ describe('TransactionService', () => {
       expect(txnDoc.linkedSaleLabel).toBe('19 Jul 2026 — Goat Sales ₹45,000');
     });
 
+    describe('paid from sales', () => {
+      const twoSales = [{ saleId: 's1', label: 'S1', amount: 20000 }, { saleId: 's2', label: 'S2', amount: 20000 }];
+      function queueSales(distributedOnS1 = 0) {
+        queueGetDoc({ id: 's1', type: 'income', amount: 45000, distributions: distributedOnS1 ? [{ uid: 'u1', name: 'A', amount: distributedOnS1 }] : [] });
+        queueGetDoc({ id: 's2', type: 'income', amount: 30000, distributions: [] });
+      }
+
+      it('saves 60k = 20k + 20k from sales + 20k own, crediting the payer with 20k', async () => {
+        queueSales();
+        await service.create({ ...baseExpenseData, amount: 60000, expensePaymentStatus: 'paid', linkedSales: twoSales });
+
+        const batch = getBatch();
+        const txnDoc = batch.set.mock.calls[0][1];
+        expect(txnDoc.linkedSales).toEqual(twoSales);
+        expect(txnDoc.linkedSaleIds).toEqual(['s1', 's2']);
+        const monthly = batch.set.mock.calls[1][1];
+        expect(monthly.totalExpense).toEqual({ _increment: 60000 });
+        expect(monthly['expenseByPerson.test-uid']).toEqual({ _increment: 20000 });
+      });
+
+      it('rejects sale amounts above the expense amount', async () => {
+        await expect(service.create({ ...baseExpenseData, amount: 30000, linkedSales: twoSales }))
+          .rejects.toThrow('exceeds the expense amount');
+      });
+
+      it('rejects using sale money on a pending expense', async () => {
+        await expect(service.create({ ...baseExpenseData, amount: 60000, expensePaymentStatus: 'pending', linkedSales: twoSales }))
+          .rejects.toThrow('Paid');
+      });
+
+      it('rejects taking more than is left after distribution', async () => {
+        queueSales(30000); // ₹45k sale, ₹30k distributed → ₹15k left
+        await expect(service.create({ ...baseExpenseData, amount: 60000, linkedSales: twoSales }))
+          .rejects.toThrow('Only ₹15,000 left');
+      });
+    });
+
     it('should omit sale link when not provided', async () => {
       await service.create(baseExpenseData);
 
@@ -336,7 +399,41 @@ describe('TransactionService', () => {
       expect(updates.linkedSaleTransactionId).toBe('sale-1');
       expect(updates.linkedSaleLabel).toBe('19 Jul 2026 — Goat Sales ₹45,000');
       const lastEntry = updates.timeline[updates.timeline.length - 1];
-      expect(lastEntry.changes).toContain('linked sale: none→19 Jul 2026 — Goat Sales ₹45,000');
+      expect(lastEntry.changes).toContain('linked sales: none→19 Jul 2026 — Goat Sales ₹45,000');
+    });
+
+    it('should replace a legacy link with paid-from-sales and move only the own share', async () => {
+      queueGetDoc({ id: 's1', type: 'income', amount: 45000, distributions: [] });
+      queueGetDoc({ id: 's2', type: 'income', amount: 30000, distributions: [] });
+      queueGetDoc({
+        ...oldExpenseDoc, amount: 60000, expensePaymentStatus: 'paid',
+        linkedSaleTransactionId: 'old-sale', linkedSaleLabel: 'Old',
+      });
+
+      await service.update('txn-1', {
+        ...baseExpenseData, amount: 60000, expensePaymentStatus: 'paid',
+        linkedSales: [{ saleId: 's1', label: 'S1', amount: 20000 }, { saleId: 's2', label: 'S2', amount: 20000 }],
+      });
+
+      const txn = mockTxnCaptures.slice(-1)[0];
+      const updates = txn.update.mock.calls[0][1];
+      expect(updates.linkedSaleIds).toEqual(['s1', 's2']);
+      expect(updates.linkedSaleTransactionId).toBeNull();
+      // Legacy link counted the full ₹60k on the payer; now only the ₹20k own share
+      const monthly = txn.set.mock.calls[0][1];
+      expect(monthly['expenseByPerson.test-uid']).toEqual({ _increment: -40000 });
+      const lastEntry = updates.timeline[updates.timeline.length - 1];
+      expect(lastEntry.changes).toContain('S1 ₹20,000, S2 ₹20,000 (own ₹20,000)');
+    });
+
+    it('should keep an untouched legacy link', async () => {
+      queueGetDoc({ ...oldExpenseDoc, linkedSaleTransactionId: 'sale-1', linkedSaleLabel: 'Old' });
+
+      await service.update('txn-1', { ...baseExpenseData, linkedSaleTransactionId: 'sale-1', linkedSaleLabel: 'Old' });
+
+      const updates = mockTxnCaptures.slice(-1)[0].update.mock.calls[0][1];
+      expect(updates.linkedSaleTransactionId).toBe('sale-1');
+      expect(updates.linkedSales).toBeNull();
     });
 
     it('should null the sale link when type changes to income', async () => {
@@ -656,16 +753,39 @@ describe('TransactionService', () => {
   // ──────────── updateDistribution ────────────
 
   describe('updateDistribution', () => {
-    function queueLinkedExpenses(amounts: number[]) {
-      // getLinkedSellingExpenses runs a getDocs query before the transaction
+    const day = { toMillis: () => 0 };
+    function queueLinkedExpenses(amounts: number[], multi: any[] = []) {
+      // getLinkedSellingExpenses runs two getDocs queries (multi-sale, legacy) before the transaction
       return import('@angular/fire/firestore').then(({ getDocs }) => {
         (getDocs as any).mockResolvedValueOnce({
-          docs: amounts.map(amount => ({ data: () => ({ type: 'expense', amount, isDeleted: false }) })),
+          docs: multi.map(d => ({ data: () => ({ type: 'expense', isDeleted: false, date: day, ...d }) })),
+          empty: multi.length === 0,
+          size: multi.length,
+        });
+        (getDocs as any).mockResolvedValueOnce({
+          docs: amounts.map((amount, i) => ({ data: () => ({
+            id: `e${i}`, type: 'expense', amount, isDeleted: false, date: day, linkedSaleTransactionId: 'sale-1',
+          }) })),
           empty: amounts.length === 0,
           size: amounts.length,
         });
       });
     }
+
+    it('should count only this sale\'s share of a multi-sale expense', async () => {
+      await queueLinkedExpenses([], [{
+        id: 'm1', amount: 60000,
+        linkedSales: [{ saleId: 'sale-1', label: 'S1', amount: 20000 }, { saleId: 'sale-2', label: 'S2', amount: 20000 }],
+      }]);
+      queueGetDoc({
+        ...baseIncomeData, amount: 45000, isDeleted: false, timeline: [],
+        distributions: [], date: { toDate: () => new Date() },
+      });
+
+      // ₹45k − ₹20k share = ₹25k distributable
+      await expect(service.updateDistribution('sale-1', [{ uid: 'u1', name: 'A', amount: 30000 }]))
+        .rejects.toThrow('net realization of ₹25,000');
+    });
 
     it('should reject distribution exceeding net realization', async () => {
       await queueLinkedExpenses([3750]);

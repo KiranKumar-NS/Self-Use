@@ -106,6 +106,20 @@ describe('SummaryReconciliationService', () => {
       expect(batchSets('yearlySummaries/')[0][1].month).toBeUndefined();
     });
 
+    it('should credit the payer with only the own share of an expense paid from sales', async () => {
+      store['transactions'] = [
+        txn({
+          amount: 60000,
+          linkedSales: [{ saleId: 's1', label: 'S1', amount: 20000 }, { saleId: 's2', label: 'S2', amount: 20000 }],
+        }),
+      ];
+
+      await service.reconcileAll();
+
+      const [, monthly] = batchSets('monthlySummaries/')[0];
+      expect(monthly).toMatchObject({ totalExpense: 60000, expenseByPerson: { 'uid-1': 20000 } });
+    });
+
     it('should report zero corrections when the stored totals already match', async () => {
       store['transactions'] = [txn()];
       store['monthlySummaries'] = [{ id: '2026-03-seg1', totalExpense: 1000, totalIncome: 0, netProfit: -1000 }];

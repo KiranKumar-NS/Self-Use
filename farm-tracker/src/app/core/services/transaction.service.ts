@@ -17,7 +17,7 @@ import {
   Timestamp,
   DocumentSnapshot,
 } from '@angular/fire/firestore';
-import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatus, ExpensePaymentStatus, pendingRemaining, settledPortion, personSummaryKey } from '../models/transaction.model';
+import { Transaction, TransactionFormData, DistributionEntry, IncomePaymentStatus, ExpensePaymentStatus, pendingRemaining, personSettledShare, personSummaryKey, fromSalesTotal, allocatedToSale, saleAllocations, SaleAllocation } from '../models/transaction.model';
 import { Animal, AnimalCostEntry } from '../models/animal.model';
 import { AuthService } from './auth.service';
 import { SummaryService } from './summary.service';
@@ -145,12 +145,13 @@ export class TransactionService {
       updatedAt: serverTimestamp(),
     };
 
-    // Reverse per-person (settled cash only — pending portion never entered the map)
+    // Reverse per-person (settled cash only — pending portion never entered the map,
+    // nor did the part paid with sale money)
     const personKey = this.personSummaryKey(txn.paidBy, txn.paidByName, txn.createdBy);
     const personField = txn.type === 'expense'
       ? `expenseByPerson.${personKey}`
       : `incomeByPerson.${personKey}`;
-    const settled = settledPortion(txn);
+    const settled = personSettledShare(txn);
     if (settled !== 0) fields[personField] = increment(-settled);
 
     // Reverse pending income (net of partial payments already received)
@@ -217,15 +218,17 @@ export class TransactionService {
     const personField = data.type === 'expense'
       ? `expenseByPerson.${personKey}`
       : `incomeByPerson.${personKey}`;
-    const personSettled = data.amount - pendingInc - pendingExp;
+    // The part paid with sale money isn't the payer's own cash
+    const personSettled = data.amount - pendingInc - pendingExp - fromSalesTotal(data);
     if (personSettled !== 0) fields[personField] = increment(personSettled);
 
     return fields;
   }
 
   async create(data: TransactionFormData): Promise<string> {
-    const batch = writeBatch(this.firestore);
     const user = this.authService.requireUser();
+    await this.assertSaleAllocations(data);
+    const batch = writeBatch(this.firestore);
 
     const txnRef = doc(collection(this.firestore, 'transactions'));
     const summaryId = `${data.month}-${data.segment}`;
@@ -278,7 +281,10 @@ export class TransactionService {
       txnDoc['linkedHarvestId'] = data.linkedHarvestId;
       txnDoc['linkedHarvestName'] = data.linkedHarvestName || null;
     }
-    if (data.linkedSaleTransactionId) {
+    if (data.type === 'expense' && data.linkedSales?.length) {
+      txnDoc['linkedSales'] = data.linkedSales;
+      txnDoc['linkedSaleIds'] = data.linkedSales.map(a => a.saleId);
+    } else if (data.linkedSaleTransactionId) {
       txnDoc['linkedSaleTransactionId'] = data.linkedSaleTransactionId;
       txnDoc['linkedSaleLabel'] = data.linkedSaleLabel || null;
     }
@@ -336,6 +342,7 @@ export class TransactionService {
 
   async update(id: string, data: TransactionFormData): Promise<void> {
     const user = this.authService.requireUser();
+    await this.assertSaleAllocations(data, id);
     const txnRef = doc(this.firestore, 'transactions', id);
     let capturedOld: Transaction | undefined;
 
@@ -386,8 +393,8 @@ export class TransactionService {
       const newPendingInc = data.type === 'income' && effectivePayStatus === 'pending' ? data.amount - keepReceived : 0;
       const newPendingExp = data.type === 'expense' && effectiveExpPayStatus === 'pending' ? data.amount - keepPaid : 0;
       // Person maps hold settled cash only — an edit moves just the settled portions
-      const oldSettled = settledPortion(oldData);
-      const newSettled = data.amount - newPendingInc - newPendingExp;
+      const oldSettled = personSettledShare(oldData);
+      const newSettled = data.amount - newPendingInc - newPendingExp - fromSalesTotal(data);
       const newBuyerId = data.type === 'income' ? (data.linkedBuyerId || null) : null;
       const newSupplierId = data.type === 'expense' ? (data.linkedSupplierId || null) : null;
       if ((oldData.linkedBuyerId || null) !== newBuyerId) {
@@ -407,11 +414,21 @@ export class TransactionService {
       if ((oldData.linkedHarvestId || null) !== newHarvestId) {
         changesList.push(`harvest: ${oldData.linkedHarvestName || 'none'}→${newHarvestName || 'none'}`);
       }
-      // Sale link: expense-only, form-managed
-      const newSaleId = data.type === 'expense' ? (data.linkedSaleTransactionId || null) : null;
-      const newSaleLabel = data.type === 'expense' ? (data.linkedSaleLabel || null) : null;
-      if ((oldData.linkedSaleTransactionId || null) !== newSaleId) {
-        changesList.push(`linked sale: ${oldData.linkedSaleLabel || 'none'}→${newSaleLabel || 'none'}`);
+      // Sale links: expense-only, form-managed. New links replace a legacy one;
+      // a legacy link the form passed through untouched is kept as-is.
+      const newSales = data.type === 'expense' ? (data.linkedSales || []) : [];
+      const keepLegacySale = data.type === 'expense' && !newSales.length && !!data.linkedSaleTransactionId;
+      const newSaleId = keepLegacySale ? data.linkedSaleTransactionId! : null;
+      const newSaleLabel = keepLegacySale ? (data.linkedSaleLabel || null) : null;
+      const oldSalesStr = this.describeSales(oldData);
+      const newSalesStr = this.describeSales({
+        amount: data.amount,
+        linkedSales: newSales,
+        linkedSaleTransactionId: newSaleId || undefined,
+        linkedSaleLabel: newSaleLabel || undefined,
+      });
+      if (oldSalesStr !== newSalesStr) {
+        changesList.push(`linked sales: ${oldSalesStr}→${newSalesStr}`);
       }
       const changesStr = changesList.length > 0 ? changesList.join(', ') : 'details updated';
 
@@ -632,6 +649,8 @@ export class TransactionService {
         linkedHarvestName: newHarvestName,
         linkedSaleTransactionId: newSaleId,
         linkedSaleLabel: newSaleLabel,
+        linkedSales: newSales.length ? newSales : null,
+        linkedSaleIds: newSales.length ? newSales.map(a => a.saleId) : null,
         quantity: data.quantity || null,
         unit: data.unit || null,
         ratePerUnit: data.ratePerUnit || null,
@@ -896,8 +915,7 @@ export class TransactionService {
 
     // Linked selling costs cap the distributable amount at net realization.
     // Queried outside runTransaction (queries aren't allowed inside Firestore transactions).
-    const sellingCosts = (await this.getLinkedSellingExpenses(transactionId))
-      .reduce((s, t) => s + t.amount, 0);
+    const sellingCosts = await this.getSellingCostFor(transactionId);
 
     await runTransaction(this.firestore, async (transaction) => {
       const oldDoc = await transaction.get(txnRef);
@@ -1253,16 +1271,109 @@ export class TransactionService {
     return snapshot.docs.map((d) => d.data() as Transaction);
   }
 
-  /** Expense transactions linked to a sale income txn (live query, no denormalized counters). */
+  /**
+   * Expense transactions paid (partly) from a sale income txn — new multi-sale
+   * links plus legacy single links. Live query, no denormalized counters.
+   * Use allocatedToSale(e, saleTxnId) for each expense's share of this sale.
+   */
   async getLinkedSellingExpenses(saleTxnId: string): Promise<Transaction[]> {
-    const q = query(
-      collection(this.firestore, 'transactions'),
-      where('linkedSaleTransactionId', '==', saleTxnId),
-      where('isDeleted', '==', false),
-      orderBy('date', 'desc'),
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => d.data() as Transaction).filter(t => t.type === 'expense');
+    const txns = collection(this.firestore, 'transactions');
+    const [multi, legacy] = await Promise.all([
+      getDocs(query(txns,
+        where('linkedSaleIds', 'array-contains', saleTxnId),
+        where('isDeleted', '==', false),
+        orderBy('date', 'desc'),
+      )),
+      getDocs(query(txns,
+        where('linkedSaleTransactionId', '==', saleTxnId),
+        where('isDeleted', '==', false),
+        orderBy('date', 'desc'),
+      )),
+    ]);
+    const byId = new Map<string, Transaction>();
+    for (const d of [...multi.docs, ...legacy.docs]) {
+      const t = d.data() as Transaction;
+      if (t.type === 'expense') byId.set(t.id, t);
+    }
+    return [...byId.values()].sort((a, b) => b.date.toMillis() - a.date.toMillis());
+  }
+
+  /** Total of a sale's money already used by linked expenses. */
+  async getSellingCostFor(saleTxnId: string): Promise<number> {
+    return (await this.getLinkedSellingExpenses(saleTxnId))
+      .reduce((s, e) => s + allocatedToSale(e, saleTxnId), 0);
+  }
+
+  /**
+   * Money still available on each sale for paying expenses:
+   * amount − used by other expenses − already distributed.
+   * excludeExpenseId leaves out the expense being edited.
+   */
+  async getSaleBalances(sales: Transaction[], excludeExpenseId?: string): Promise<Map<string, number>> {
+    const ids = sales.map(s => s.id);
+    const used = new Map<string, number>();
+    const txns = collection(this.firestore, 'transactions');
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+    // Single-field filters only (auto-indexed); isDeleted is filtered here
+    const snaps = await Promise.all(chunks.flatMap(chunk => [
+      getDocs(query(txns, where('linkedSaleIds', 'array-contains-any', chunk))),
+      getDocs(query(txns, where('linkedSaleTransactionId', 'in', chunk))),
+    ]));
+    const seen = new Set<string>();
+    for (const snap of snaps) {
+      for (const d of snap.docs) {
+        const t = d.data() as Transaction;
+        if (seen.has(t.id) || t.isDeleted || t.type !== 'expense' || t.id === excludeExpenseId) continue;
+        seen.add(t.id);
+        for (const a of saleAllocations(t)) used.set(a.saleId, (used.get(a.saleId) || 0) + a.amount);
+      }
+    }
+    const balances = new Map<string, number>();
+    for (const s of sales) {
+      const distributed = (s.distributions || []).reduce((sum, d) => sum + d.amount, 0);
+      balances.set(s.id, s.amount - (used.get(s.id) || 0) - distributed);
+    }
+    return balances;
+  }
+
+  /**
+   * Validate "paid from sales" links before a write: expense + paid only,
+   * positive amounts, no repeats, total ≤ expense amount, and no sale over-used
+   * (other expenses and distributions included).
+   */
+  private async assertSaleAllocations(data: TransactionFormData, excludeExpenseId?: string): Promise<void> {
+    const sales = data.linkedSales || [];
+    if (!sales.length) return;
+    if (data.type !== 'expense') throw new Error('Only expenses can be paid from sales');
+    if ((data.expensePaymentStatus || 'paid') !== 'paid') {
+      throw new Error('Mark the expense as Paid to pay it from sales');
+    }
+    if (sales.some(a => !(a.amount > 0))) throw new Error('Each sale amount must be more than ₹0');
+    if (new Set(sales.map(a => a.saleId)).size !== sales.length) throw new Error('A sale is selected twice');
+    const total = fromSalesTotal(data);
+    if (total > data.amount + 0.01) {
+      throw new Error(`Amount from sales (₹${total.toLocaleString('en-IN')}) exceeds the expense amount (₹${data.amount.toLocaleString('en-IN')})`);
+    }
+    const saleDocs = (await Promise.all(sales.map(a => this.getById(a.saleId))))
+      .filter((t): t is Transaction => !!t && !t.isDeleted);
+    const balances = await this.getSaleBalances(saleDocs, excludeExpenseId);
+    for (const a of sales) {
+      const left = balances.get(a.saleId);
+      if (left === undefined) throw new Error(`Sale not found: ${a.label}`);
+      if (a.amount > left + 0.01) {
+        throw new Error(`Only ₹${Math.max(0, left).toLocaleString('en-IN')} left on sale ${a.label}`);
+      }
+    }
+  }
+
+  /** Timeline text for an expense's sale links, e.g. "S1 ₹20,000, S2 ₹20,000 (own ₹20,000)". */
+  private describeSales(t: Pick<Transaction, 'amount' | 'linkedSales' | 'linkedSaleTransactionId' | 'linkedSaleLabel'>): string {
+    const allocs: SaleAllocation[] = saleAllocations(t);
+    if (!allocs.length) return 'none';
+    const parts = allocs.map(a => `${a.label} ₹${a.amount.toLocaleString('en-IN')}`).join(', ');
+    const own = t.amount - fromSalesTotal(t);
+    return t.linkedSales?.length && own > 0 ? `${parts} (own ₹${own.toLocaleString('en-IN')})` : parts;
   }
 
   /** Display label stored as linkedSaleLabel on expenses, e.g. "19 Jul 2026 — Goat Sales ₹45,000 (Rahim Traders)" */

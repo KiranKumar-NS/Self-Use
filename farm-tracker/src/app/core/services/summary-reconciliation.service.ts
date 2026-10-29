@@ -15,7 +15,7 @@ import {
   orderBy,
   Timestamp,
 } from '@angular/fire/firestore';
-import { Transaction, pendingRemaining, settledPortion, personSummaryKey } from '../models/transaction.model';
+import { Transaction, pendingRemaining, personSettledShare, personSummaryKey } from '../models/transaction.model';
 import { MonthlySummary, YearlySummary } from '../models/monthly-summary.model';
 import { Buyer } from '../models/buyer.model';
 import { Supplier } from '../models/supplier.model';
@@ -99,9 +99,10 @@ export class SummaryReconciliationService {
     const catId = txn.category || UNCATEGORIZED;
     const catName = txn.categoryName || UNCATEGORIZED_LABEL;
 
-    // Person maps hold settled cash only (skip zero so fully-pending txns
-    // don't seed ₹0 entries — matches the write-path omission)
-    const settled = settledPortion(txn);
+    // Person maps hold settled cash only, net of the part paid with sale money
+    // (skip zero so fully-pending txns don't seed ₹0 entries — matches the
+    // write-path omission)
+    const settled = personSettledShare(txn);
 
     if (txn.type === 'expense') {
       acc.totalExpense += txn.amount;

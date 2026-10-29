@@ -321,6 +321,8 @@ async function importBackup(wb, dryRun) {
         linkedHarvestName: str(r['Linked Harvest Name']) || null,
         linkedSaleTransactionId: str(r['Linked Sale Txn ID']) || null,
         linkedSaleLabel: str(r['Linked Sale Label']) || null,
+        linkedSales: parseJson(r['Linked Sales'], null),
+        linkedSaleIds: parseJson(r['Linked Sales'], null)?.map(a => a.saleId) || null,
         month, year: txnDate.getFullYear(),
       }});
       count('expenses');

@@ -9,7 +9,7 @@ import { UserService } from '../../../core/services/user.service';
 import { Category } from '../../../core/models/category.model';
 import { Segment } from '../../../core/models/segment.model';
 import { AppUser } from '../../../core/models/user.model';
-import { TransactionFormData, PaymentMethod, IncomePaymentStatus, ExpensePaymentStatus, SaleUnit } from '../../../core/models/transaction.model';
+import { Transaction, TransactionFormData, PaymentMethod, IncomePaymentStatus, ExpensePaymentStatus, SaleUnit, SaleAllocation } from '../../../core/models/transaction.model';
 import { AnimalService } from '../../../core/services/animal.service';
 import { Animal } from '../../../core/models/animal.model';
 import { BuyerService } from '../../../core/services/buyer.service';
@@ -37,6 +37,7 @@ import { TagInputComponent } from '../../../shared/components/tag-input/tag-inpu
 import { TagService } from '../../../core/services/tag.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ErrorMessagePipe } from '../../../shared/pipes/error-message.pipe';
+import { CurrencyInrPipe } from '../../../shared/pipes/currency-inr.pipe';
 
 /** Control name -> the label shown in the form, for the "required fields" message. */
 const FIELD_LABELS: Record<string, string> = {
@@ -54,7 +55,7 @@ const FIELD_LABELS: Record<string, string> = {
     FormsModule, MatCardModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatDatepickerModule, MatRadioModule,
     MatIconModule, MatCheckboxModule, MatAutocompleteModule,
-    TagInputComponent, ErrorMessagePipe,
+    TagInputComponent, ErrorMessagePipe, CurrencyInrPipe,
   ],
   template: `
     <div class="page-header">
@@ -108,7 +109,7 @@ const FIELD_LABELS: Record<string, string> = {
 
           <mat-form-field appearance="outline">
             <mat-label>Amount (INR)</mat-label>
-            <input matInput type="number" [(ngModel)]="amount" name="amount" required min="1" #amountModel="ngModel" />
+            <input matInput type="number" [(ngModel)]="amount" name="amount" required min="1" #amountModel="ngModel" (ngModelChange)="onAmountChange()" />
             <mat-error>{{ amountModel.errors | errorMessage }}</mat-error>
           </mat-form-field>
         </div>
@@ -169,7 +170,7 @@ const FIELD_LABELS: Record<string, string> = {
           <div class="form-row">
             <div class="payment-method-group">
               <label class="field-label">Payment Status</label>
-              <mat-radio-group [(ngModel)]="expensePaymentStatus" name="expensePaymentStatus">
+              <mat-radio-group [(ngModel)]="expensePaymentStatus" name="expensePaymentStatus" (change)="onExpenseStatusChange()">
                 <mat-radio-button value="paid">Paid</mat-radio-button>
                 <mat-radio-button value="pending">Pending (Credit)</mat-radio-button>
               </mat-radio-group>
@@ -279,20 +280,43 @@ const FIELD_LABELS: Record<string, string> = {
           </div>
         }
 
-        <!-- Sale link (expense only) -->
-        @if (type === 'expense' && saleOptions().length > 0) {
+        <!-- Paid from sales (paid expense only) -->
+        @if (type === 'expense' && legacySale) {
+          <div class="legacy-sale">
+            <mat-icon>point_of_sale</mat-icon>
+            <span>Linked to sale: {{ legacySale.label }}</span>
+            <button mat-button type="button" (click)="legacySale = null">Remove</button>
+          </div>
+        }
+        @if (type === 'expense' && expensePaymentStatus === 'paid' && saleOptions().length > 0) {
           <div class="form-row">
             <mat-form-field appearance="outline">
-              <mat-label>Link to Sale (optional)</mat-label>
-              <mat-select [(ngModel)]="linkedSaleTransactionId" name="linkedSaleTransactionId">
-                <mat-option value="">No sale</mat-option>
+              <mat-label>Paid from Sales (optional)</mat-label>
+              <mat-select multiple [(ngModel)]="selectedSaleIds" name="selectedSaleIds" (selectionChange)="onSalesChange()">
                 @for (s of saleOptions(); track s.id) {
-                  <mat-option [value]="s.id">{{ s.label }}</mat-option>
+                  <mat-option [value]="s.id">{{ s.label }} · {{ s.available | currencyInr }} left</mat-option>
                 }
               </mat-select>
-              <mat-hint>Links this selling cost (petrol, commission, market fee...) to a sale for net realization</mat-hint>
+              <mat-hint>Money taken from these sales; the rest is paid by {{ payerName() }}</mat-hint>
             </mat-form-field>
           </div>
+          @if (selectedSaleIds.length > 0) {
+            <div class="sale-alloc">
+              @for (id of selectedSaleIds; track id) {
+                <div class="sale-alloc-row">
+                  <span class="sale-alloc-label">{{ saleOption(id)?.label }}</span>
+                  <mat-form-field appearance="outline" class="sale-alloc-amount">
+                    <mat-label>Amount (₹)</mat-label>
+                    <input matInput type="number" min="1" [max]="saleOption(id)?.available ?? null" [(ngModel)]="saleAmounts[id]" [name]="'saleAmount_' + id" />
+                    <mat-hint>{{ saleOption(id)?.available | currencyInr }} left</mat-hint>
+                  </mat-form-field>
+                </div>
+              }
+              <div class="sale-alloc-summary" [class.over]="fromSalesTotal() > (amount || 0)">
+                From sales {{ fromSalesTotal() | currencyInr }} · Own share ({{ payerName() }}) {{ ownShare() | currencyInr }}
+              </div>
+            </div>
+          }
         }
 
         <!-- Link to Animals (expense + animal segment) -->
@@ -387,6 +411,13 @@ const FIELD_LABELS: Record<string, string> = {
     .animal-row { padding: 4px 0; border-bottom: 1px solid var(--color-bg-alt); }
     .breed-tag { color: var(--color-purple); font-size: 0.8rem; }
     .no-animals { color: var(--color-text-muted); font-size: 0.85rem; padding: 8px 0; }
+    .legacy-sale { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--color-text-subtle); margin-bottom: 0.5rem; }
+    .sale-alloc { border: 1px solid var(--color-border); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+    .sale-alloc-row { display: flex; align-items: center; gap: 12px; }
+    .sale-alloc-label { flex: 1; min-width: 0; font-size: 0.85rem; overflow-wrap: anywhere; }
+    .sale-alloc-amount { width: 150px; flex: none; }
+    .sale-alloc-summary { font-size: 0.85rem; font-weight: 600; color: var(--color-text-subtle); }
+    .sale-alloc-summary.over { color: var(--color-expense); }
     .tag-row { display: flex; align-items: flex-start; gap: 4px; width: 100%; }
     .tag-row app-tag-input { flex: 1; }
     .auto-tag-btn { margin-top: 8px; }
@@ -450,8 +481,13 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
   linkedHarvestId = '';
   // label = display shown in dropdown (with quantity); name = stored as linkedHarvestName
   harvestOptions = signal<{ id: string; label: string; name: string }[]>([]);
-  linkedSaleTransactionId = '';
-  saleOptions = signal<{ id: string; label: string }[]>([]);
+  // Paid from sales: available = sale amount − other expenses − distributed
+  saleOptions = signal<{ id: string; label: string; available: number }[]>([]);
+  selectedSaleIds: string[] = [];
+  saleAmounts: Record<string, number | null> = {};
+  /** Old single-sale link, kept untouched unless removed or replaced */
+  legacySale: { id: string; label: string } | null = null;
+  private lastAmount = 0;
   filteredCategories = signal<Category[]>([]);
   /** Derived, not snapshotted: auth.service live-watches the user's own profile doc, so an
    *  admin changing their assigned segments must re-filter this list without a reload. */
@@ -494,7 +530,7 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
       this.buyerService.getAll(),
       this.supplierService.getAll(),
       this.harvestService.getAll({}, 30),
-      this.transactionService.getRecentIncome(25),
+      this.transactionService.getRecentIncome(50),
     ]);
 
     this.allCategories.set(categories);
@@ -504,9 +540,8 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
     this.suppliers.set(suppliers);
     this.harvestOptions.set(harvests.map(h => this.toHarvestOption(h)));
     const editIdParam = this.route.snapshot.params['id'] || '';
-    this.saleOptions.set(recentIncome
-      .filter(t => !t.linkedLoanId && t.id !== editIdParam)
-      .map(t => ({ id: t.id, label: this.transactionService.saleLabel(t) })));
+    const saleCandidates = recentIncome.filter(t => !t.linkedLoanId && t.id !== editIdParam);
+    this.saleOptions.set(await this.toSaleOptions(saleCandidates, editIdParam));
     this.paidBy = this.authService.currentUser()?.uid || '';
 
     // Load known custom names for duplicate detection
@@ -572,12 +607,15 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
             this.harvestOptions.update(list => [...list, { id: txn.linkedHarvestId!, label: name, name }]);
           }
         }
-        if (txn.type === 'expense' && txn.linkedSaleTransactionId) {
-          this.linkedSaleTransactionId = txn.linkedSaleTransactionId;
-          if (!this.saleOptions().some(o => o.id === txn.linkedSaleTransactionId)) {
-            this.saleOptions.update(list => [...list, { id: txn.linkedSaleTransactionId!, label: txn.linkedSaleLabel || 'Linked sale' }]);
-          }
+        if (txn.type === 'expense' && txn.linkedSales?.length) {
+          // Linked sales stay selectable even when fully used or older than the recent list
+          await this.ensureSaleOptions(txn.linkedSales.map(a => a.saleId), this.editId);
+          this.selectedSaleIds = txn.linkedSales.map(a => a.saleId);
+          this.saleAmounts = Object.fromEntries(txn.linkedSales.map(a => [a.saleId, a.amount]));
+        } else if (txn.type === 'expense' && txn.linkedSaleTransactionId) {
+          this.legacySale = { id: txn.linkedSaleTransactionId, label: txn.linkedSaleLabel || 'Linked sale' };
         }
+        this.lastAmount = txn.amount;
         this.onTypeChange();
 
         // Load existing animal links
@@ -612,16 +650,88 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         const sale = await this.transactionService.getById(saleTxnId);
         if (sale && sale.type === 'income') {
           this.type = 'expense';
-          this.linkedSaleTransactionId = saleTxnId;
-          if (!this.saleOptions().some(o => o.id === saleTxnId)) {
-            this.saleOptions.update(list => [{ id: saleTxnId, label: this.transactionService.saleLabel(sale) }, ...list]);
-          }
+          await this.ensureSaleOptions([saleTxnId]);
+          this.selectedSaleIds = [saleTxnId];
+          this.saleAmounts = { [saleTxnId]: null };
           if (this.filteredSegments().some(s => s.id === sale.segment)) {
             this.segment = sale.segment;
           }
           this.onTypeChange();
         }
       }
+    }
+  }
+
+  /** Sale options with their remaining balance; fully used sales are dropped. */
+  private async toSaleOptions(sales: Transaction[], excludeExpenseId?: string): Promise<{ id: string; label: string; available: number }[]> {
+    if (!sales.length) return [];
+    const balances = await this.transactionService.getSaleBalances(sales, excludeExpenseId || undefined);
+    return sales
+      .map(t => ({ id: t.id, label: this.transactionService.saleLabel(t), available: balances.get(t.id) ?? 0 }))
+      .filter(o => o.available > 0);
+  }
+
+  /** Make sure these sales are in the dropdown (even when fully used by this expense). */
+  private async ensureSaleOptions(ids: string[], excludeExpenseId?: string): Promise<void> {
+    const missing = ids.filter(id => !this.saleOptions().some(o => o.id === id));
+    if (!missing.length) return;
+    const sales = (await Promise.all(missing.map(id => this.transactionService.getById(id))))
+      .filter((t): t is Transaction => !!t && t.type === 'income');
+    if (!sales.length) return;
+    const balances = await this.transactionService.getSaleBalances(sales, excludeExpenseId);
+    const extra = sales.map(t => ({ id: t.id, label: this.transactionService.saleLabel(t), available: Math.max(0, balances.get(t.id) ?? 0) }));
+    this.saleOptions.update(list => [...extra, ...list]);
+  }
+
+  saleOption(id: string): { id: string; label: string; available: number } | undefined {
+    return this.saleOptions().find(o => o.id === id);
+  }
+
+  fromSalesTotal(): number {
+    return this.selectedSaleIds.reduce((s, id) => s + (Number(this.saleAmounts[id]) || 0), 0);
+  }
+
+  ownShare(): number {
+    return Math.max(0, (this.amount || 0) - this.fromSalesTotal());
+  }
+
+  payerName(): string {
+    if (this.paidBy === 'other') return normalizeName(this.customPaidByName || '') || 'payer';
+    return this.users().find(u => u.uid === this.paidBy)?.displayName || 'payer';
+  }
+
+  /** New sale defaults to what's still unallocated, capped at the sale's balance. */
+  onSalesChange(): void {
+    const next: Record<string, number | null> = {};
+    for (const id of this.selectedSaleIds) {
+      if (this.saleAmounts[id] != null) { next[id] = this.saleAmounts[id]; continue; }
+      const allocated = Object.values(next).reduce<number>((s, v) => s + (Number(v) || 0), 0);
+      const remainder = Math.max(0, (this.amount || 0) - allocated);
+      const fill = Math.min(remainder, this.saleOption(id)?.available ?? 0);
+      next[id] = fill > 0 ? fill : null;
+    }
+    this.saleAmounts = next;
+    if (this.selectedSaleIds.length) this.legacySale = null;
+  }
+
+  /** With one sale selected, keep its amount in step with the expense amount while it still matches. */
+  onAmountChange(): void {
+    if (this.selectedSaleIds.length === 1) {
+      const id = this.selectedSaleIds[0];
+      const current = this.saleAmounts[id];
+      if (current == null || current === this.lastAmount) {
+        const fill = Math.min(this.amount || 0, this.saleOption(id)?.available ?? 0);
+        this.saleAmounts = { [id]: fill > 0 ? fill : null };
+      }
+    }
+    this.lastAmount = this.amount || 0;
+  }
+
+  /** Sale money can only pay an expense that is actually paid. */
+  onExpenseStatusChange(): void {
+    if (this.expensePaymentStatus !== 'paid') {
+      this.selectedSaleIds = [];
+      this.saleAmounts = {};
     }
   }
 
@@ -754,7 +864,9 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
       this.linkedSupplierId = '';
       this.newSupplierName = '';
       this.linkedHarvestId = '';
-      this.linkedSaleTransactionId = '';
+      this.selectedSaleIds = [];
+      this.saleAmounts = {};
+      this.legacySale = null;
     } else {
       this.linkedBuyerId = '';
       this.newBuyerName = '';
@@ -777,6 +889,13 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
           ? `Please fill in the required field${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}.`
           : 'Please correct the highlighted fields before saving.'
       );
+      this.cdr.detectChanges();
+      return;
+    }
+
+    const saleError = this.saleAllocationError();
+    if (saleError) {
+      this.error.set(saleError);
       this.cdr.detectChanges();
       return;
     }
@@ -863,10 +982,9 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
         linkedHarvestName: this.type === 'expense' && this.linkedHarvestId
           ? this.harvestOptions().find(h => h.id === this.linkedHarvestId)?.name
           : undefined,
-        linkedSaleTransactionId: (this.type === 'expense' && this.linkedSaleTransactionId) || undefined,
-        linkedSaleLabel: this.type === 'expense' && this.linkedSaleTransactionId
-          ? this.saleOptions().find(o => o.id === this.linkedSaleTransactionId)?.label
-          : undefined,
+        linkedSales: this.buildSaleAllocations(),
+        linkedSaleTransactionId: (this.type === 'expense' && this.legacySale?.id) || undefined,
+        linkedSaleLabel: (this.type === 'expense' && this.legacySale?.label) || undefined,
         tags: this.tags.length ? this.tags : undefined,
         month: getMonthString(this.date),
         year: getYear(this.date),
@@ -917,6 +1035,38 @@ export class TransactionFormComponent implements OnInit, HasUnsavedChanges {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  private activeSaleIds(): string[] {
+    return this.type === 'expense' && this.expensePaymentStatus === 'paid' ? this.selectedSaleIds : [];
+  }
+
+  private buildSaleAllocations(): SaleAllocation[] | undefined {
+    const ids = this.activeSaleIds();
+    if (!ids.length) return undefined;
+    return ids.map(id => ({
+      saleId: id,
+      label: this.saleOption(id)?.label || 'Linked sale',
+      amount: Number(this.saleAmounts[id]) || 0,
+    }));
+  }
+
+  /** Client-side check of the "paid from sales" amounts (the service re-checks balances). */
+  private saleAllocationError(): string {
+    const ids = this.activeSaleIds();
+    if (!ids.length) return '';
+    for (const id of ids) {
+      const amt = Number(this.saleAmounts[id]) || 0;
+      const opt = this.saleOption(id);
+      if (amt <= 0) return `Enter the amount taken from sale ${opt?.label || ''}`.trim();
+      if (opt && amt > opt.available + 0.01) {
+        return `Only ₹${opt.available.toLocaleString('en-IN')} left on sale ${opt.label}`;
+      }
+    }
+    if (this.fromSalesTotal() > (this.amount || 0) + 0.01) {
+      return `Amount from sales (₹${this.fromSalesTotal().toLocaleString('en-IN')}) exceeds the expense amount`;
+    }
+    return '';
   }
 
   /** True for a Firestore security-rules rejection, however it is surfaced. */

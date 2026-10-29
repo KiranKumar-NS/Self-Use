@@ -77,10 +77,16 @@ export interface Transaction {
   linkedHarvestId?: string;
   linkedHarvestName?: string;
 
-  // Sale linkage (expense-only): points at the sale income transaction this
-  // selling cost (transport, commission, market fee...) belongs to
+  // Legacy sale linkage (expense-only, single sale, full amount). Still read;
+  // new links are written to linkedSales.
   linkedSaleTransactionId?: string;
   linkedSaleLabel?: string;
+
+  // Paid from sales (expense-only, paid status): money taken from one or more
+  // sale income txns. Σ amounts ≤ txn amount; the remainder is the payer's own
+  // share. linkedSaleIds mirrors the ids for array-contains queries.
+  linkedSales?: SaleAllocation[];
+  linkedSaleIds?: string[];
 
   // Freeform tags for ad-hoc grouping (e.g. "vaccination-drive", "eid-season")
   tags?: string[];
@@ -88,6 +94,42 @@ export interface Transaction {
   // For queries
   month: string;
   year: number;
+}
+
+export interface SaleAllocation {
+  saleId: string;
+  label: string;
+  amount: number;
+}
+
+/**
+ * Every sale an expense draws on, with the amount taken from each. A legacy
+ * single-sale link counts as the full expense amount.
+ */
+export function saleAllocations(
+  t: Pick<Transaction, 'amount' | 'linkedSales' | 'linkedSaleTransactionId' | 'linkedSaleLabel'>,
+): SaleAllocation[] {
+  if (t.linkedSales?.length) return t.linkedSales;
+  if (t.linkedSaleTransactionId) {
+    return [{ saleId: t.linkedSaleTransactionId, label: t.linkedSaleLabel || 'Linked sale', amount: t.amount }];
+  }
+  return [];
+}
+
+/** Amount of an expense charged against one sale (0 if not linked). */
+export function allocatedToSale(
+  t: Pick<Transaction, 'amount' | 'linkedSales' | 'linkedSaleTransactionId' | 'linkedSaleLabel'>,
+  saleId: string,
+): number {
+  return saleAllocations(t).filter(a => a.saleId === saleId).reduce((s, a) => s + a.amount, 0);
+}
+
+/**
+ * Portion of an expense paid with sale money (new-format links only). Legacy
+ * single-sale links stay fully attributed to the payer so history doesn't shift.
+ */
+export function fromSalesTotal(t: { linkedSales?: SaleAllocation[] | null }): number {
+  return (t.linkedSales || []).reduce((s, a) => s + a.amount, 0);
 }
 
 /**
@@ -112,6 +154,14 @@ export function pendingRemaining(t: Transaction): number {
  */
 export function settledPortion(t: Transaction): number {
   return t.amount - pendingRemaining(t);
+}
+
+/**
+ * Settled cash the payer actually put in: settledPortion minus the part paid
+ * with sale money. This is what expenseByPerson/incomeByPerson hold.
+ */
+export function personSettledShare(t: Transaction): number {
+  return settledPortion(t) - fromSalesTotal(t);
 }
 
 /**
@@ -169,6 +219,7 @@ export interface TransactionFormData {
   linkedHarvestName?: string;
   linkedSaleTransactionId?: string;
   linkedSaleLabel?: string;
+  linkedSales?: SaleAllocation[];
   tags?: string[];
   month: string;
   year: number;
