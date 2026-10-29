@@ -119,7 +119,10 @@ import { MatIconModule } from '@angular/material/icon';
   styles: [`
     .sidebar {
       width: 250px;
-      min-height: 100vh;
+      height: 100vh;
+      height: 100dvh;
+      overflow-y: auto;
+      box-sizing: border-box;
       background: var(--color-sidebar-bg);
       color: white;
       padding: 1rem 0;
